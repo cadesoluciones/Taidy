@@ -1,0 +1,18 @@
+[project]
+name = "poc-cade-api"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "requests>=2.32.5",
+    "responses>=0.25.8",
+    "tenacity>=9.1.2",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.1.0",
+    "pytest>=8.4.2",
+    "python-dotenv>=1.2.1",
+]
