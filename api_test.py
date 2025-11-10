@@ -17,7 +17,7 @@ from typing import Iterable
 from dotenv import load_dotenv
 
 from bc_client.auth import OAuthTokenProvider
-from bc_client.config import Settings, TableConfig, load_settings
+from bc_client.config import DEFAULT_PAGE_SIZE, Settings, TableConfig, load_settings
 from bc_client.api import BusinessCentralClient
 from bc_client.exporter import export_table
 
@@ -26,7 +26,11 @@ def _parse_args(argv: Iterable[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Download Business Central tables to CSV")
     parser.add_argument("--tables", nargs="*", help="Override configured table list")
     parser.add_argument("--output-dir", help="Override CSV output directory")
-    parser.add_argument("--page-size", type=int, help="Override page size for API pagination")
+    parser.add_argument(
+        "--page-size",
+        type=int,
+        help=f"Override Business Central page size (defaults to BC_PAGE_SIZE or {DEFAULT_PAGE_SIZE})",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Log actions without calling the API")
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
     return parser.parse_args(list(argv) if argv is not None else None)
@@ -92,6 +96,7 @@ def run(argv: Iterable[str] | None = None) -> int:
         settings = load_settings()
         settings = _apply_overrides(settings, args)
         tables = settings.tables
+        logging.info("Requesting up to %s rows per page", settings.page_size)
 
         if args.dry_run:
             for table in tables:

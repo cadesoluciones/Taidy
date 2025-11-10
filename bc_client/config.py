@@ -31,6 +31,9 @@ class Settings:
     output_dir: Path
 
 
+DEFAULT_PAGE_SIZE = 1000
+
+
 REQUIRED_KEYS = {
     "BC_TENANT_ID",
     "BC_ENVIRONMENT",
@@ -39,7 +42,6 @@ REQUIRED_KEYS = {
     "BC_SCOPE",
     "BC_TOKEN_URL",
     "BC_COMPANY_NAME",
-    "BC_PAGE_SIZE",
     "BC_OUTPUT_DIR",
 }
 
@@ -89,13 +91,16 @@ def load_settings(_env: Iterable[tuple[str, str]] | None = None) -> Settings:
     if missing:
         raise ValueError(f"Missing required configuration: {', '.join(sorted(missing))}")
 
-    try:
-        page_size = int(raw_env["BC_PAGE_SIZE"])
-    except ValueError as exc:  # pragma: no cover - defensive branch
-        raise ValueError("BC_PAGE_SIZE must be an integer") from exc
-
-    if page_size <= 0:
-        raise ValueError("BC_PAGE_SIZE must be greater than zero")
+    page_size_raw = raw_env.get("BC_PAGE_SIZE")
+    if page_size_raw:
+        try:
+            page_size = int(page_size_raw)
+        except ValueError as exc:  # pragma: no cover - defensive branch
+            raise ValueError("BC_PAGE_SIZE must be an integer") from exc
+        if page_size <= 0:
+            raise ValueError("BC_PAGE_SIZE must be greater than zero")
+    else:
+        page_size = DEFAULT_PAGE_SIZE
 
     tables_file = Path(raw_env.get("BC_TABLES_FILE", "tables.yaml")).expanduser()
     tables = _load_tables_from_file(tables_file)

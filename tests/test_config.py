@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from bc_client.config import Settings, TableConfig, load_settings
+from bc_client.config import DEFAULT_PAGE_SIZE, Settings, TableConfig, load_settings
 
 
 def _write_tables_file(directory: Path, entries: list[tuple[str, str]] | None = None) -> Path:
@@ -33,9 +33,9 @@ def _base_env(tmp_path: Path) -> dict[str, str]:
         "BC_TOKEN_URL": "https://example.com/token",
         "BC_COMPANY_ID": "123",
         "BC_COMPANY_NAME": "Some Company",
-        "BC_PAGE_SIZE": "500",
         "BC_OUTPUT_DIR": "./out",
         "BC_TABLES_FILE": str(tables_file),
+        "BC_PAGE_SIZE": "500",
     }
 
 
@@ -133,3 +133,12 @@ def test_load_settings_tables_file_default(monkeypatch: pytest.MonkeyPatch, tmp_
     settings = load_settings()
 
     assert [table.name for table in settings.tables] == ["Table A", "Table B"]
+
+
+def test_load_settings_defaults_page_size_when_missing(tmp_path: Path) -> None:
+    env = _base_env(tmp_path)
+    env.pop("BC_PAGE_SIZE")
+
+    settings = load_settings(env.items())
+
+    assert settings.page_size == DEFAULT_PAGE_SIZE

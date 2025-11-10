@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, Iterable
-from urllib.parse import urljoin, urlparse, urlunparse, parse_qsl, urlencode
+from urllib.parse import urljoin
 
 import requests
 from requests import Response, Session
@@ -28,7 +28,7 @@ class BusinessCentralClient:
         self._page_size = settings.page_size
 
     def iter_table_rows(self, table_url: str) -> Iterable[Dict[str, Any]]:
-        next_url: str | None = self._prepare_initial_url(table_url)
+        next_url: str | None = table_url
 
         while next_url:
             current_url = next_url
@@ -56,6 +56,7 @@ class BusinessCentralClient:
         headers = {
             "Authorization": f"Bearer {token}",
             "Accept": "application/json",
+            "Prefer": f"odata.maxpagesize={self._page_size}",
         }
 
         response = self._session.get(url, headers=headers, timeout=self._timeout)
@@ -64,15 +65,6 @@ class BusinessCentralClient:
                 f"Business Central request failed with status {response.status_code}: {response.text}"
             )
         return response
-
-    def _prepare_initial_url(self, url: str) -> str:
-        parsed = urlparse(url)
-        query_items = parse_qsl(parsed.query, keep_blank_values=True)
-        has_top = any(key == "$top" for key, _ in query_items)
-        if not has_top:
-            query_items.append(("$top", str(self._page_size)))
-        new_query = urlencode(query_items, doseq=True)
-        return urlunparse(parsed._replace(query=new_query))
 
     def _parse_response(self, response: Response) -> Dict[str, Any]:
         try:

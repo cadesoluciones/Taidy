@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from urllib.parse import urlencode
-
 import pytest
 import responses
 
@@ -44,19 +42,13 @@ def _client(token: str = "token") -> BusinessCentralClient:
     )
 
 
-def _initial_url(settings: Settings, table: str) -> str:
-    params = urlencode({"$top": settings.page_size})
-    return f"{table}?{params}"
-
-
 @responses.activate
 def test_iter_table_rows_single_page() -> None:
     settings = _settings()
     table = settings.tables[0]
-    initial_url = _initial_url(settings, table.url)
     responses.add(
         responses.GET,
-        initial_url,
+        table.url,
         json={"value": [{"id": 1}, {"id": 2}]},
         status=200,
     )
@@ -73,14 +65,13 @@ def test_iter_table_rows_single_page() -> None:
 def test_iter_table_rows_paginates() -> None:
     settings = _settings()
     table = settings.tables[0]
-    initial_url = _initial_url(settings, table.url)
     next_url = "https://api.businesscentral.dynamics.com/v2.0/tenant/Sandbox/api/data/companies({})/customers?$skiptoken=abc".format(
         settings.company_id
     )
 
     responses.add(
         responses.GET,
-        initial_url,
+        table.url,
         json={
             "value": [{"id": 1}],
             "@odata.nextLink": next_url,
@@ -105,10 +96,9 @@ def test_iter_table_rows_paginates() -> None:
 def test_iter_table_rows_raises_on_error() -> None:
     settings = _settings()
     table = settings.tables[0]
-    initial_url = _initial_url(settings, table.url)
     responses.add(
         responses.GET,
-        initial_url,
+        table.url,
         json={"error": {"code": "Bad"}},
         status=500,
     )
@@ -117,3 +107,21 @@ def test_iter_table_rows_raises_on_error() -> None:
 
     with pytest.raises(RuntimeError):
         list(client.iter_table_rows(table.url))
+
+
+@responses.activate
+def test_iter_table_rows_sets_prefer_header_for_page_size() -> None:
+    settings = _settings()
+    table = settings.tables[0]
+    responses.add(
+        responses.GET,
+        table.url,
+        json={"value": []},
+        status=200,
+    )
+
+    client = _client()
+    list(client.iter_table_rows(table.url))
+
+    headers = responses.calls[0].request.headers
+    assert headers["Prefer"] == f"odata.maxpagesize={settings.page_size}"

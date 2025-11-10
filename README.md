@@ -1,6 +1,6 @@
 # Business Central Data Extraction PoC
 
-This proof of concept demonstrates how to authenticate against Microsoft Dynamics 365 Business Central, retrieve table data through the OData API, and export the full result set to CSV files. The codebase follows a test-driven approach so that core behaviours (configuration loading, authentication, pagination, exporting, orchestration) remain covered by unit tests.
+This proof of concept demonstrates how to authenticate against Microsoft Dynamics 365 Business Central, retrieve table data through the OData API, and export the full result set to CSV files. Pagination relies on Business Central’s `@odata.nextLink` along with the `Prefer: odata.maxpagesize=<N>` header so that tables larger than 100 rows are streamed completely. The codebase follows a test-driven approach so that core behaviours (configuration loading, authentication, pagination, exporting, orchestration) remain covered by unit tests.
 
 ## Project Layout
 
@@ -19,11 +19,12 @@ This proof of concept demonstrates how to authenticate against Microsoft Dynamic
 
 ## Setup Instructions
 
-1. **Create virtual environment and install dependencies**
+1. **Create virtual environment and install dependencies (via `uv`)**
 
    ```bash
-   python3 -m venv .venv
-   .venv/bin/pip install -r requirements.txt
+   uv venv
+   source .venv/bin/activate
+   uv pip install -r requirements.txt
    ```
 
 2. **Provide configuration**
@@ -45,6 +46,7 @@ This proof of concept demonstrates how to authenticate against Microsoft Dynamic
    - `BC_SCOPE` – usually `https://api.businesscentral.dynamics.com/.default`.
    - `BC_COMPANY_ID` – *optional* GUID of the target company (discover via `.../api/data/companies`; leave blank if unknown).
    - `BC_TABLES_FILE` – path to the YAML file describing table names and URLs (defaults to `tables.yaml` if omitted).
+   - `BC_PAGE_SIZE` – *optional* pagination chunk size override; defaults to 1000 rows per request and controls the `Prefer: odata.maxpagesize` header.
    - `BC_OUTPUT_DIR` – directory where CSV files will be written.
 
    The YAML file should look like this:
@@ -64,7 +66,7 @@ This proof of concept demonstrates how to authenticate against Microsoft Dynamic
 Unit tests validate configuration parsing, token lifecycle, pagination logic, CSV exporting, and CLI behaviour. Execute them after each change.
 
 ```bash
-.venv/bin/pytest -q
+uv run pytest -q
 ```
 
 The suite is hermetic and does not require live Business Central access. When you later add integration tests, mark them with `@pytest.mark.integration` so they can be skipped by default.
@@ -74,19 +76,17 @@ The suite is hermetic and does not require live Business Central access. When yo
 1. **Dry run** – confirm configuration and table selection without hitting the API:
 
    ```bash
-   .venv/bin/python api_test.py --dry-run --verbose
-   ```
+   uv run python api_test.py --dry-run --verbose
 
 2. **Fetch data** – remove `--dry-run` once credentials are confirmed:
 
    ```bash
-   .venv/bin/python api_test.py --verbose
-   ```
+   uv run python api_test.py --verbose
 
    Optional overrides:
 
    - `--tables Customers Vendors` – fetch only the listed table names defined in your YAML configuration.
-   - `--page-size 1000` – adjust pagination chunk size for large datasets.
+   - `--page-size 1000` – adjust the `Prefer: odata.maxpagesize` hint for large datasets (defaults to 1000 when not set).
    - `--output-dir ./exports_run_$(date +%Y%m%d)` – customize output location.
 
 3. Inspect the generated CSV files under `BC_OUTPUT_DIR`. Files are named after the table (lowercase with underscores) and written atomically to avoid partial results.
