@@ -4,8 +4,8 @@ Esta prueba de concepto demuestra cómo autenticarse contra Microsoft Dynamics 3
 
 ## Estructura del Proyecto
 
-- `api_test.py` – Punto de entrada CLI que conecta configuración, autenticación, cliente API y exportador CSV
-- `bc_client/` – Módulos de soporte:
+- `src/main.py` – Punto de entrada CLI que conecta configuración, autenticación, cliente API y exportador CSV
+- `src/bc_client/` – Módulos de soporte:
   - `config.py` – Cargador de configuración basado en variables de entorno
   - `auth.py` – Flujo OAuth client credentials con caché de tokens
   - `api.py` – Wrapper OData de Business Central con paginación
@@ -76,13 +76,13 @@ La suite es hermética y no requiere acceso en vivo a Business Central. Cuando a
 1. **Ejecución en seco** – Confirma configuración y selección de tablas sin llamar a la API:
 
    ```bash
-   uv run python api_test.py --dry-run --verbose
+   task ingest -- --dry-run --verbose
    ```
 
 2. **Obtener datos** – Remueve `--dry-run` una vez que las credenciales estén confirmadas:
 
    ```bash
-   uv run python api_test.py --verbose
+   task ingest -- --verbose
    ```
 
    Anulaciones opcionales:

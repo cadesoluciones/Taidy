@@ -6,8 +6,8 @@ from urllib.parse import urljoin
 import requests
 from requests import Response, Session
 
-from bc_client.auth import TokenProvider
-from bc_client.config import Settings
+from .auth import TokenProvider
+from .config import Settings
 
 
 class BusinessCentralClient:

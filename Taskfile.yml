@@ -66,3 +66,12 @@ tasks:
     cmds:
       - uv run ruff format
       - uv run ruff check --fix
+
+  # ------------------------------
+  # 📊 Data Ingestion
+  # ------------------------------
+  ingest:
+    desc: Run Business Central data ingestion
+    dir: src
+    cmds:
+      - uv run python main.py {{.CLI_ARGS}}

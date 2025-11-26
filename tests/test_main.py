@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-import api_test
+import main
 from bc_client.config import Settings, TableConfig
 
 
@@ -54,20 +54,20 @@ def test_run_triggers_exports(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     )
     exported: list[tuple[str, list[dict[str, object]]]] = []
 
-    monkeypatch.setattr(api_test, "load_dotenv", lambda *_, **__: True)
-    monkeypatch.setattr(api_test, "load_settings", lambda: settings)
+    monkeypatch.setattr(main, "load_dotenv", lambda *_, **__: True)
+    monkeypatch.setattr(main, "load_settings", lambda: settings)
     monkeypatch.setattr(
-        api_test, "OAuthTokenProvider", lambda **kwargs: DummyTokenProvider()
+        main, "OAuthTokenProvider", lambda **kwargs: DummyTokenProvider()
     )
-    monkeypatch.setattr(api_test, "BusinessCentralClient", lambda **kwargs: client)
+    monkeypatch.setattr(main, "BusinessCentralClient", lambda **kwargs: client)
 
     def fake_export(table_name, rows, output_dir):
         exported.append((table_name, list(rows)))
         return output_dir / f"{table_name}.csv"
 
-    monkeypatch.setattr(api_test, "export_table", fake_export)
+    monkeypatch.setattr(main, "export_table", fake_export)
 
-    exit_code = api_test.run([])
+    exit_code = main.run([])
 
     assert exit_code == 0
     assert exported == [
@@ -87,12 +87,12 @@ def test_run_tables_override_filters_targets(
         }
     )
 
-    monkeypatch.setattr(api_test, "load_dotenv", lambda *_, **__: True)
-    monkeypatch.setattr(api_test, "load_settings", lambda: settings)
+    monkeypatch.setattr(main, "load_dotenv", lambda *_, **__: True)
+    monkeypatch.setattr(main, "load_settings", lambda: settings)
     monkeypatch.setattr(
-        api_test, "OAuthTokenProvider", lambda **kwargs: DummyTokenProvider()
+        main, "OAuthTokenProvider", lambda **kwargs: DummyTokenProvider()
     )
-    monkeypatch.setattr(api_test, "BusinessCentralClient", lambda **kwargs: client)
+    monkeypatch.setattr(main, "BusinessCentralClient", lambda **kwargs: client)
 
     exported: list[str] = []
 
@@ -100,9 +100,9 @@ def test_run_tables_override_filters_targets(
         exported.append(table_name)
         return output_dir / f"{table_name}.csv"
 
-    monkeypatch.setattr(api_test, "export_table", fake_export)
+    monkeypatch.setattr(main, "export_table", fake_export)
 
-    exit_code = api_test.run(["--tables", "customers"])
+    exit_code = main.run(["--tables", "customers"])
 
     assert exit_code == 0
     assert exported == ["customers"]
@@ -113,17 +113,15 @@ def test_run_unknown_table_returns_failure(
 ) -> None:
     settings = _settings(tmp_path)
 
-    monkeypatch.setattr(api_test, "load_dotenv", lambda *_, **__: True)
-    monkeypatch.setattr(api_test, "load_settings", lambda: settings)
+    monkeypatch.setattr(main, "load_dotenv", lambda *_, **__: True)
+    monkeypatch.setattr(main, "load_settings", lambda: settings)
     monkeypatch.setattr(
-        api_test, "OAuthTokenProvider", lambda **kwargs: DummyTokenProvider()
+        main, "OAuthTokenProvider", lambda **kwargs: DummyTokenProvider()
     )
-    monkeypatch.setattr(
-        api_test, "BusinessCentralClient", lambda **kwargs: DummyClient({})
-    )
-    monkeypatch.setattr(api_test, "export_table", lambda *_, **__: None)
+    monkeypatch.setattr(main, "BusinessCentralClient", lambda **kwargs: DummyClient({}))
+    monkeypatch.setattr(main, "export_table", lambda *_, **__: None)
 
-    exit_code = api_test.run(["--tables", "missing"])
+    exit_code = main.run(["--tables", "missing"])
 
     assert exit_code == 1
 
@@ -131,14 +129,12 @@ def test_run_unknown_table_returns_failure(
 def test_run_respects_dry_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
 
-    monkeypatch.setattr(api_test, "load_dotenv", lambda *_, **__: True)
-    monkeypatch.setattr(api_test, "load_settings", lambda: settings)
+    monkeypatch.setattr(main, "load_dotenv", lambda *_, **__: True)
+    monkeypatch.setattr(main, "load_settings", lambda: settings)
     monkeypatch.setattr(
-        api_test, "OAuthTokenProvider", lambda **kwargs: DummyTokenProvider()
+        main, "OAuthTokenProvider", lambda **kwargs: DummyTokenProvider()
     )
-    monkeypatch.setattr(
-        api_test, "BusinessCentralClient", lambda **kwargs: DummyClient({})
-    )
+    monkeypatch.setattr(main, "BusinessCentralClient", lambda **kwargs: DummyClient({}))
 
     called = []
 
@@ -146,9 +142,9 @@ def test_run_respects_dry_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
         called.append(table_name)
         return output_dir / f"{table_name}.csv"
 
-    monkeypatch.setattr(api_test, "export_table", fake_export)
+    monkeypatch.setattr(main, "export_table", fake_export)
 
-    exit_code = api_test.run(["--dry-run"])
+    exit_code = main.run(["--dry-run"])
 
     assert exit_code == 0
     assert called == []
@@ -159,20 +155,18 @@ def test_run_returns_failure_on_exception(
 ) -> None:
     settings = _settings(tmp_path)
 
-    monkeypatch.setattr(api_test, "load_dotenv", lambda *_, **__: True)
-    monkeypatch.setattr(api_test, "load_settings", lambda: settings)
+    monkeypatch.setattr(main, "load_dotenv", lambda *_, **__: True)
+    monkeypatch.setattr(main, "load_settings", lambda: settings)
 
     def fail_export(*_, **__):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(api_test, "export_table", fail_export)
+    monkeypatch.setattr(main, "export_table", fail_export)
     monkeypatch.setattr(
-        api_test, "OAuthTokenProvider", lambda **kwargs: DummyTokenProvider()
+        main, "OAuthTokenProvider", lambda **kwargs: DummyTokenProvider()
     )
-    monkeypatch.setattr(
-        api_test, "BusinessCentralClient", lambda **kwargs: DummyClient({})
-    )
+    monkeypatch.setattr(main, "BusinessCentralClient", lambda **kwargs: DummyClient({}))
 
-    exit_code = api_test.run([])
+    exit_code = main.run([])
 
     assert exit_code == 1
