@@ -1,7 +1,5 @@
 """Fabric OneLake uploader implementation."""
 
-from __future__ import annotations
-
 import logging
 import time
 from datetime import datetime, timezone
@@ -9,33 +7,15 @@ from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 from typing import Callable, Iterable, List, Optional, Protocol
 
+from azure.core.exceptions import (
+    HttpResponseError,
+    ResourceNotFoundError,
+    ServiceRequestError,
+)
+
 from .config import FabricUploadSettings
 
 logger = logging.getLogger(__name__)
-
-
-try:  # pragma: no cover - exercised when Azure SDK is installed
-    from azure.core.exceptions import (  # type: ignore
-        HttpResponseError,
-        ResourceNotFoundError,
-        ServiceRequestError,
-    )
-except ImportError:  # pragma: no cover - allow tests without Azure SDK
-
-    class HttpResponseError(Exception):
-        """Fallback HttpResponseError with optional status code."""
-
-        def __init__(
-            self, message: str = "", *, status_code: Optional[int] = None
-        ) -> None:
-            super().__init__(message)
-            self.status_code = status_code
-
-    class ResourceNotFoundError(Exception):
-        """Fallback ResourceNotFoundError."""
-
-    class ServiceRequestError(Exception):
-        """Fallback ServiceRequestError."""
 
 
 class FileClientProtocol(Protocol):
@@ -202,16 +182,8 @@ class FabricUploader:
         return False
 
     def _build_file_system_client(self) -> FileSystemClientProtocol:
-        try:
-            from azure.identity import ClientSecretCredential  # type: ignore
-            from azure.storage.filedatalake import (  # type: ignore
-                DataLakeServiceClient,
-            )
-        except ImportError as exc:  # pragma: no cover - requires Azure SDK runtime
-            raise RuntimeError(
-                "Azure Storage dependencies are missing. Install 'azure-identity' "
-                "and 'azure-storage-file-datalake' to enable Fabric uploads."
-            ) from exc
+        from azure.identity import ClientSecretCredential
+        from azure.storage.filedatalake import DataLakeServiceClient
 
         credential = ClientSecretCredential(
             tenant_id=self._settings.tenant_id,

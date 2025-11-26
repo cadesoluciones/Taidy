@@ -1,7 +1,5 @@
 """Standalone CLI entry point for uploading exports to Fabric OneLake."""
 
-from __future__ import annotations
-
 import argparse
 import logging
 import sys
