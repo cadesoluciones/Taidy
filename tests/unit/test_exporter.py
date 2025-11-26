@@ -15,6 +15,7 @@ def test_export_table_writes_csv(tmp_path: Path) -> None:
     assert output.exists()
     with output.open(newline="") as fh:
         reader = csv.reader(fh)
+        # CSV header should include every field seen across rows.
         assert next(reader) == ["id", "name"]
         assert next(reader) == ["1", "Alice"]
         assert next(reader) == ["2", "Bob"]
@@ -24,6 +25,7 @@ def test_export_table_handles_empty_dataset(tmp_path: Path) -> None:
     output = exporter.export_table("Empty Table", [], tmp_path)
 
     assert output.exists()
+    # An empty dataset should produce an empty file (no header written).
     assert output.read_text() == ""
 
 

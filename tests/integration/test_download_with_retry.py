@@ -37,7 +37,7 @@ def test_auth_and_api_integration(tmp_path: Path) -> None:
     settings = _settings()
     table = settings.tables[0]
 
-    # Mock token endpoint
+    # Prevent external calls by returning a canned token payload.
     responses.add(
         responses.POST,
         settings.token_url,
@@ -45,7 +45,7 @@ def test_auth_and_api_integration(tmp_path: Path) -> None:
         status=200,
     )
 
-    # Mock API endpoint
+    # Return a simple table payload so the client can decode rows.
     responses.add(
         responses.GET,
         table.url,
@@ -53,7 +53,7 @@ def test_auth_and_api_integration(tmp_path: Path) -> None:
         status=200,
     )
 
-    # Real token provider + real API client (no mocking internals)
+    # Use the real components to prove the integration surface.
     token_provider = OAuthTokenProvider(
         token_url=settings.token_url,
         client_id=settings.client_id,
@@ -69,7 +69,7 @@ def test_auth_and_api_integration(tmp_path: Path) -> None:
 
     assert len(rows) == 1
     assert rows[0]["name"] == "Test"
-    # Verify token was actually used
+    # Confirm the client attached the expected bearer token to the second request.
     assert (
         "Bearer real_token_123" in responses.calls[1].request.headers["Authorization"]
     )
@@ -79,10 +79,11 @@ def test_auth_and_api_integration(tmp_path: Path) -> None:
 def test_full_pipeline_integration(tmp_path: Path) -> None:
     """Test complete pipeline: auth -> fetch -> paginate -> export."""
     settings = _settings()
+    # Keep exports contained inside pytest's temporary directory.
     settings.output_dir = tmp_path
     table = settings.tables[0]
 
-    # Mock token endpoint
+    # Token endpoint still needs to be stubbed for the OAuth flow.
     responses.add(
         responses.POST,
         settings.token_url,
@@ -90,7 +91,7 @@ def test_full_pipeline_integration(tmp_path: Path) -> None:
         status=200,
     )
 
-    # Mock paginated API responses
+    # Respond with nextLink so pagination logic is exercised.
     responses.add(
         responses.GET,
         table.url,
@@ -107,7 +108,7 @@ def test_full_pipeline_integration(tmp_path: Path) -> None:
         status=200,
     )
 
-    # Real components working together
+    # Use the actual provider + client to wire auth and pagination.
     token_provider = OAuthTokenProvider(
         token_url=settings.token_url,
         client_id=settings.client_id,

@@ -61,8 +61,10 @@ def test_run_triggers_exports(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
             "https://example.com/vendors": [{"id": 2}],
         }
     )
+    # Capture every export so we can assert the exported rows.
     exported: list[tuple[str, list[dict[str, object]]]] = []
 
+    # Prevent dotenv/real API calls; tests inject their own settings.
     monkeypatch.setattr(main, "load_dotenv", lambda *_, **__: True)
     monkeypatch.setattr(main, "load_settings", lambda: settings)
     monkeypatch.setattr(
@@ -127,6 +129,7 @@ def test_run_unknown_table_returns_failure(
     monkeypatch.setattr(
         main, "OAuthTokenProvider", lambda **kwargs: DummyTokenProvider()
     )
+    # Client returns no rows so run() treats requested table as missing.
     monkeypatch.setattr(main, "BusinessCentralClient", lambda **kwargs: DummyClient({}))
     monkeypatch.setattr(main, "export_table", lambda *_, **__: None)
 
@@ -200,6 +203,7 @@ def test_run_supports_parallel_exports(
         main, "BusinessCentralClient", lambda **kwargs: RecordingClient(rows)
     )
 
+    # Each worker should trigger an export for its assigned table.
     exported: list[str] = []
 
     def fake_export(table_name, rows_iter, output_dir):

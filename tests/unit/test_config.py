@@ -22,6 +22,7 @@ def _write_tables_file(
 
 
 def _base_env(tmp_path: Path) -> dict[str, str]:
+    # Provide a complete set of environment variables for successful parsing.
     tables_file = _write_tables_file(tmp_path)
     return {
         "BC_TENANT_ID": "tenant",
@@ -85,6 +86,7 @@ def test_load_settings_default_env(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     env = _base_env(tmp_path)
+    # Push the env vars into the process so load_settings uses the defaults.
     for key, value in env.items():
         monkeypatch.setenv(key, value)
 
@@ -97,6 +99,7 @@ def test_load_settings_default_env(
 def test_load_settings_invalid_table_entry(tmp_path: Path) -> None:
     env = _base_env(tmp_path)
     tables_file = Path(env["BC_TABLES_FILE"])
+    # Break the tables file so load_settings surfaces parsing errors.
     tables_file.write_text("tables: invalid", encoding="utf-8")
 
     with pytest.raises(ValueError) as exc:
@@ -131,6 +134,7 @@ def test_load_settings_tables_file_default(
     monkeypatch.chdir(tmp_path)
 
     env = _base_env(tmp_path)
+    # Remove BC_TABLES_FILE so load_settings falls back to cwd tables.yaml.
     env.pop("BC_TABLES_FILE")
     for key, value in env.items():
         monkeypatch.setenv(key, value)

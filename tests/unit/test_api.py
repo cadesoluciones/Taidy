@@ -49,6 +49,7 @@ def _client(token: str = "token") -> BusinessCentralClient:
 def test_get_table_rows_single_page() -> None:
     settings = _settings()
     table = settings.tables[0]
+    # Return a single JSON payload so pagination stays in the single-page path.
     responses.add(
         responses.GET,
         table.url,
@@ -61,6 +62,7 @@ def test_get_table_rows_single_page() -> None:
 
     assert rows == [{"id": 1}, {"id": 2}]
     assert len(responses.calls) == 1
+    # The client should always attach the cached bearer token.
     assert responses.calls[0].request.headers["Authorization"] == "Bearer token"
 
 
@@ -72,6 +74,7 @@ def test_get_table_rows_paginates() -> None:
         settings.company_id
     )
 
+    # Provide a nextLink so the client is forced to request a second page.
     responses.add(
         responses.GET,
         table.url,
@@ -99,6 +102,7 @@ def test_get_table_rows_paginates() -> None:
 def test_get_table_rows_raises_on_error() -> None:
     settings = _settings()
     table = settings.tables[0]
+    # Error payload simulates a server-side failure condition.
     responses.add(
         responses.GET,
         table.url,
@@ -116,6 +120,7 @@ def test_get_table_rows_raises_on_error() -> None:
 def test_get_table_rows_sets_prefer_header_for_page_size() -> None:
     settings = _settings()
     table = settings.tables[0]
+    # Ensure the Prefer header encodes the configured page size.
     responses.add(
         responses.GET,
         table.url,

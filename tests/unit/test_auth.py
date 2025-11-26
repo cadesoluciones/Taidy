@@ -21,6 +21,7 @@ def _build_provider(now_fn: Callable[[], datetime] | None = None) -> OAuthTokenP
 
 @responses.activate
 def test_get_access_token_fetches_and_caches() -> None:
+    # Token endpoint returns a valid access token once.
     responses.add(
         responses.POST,
         "https://example.com/token",
@@ -46,6 +47,7 @@ def test_get_access_token_refreshes_when_expired() -> None:
 
     provider = _build_provider(now_fn)
 
+    # Token endpoint issues a short-lived token so we can force a refresh.
     responses.add(
         responses.POST,
         "https://example.com/token",
@@ -55,7 +57,9 @@ def test_get_access_token_refreshes_when_expired() -> None:
     token_1 = provider.get_access_token()
     assert token_1 == "first"
 
+    # Move time forward past the short-lived expiry to force a refresh.
     now = now + timedelta(seconds=5)
+    # Failed token exchange should raise to bubble up auth problems.
     responses.add(
         responses.POST,
         "https://example.com/token",

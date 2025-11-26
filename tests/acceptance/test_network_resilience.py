@@ -38,9 +38,10 @@ def settings():
 @pytest.mark.acceptance
 def test_full_download_with_real_api(settings, tmp_path: Path) -> None:
     """Test complete download flow with real BC API (bc_job_headers only)."""
+    # Keep exports isolated inside the temporary pytest directory.
     settings.output_dir = tmp_path
 
-    # Use only bc_job_headers (smallest table)
+    # Use only bc_job_headers (smallest table) so downloads stay fast.
     table = next((t for t in settings.tables if t.name == "bc_job_headers"), None)
     if not table:
         pytest.skip("bc_job_headers table not configured")
@@ -76,9 +77,10 @@ def test_retry_behavior_with_real_api(settings, tmp_path: Path) -> None:
     Validates retry logic works with real network calls.
     Manually disconnect/reconnect internet during execution to test recovery.
     """
+    # Keep exports isolated inside the temporary pytest directory.
     settings.output_dir = tmp_path
 
-    # Use only bc_job_headers (smallest table)
+    # Use only bc_job_headers (smallest table) so manual retry testing stays quick.
     table = next((t for t in settings.tables if t.name == "bc_job_headers"), None)
     if not table:
         pytest.skip("bc_job_headers table not configured")

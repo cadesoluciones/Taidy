@@ -75,4 +75,4 @@ tasks:
     env:
       PYTHONPATH: .
     cmds:
-      - uv run python src/main.py {{.CLI_ARGS}}
+      - time uv run python src/main.py {{.CLI_ARGS}}

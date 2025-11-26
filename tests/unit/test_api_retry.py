@@ -1,17 +1,12 @@
 """Unit tests for API client basic functionality."""
 
 from pathlib import Path
-from unittest.mock import Mock
+from types import SimpleNamespace
 
 import pytest
 
 from src.bc_client.api import BusinessCentralClient, BusinessCentralError
 from src.bc_client.config import Settings, TableConfig
-
-
-class StubTokenProvider:
-    def get_access_token(self) -> str:
-        return "token"
 
 
 def _settings() -> Settings:
@@ -35,68 +30,60 @@ def _settings() -> Settings:
     )
 
 
-def test_get_adds_authorization_header() -> None:
-    """_get should add Bearer token to request headers."""
-    mock_token_provider = Mock()
-    mock_token_provider.get_access_token.return_value = "test_token"
+def _token_provider(token: str = "token") -> SimpleNamespace:
+    def get_access_token() -> str:
+        return token
 
-    client = BusinessCentralClient(
+    return SimpleNamespace(get_access_token=get_access_token)
+
+
+def _response(status_code: int, text: str = "") -> SimpleNamespace:
+    return SimpleNamespace(status_code=status_code, text=text)
+
+
+def _session(response: SimpleNamespace) -> SimpleNamespace:
+    # Capture request metadata so tests can assert on headers after the call.
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    def get(url: str, **kwargs):
+        calls.append((url, kwargs))
+        return response
+
+    return SimpleNamespace(get=get, calls=calls)
+
+
+def _client(
+    *,
+    token: str = "token",
+    session: SimpleNamespace | None = None,
+) -> BusinessCentralClient:
+    return BusinessCentralClient(
         settings=_settings(),
-        token_provider=mock_token_provider,
+        token_provider=_token_provider(token),
+        session=session,
+        timeout=5,
     )
 
-    mock_response = Mock()
-    mock_response.status_code = 200
 
-    mock_session = Mock()
-    mock_session.get.return_value = mock_response
-    client._session = mock_session
+def test_get_adds_authorization_header() -> None:
+    """_get should add Bearer token to request headers."""
+    session = _session(_response(status_code=200))
+    client = _client(token="test_token", session=session)
 
     client._get("https://example.com/test")
 
-    call_kwargs = mock_session.get.call_args[1]
+    _, call_kwargs = session.calls[0]
     assert call_kwargs["headers"]["Authorization"] == "Bearer test_token"
 
 
-def test_get_raises_on_4xx_error() -> None:
-    """_get should raise BusinessCentralError on 4xx status."""
-    mock_token_provider = Mock()
-    mock_token_provider.get_access_token.return_value = "token"
+@pytest.mark.parametrize(
+    "status_code",
+    [404, 500],
+)
+def test_get_raises_on_error(status_code: int) -> None:
+    """Any 4xx/5xx result should surface as a BusinessCentralError."""
+    session = _session(_response(status_code=status_code, text="boom"))
+    client = _client(session=session)
 
-    client = BusinessCentralClient(
-        settings=_settings(),
-        token_provider=mock_token_provider,
-    )
-
-    mock_response = Mock()
-    mock_response.status_code = 404
-    mock_response.text = "Not found"
-
-    mock_session = Mock()
-    mock_session.get.return_value = mock_response
-    client._session = mock_session
-
-    with pytest.raises(BusinessCentralError, match="404"):
-        client._get("https://example.com/test")
-
-
-def test_get_raises_on_5xx_error() -> None:
-    """_get should raise BusinessCentralError on 5xx status."""
-    mock_token_provider = Mock()
-    mock_token_provider.get_access_token.return_value = "token"
-
-    client = BusinessCentralClient(
-        settings=_settings(),
-        token_provider=mock_token_provider,
-    )
-
-    mock_response = Mock()
-    mock_response.status_code = 500
-    mock_response.text = "Internal server error"
-
-    mock_session = Mock()
-    mock_session.get.return_value = mock_response
-    client._session = mock_session
-
-    with pytest.raises(BusinessCentralError, match="500"):
+    with pytest.raises(BusinessCentralError, match=str(status_code)):
         client._get("https://example.com/test")
