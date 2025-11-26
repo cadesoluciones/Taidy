@@ -1,110 +1,159 @@
-# Extracción de Datos de Business Central - PoC
+# 📊 Extracción de Datos de Business Central - PoC
 
-Esta prueba de concepto demuestra cómo autenticarse contra Microsoft Dynamics 365 Business Central, recuperar datos de tablas a través de la API OData, y exportar el conjunto completo de resultados a archivos CSV. La paginación se basa en `@odata.nextLink` de Business Central junto con el encabezado `Prefer: odata.maxpagesize=<N>` para que las tablas con más de 100 filas se transmitan completamente. El código sigue un enfoque dirigido por pruebas para que los comportamientos principales (carga de configuración, autenticación, paginación, exportación, orquestación) estén cubiertos por pruebas unitarias.
+Herramienta para extraer datos completos de Microsoft Dynamics 365 Business Central a archivos CSV. Incluye autenticación OAuth, paginación automática, procesamiento paralelo y exportación atómica.
 
-## Estructura del Proyecto
-
-- `src/main.py` – Punto de entrada CLI que conecta configuración, autenticación, cliente API y exportador CSV
-- `src/bc_client/` – Módulos de soporte:
-  - `config.py` – Cargador de configuración basado en variables de entorno
-  - `auth.py` – Flujo OAuth client credentials con caché de tokens
-  - `api.py` – Wrapper OData de Business Central con paginación
-  - `exporter.py` – Utilidades de exportación CSV con nombres de archivo seguros
-- `tests/` – Pruebas unitarias que cubren los módulos anteriores; herméticas mediante mocks
-
-## Requisitos Previos
-
-- Python 3.12+
-- Acceso a Business Central con una aplicación Azure AD configurada para client-credentials
-
-## Instrucciones de Configuración
-
-1. **Crear entorno virtual e instalar dependencias (vía `uv`)**
-
-   ```bash
-   uv venv
-   source .venv/bin/activate
-   uv pip install -r requirements.txt
-   ```
-
-2. **Proporcionar configuración**
-
-   Copia `.env.example` a `.env` para credenciales y configuración general, luego copia `tables.example.yaml` a `tables.yaml` (o otra ruta de tu elección) para declarar las tablas que quieres exportar.
-
-   ```bash
-   cp .env.example .env
-   cp tables.example.yaml tables.yaml
-   $EDITOR .env
-   $EDITOR tables.yaml
-   ```
-
-   Variables clave:
-
-   - `BC_TENANT_ID` – ID del tenant de Azure AD (GUID)
-   - `BC_ENVIRONMENT` – Nombre del entorno de Business Central (ej., `Sandbox`, `Production`)
-   - `BC_CLIENT_ID` / `BC_CLIENT_SECRET` – Credenciales del registro de aplicación
-   - `BC_SCOPE` – Usualmente `https://api.businesscentral.dynamics.com/.default`
-   - `BC_COMPANY_ID` – *Opcional* GUID de la empresa objetivo (descubrir vía `.../api/data/companies`; dejar en blanco si es desconocido)
-   - `BC_TABLES_FILE` – Ruta al archivo YAML que describe nombres y URLs de tablas (por defecto `tables.yaml` si se omite)
-   - `BC_PAGE_SIZE` – *Opcional* Anulación del tamaño de chunk de paginación; por defecto 1000 filas por solicitud y controla el encabezado `Prefer: odata.maxpagesize`
-   - `BC_OUTPUT_DIR` – Directorio donde se escribirán los archivos CSV
-
-   El archivo YAML debe verse así:
-
-   ```yaml
-   tables:
-     - name: Customers
-       url: https://api.businesscentral.dynamics.com/v2.0/<TENANT>/<ENV>/api/data/companies(<COMPANY_ID>)/customers
-     - name: Vendors
-       url: https://api.businesscentral.dynamics.com/v2.0/<TENANT>/<ENV>/api/data/companies(<COMPANY_ID>)/vendors
-   ```
-
-   Elige valores `name` compactos—se usarán para anulaciones CLI (ej., `--tables Customers`).
-
-## Ejecutar las Pruebas Automatizadas
-
-Las pruebas unitarias validan el análisis de configuración, ciclo de vida de tokens, lógica de paginación, exportación CSV y comportamiento CLI. Ejécutalas después de cada cambio.
+## 🚀 Inicio Rápido
 
 ```bash
-uv run pytest -q
+# 1. Configurar entorno
+uv venv && source .venv/bin/activate
+uv pip install -r requirements.txt
+
+# 2. Configurar credenciales y configuración
+cp .env.example .env
+cp tables.example.yaml tables.yaml
+# Editar .env con tus secretos de Azure AD y actualizar config.json
+
+# 3. Probar configuración
+task ingest -- --dry-run --verbose
+
+# 4. Extraer datos
+task ingest -- --verbose
 ```
 
-La suite es hermética y no requiere acceso en vivo a Business Central. Cuando agregues pruebas de integración más tarde, márcalas con `@pytest.mark.integration` para que puedan omitirse por defecto.
+## 📚 Documentación Adicional
 
-## Flujo de Verificación Manual
+- **[🔧 Configuración Detallada](docs/configuracion.md)** - Azure AD, variables de entorno, configuración de tablas
+- **[🛠️ Guía de Desarrollo](docs/desarrollo.md)** - Arquitectura, pruebas, troubleshooting, extensión
 
-1. **Ejecución en seco** – Confirma configuración y selección de tablas sin llamar a la API:
+## ⚡ Características
 
-   ```bash
-   task ingest -- --dry-run --verbose
-   ```
+- **Autenticación OAuth** con caché automático de tokens
+- **Paginación completa** vía `@odata.nextLink`
+- **Procesamiento paralelo** de múltiples tablas
+- **Exportación atómica** para evitar archivos parciales
+- **Pruebas comprehensivas** (unit/integration/acceptance)
 
-2. **Obtener datos** – Remueve `--dry-run` una vez que las credenciales estén confirmadas:
+## 📋 Requisitos
 
-   ```bash
-   task ingest -- --verbose
-   ```
+- Python 3.12+
+- Aplicación Azure AD con permisos de Business Central
 
-   Anulaciones opcionales:
+## ⚙️ Configuración Básica
 
-   - `--tables Customers Vendors` – Obtiene solo los nombres de tabla listados definidos en tu configuración YAML
-   - `--page-size 1000` – Ajusta la sugerencia `Prefer: odata.maxpagesize` para conjuntos de datos grandes (por defecto 1000 cuando no se establece)
-   - `--output-dir ./exports_run_$(date +%Y%m%d)` – Personaliza la ubicación de salida
-   - `--parallel 4` – Exporta hasta 4 tablas en paralelo (útil para conjuntos grandes; úsalo con cuidado frente a límites de rate)
+### Secretos en `.env`
 
-3. Inspecciona los archivos CSV generados bajo `BC_OUTPUT_DIR`. Los archivos se nombran según la tabla (minúsculas con guiones bajos) y se escriben atómicamente para evitar resultados parciales.
+Solo guarda los secretos: `BC_CLIENT_SECRET` y `FABRIC_CLIENT_SECRET`. El resto de la configuración vive en `config.json` (consulta `config.example.json`).
 
-## Extendiendo el PoC
+```bash
+# En tu archivo .env
+BC_CLIENT_SECRET=tu-client-secret-aqui
+FABRIC_CLIENT_SECRET=tu-fabric-secret-aqui
+CONFIG_FILE=./config.json
+```
 
-- Agregar pruebas de integración que llamen a la API en vivo usando credenciales cargadas desde `.env`, protegidas detrás de una bandera opt-in (ej., `pytest -m integration`)
-- Introducir políticas de reintento/backoff (ej., vía `tenacity`) alrededor de llamadas API si la limitación de velocidad se convierte en un problema
-- Transmitir filas directamente al almacenamiento en la nube (S3, Azure Blob) una vez que la exportación CSV esté validada localmente
-- Implementar estrategias de sincronización incremental rastreando timestamps de última modificación o usando filtros OData
+### Configuración de Tablas
 
-## Solución de Problemas
+```yaml
+# En tables.yaml
+tables:
+  - name: Customers
+    url: https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/data/companies({company})/customers
+  - name: Vendors
+    url: https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/data/companies({company})/vendors
+```
 
-- **Fallas de autenticación** – Verifica que el registro de aplicación Azure AD tenga los permisos delegados/de aplicación de `Dynamics 365 Business Central` y que el secreto esté vigente
-- **Errores de `Missing required configuration`** – Asegúrate de que tu `.env` coincida con `.env.example` y que ninguna clave esté en blanco
-- **Problemas de esquema inesperados** – Confirma que los nombres de tabla referencien entidades de la API de Business Central (ver `https://api.businesscentral.dynamics.com/v2.0/<tenant>/<environment>/api/data/$metadata`)
+> 📖 **Para configuración detallada**: Ver [Guía de Configuración](docs/configuracion.md)
 
-Para depuración adicional, vuelve a ejecutar con `--verbose` para emitir logging de nivel debug e inspeccionar respuestas HTTP.
+## 🧪 Pruebas
+
+```bash
+# Pruebas rápidas (unit + integration)
+pytest
+
+# Con cobertura
+task test:run
+
+# Pruebas con API real (requiere .env configurado)
+pytest -m acceptance -v
+```
+
+## 🔄 Comandos de Uso
+
+```bash
+# Validar configuración (sin llamar API)
+task ingest -- --dry-run --verbose
+
+# Extraer todas las tablas
+task ingest -- --verbose
+
+# Extraer tablas específicas
+task ingest -- --tables Customers Vendors
+
+# Procesamiento paralelo
+task ingest -- --parallel 4
+
+# Directorio personalizado
+task ingest -- --output-dir ./exports_$(date +%Y%m%d)
+```
+
+## ☁️ Subir CSV directamente a Microsoft Fabric OneLake
+
+Ahora las cargas a Fabric se ejecutan en un paso independiente para poder validar primero los CSV exportados.
+
+1. Completa en `.env` las variables `FABRIC_*`:
+   - `FABRIC_TENANT_ID`, `FABRIC_CLIENT_ID`, `FABRIC_CLIENT_SECRET`
+   - `FABRIC_WORKSPACE_NAME`, `FABRIC_LAKEHOUSE_NAME`
+   - Opcional: `FABRIC_WORKSPACE_ID`, `FABRIC_LAKEHOUSE_ID` (recomendado: usa los GUID del portal para garantizar nombres compatibles con OneLake)
+   - Opcional: `FABRIC_PATH_PREFIX`, `FABRIC_SOURCE_NAME`, `FABRIC_OVERWRITE`, `FABRIC_MAX_RETRIES`
+2. Ejecuta `task ingest -- --verbose` para descargar las tablas a `exports/`.
+3. Revisa/valida los CSV generados.
+4. Ejecuta `task fabric:upload -- --output-dir ./exports` para subir todos los CSV encontrados a `Files/<prefijo>/<source>/<tabla>/<yyyy>/<mm>/<dd>/<archivo>.csv` usando tu aplicación de Entra ID.
+
+El comando de subida admite `--dry-run` (lista los archivos sin subirlos) y respeta `FABRIC_OVERWRITE`/`FABRIC_MAX_RETRIES`. Para evitar errores `ArtifactNotFound`, especifica `FABRIC_WORKSPACE_ID`/`FABRIC_LAKEHOUSE_ID` con los GUID que aparecen en las URLs del portal (`.../groups/<workspaceId>/lakehouses/<lakehouseId>`) y recuerda que OneLake usa la ruta `https://onelake.dfs.fabric.microsoft.com/<workspace>/<lakehouse>.Lakehouse/Files/...`. El uploader crea las carpetas intermedias automáticamente y los reintentos manejan errores transitorios de red.
+
+## 🔧 Solución de Problemas Básicos
+
+### Error de autenticación
+
+- Verificar credenciales en `.env`
+- Confirmar permisos en Azure AD
+- Verificar que admin consent fue otorgado
+
+### Error de configuración
+
+```bash
+# Verificar variables
+env | grep BC_
+
+# Probar configuración
+task ingest -- --dry-run --verbose
+```
+
+### Problemas de red
+
+- El sistema reintenta automáticamente (5 intentos)
+- Verificar conectividad a `api.businesscentral.dynamics.com`
+
+> 🔍 **Para troubleshooting avanzado**: Ver [Guía de Desarrollo](docs/desarrollo.md)
+
+## 📁 Estructura del Proyecto
+
+```text
+src/
+├── main.py              # CLI y orquestación
+└── bc_client/
+    ├── config.py        # Configuración y validación
+    ├── auth.py          # OAuth con caché de tokens
+    ├── api.py           # Cliente OData con paginación
+    └── exporter.py      # Exportación CSV atómica
+
+tests/
+├── unit/               # Pruebas unitarias rápidas
+├── integration/        # Pruebas de integración
+└── acceptance/         # Pruebas con API real
+
+docs/
+├── configuracion.md    # Configuración detallada
+└── desarrollo.md       # Guía técnica
+```

@@ -3,9 +3,11 @@
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 import yaml
+
+from src.config_loader import load_config_data
 
 
 # ---------------------------
@@ -36,16 +38,7 @@ class Settings:
 
 DEFAULT_PAGE_SIZE = 1000
 
-REQUIRED_KEYS = [
-    "BC_TENANT_ID",
-    "BC_ENVIRONMENT",
-    "BC_CLIENT_ID",
-    "BC_CLIENT_SECRET",
-    "BC_SCOPE",
-    "BC_TOKEN_URL",
-    "BC_COMPANY_NAME",
-    "BC_OUTPUT_DIR",
-]
+REQUIRED_SECRET_KEYS = ["BC_CLIENT_SECRET"]
 
 
 # ---------------------------
@@ -53,7 +46,13 @@ REQUIRED_KEYS = [
 # ---------------------------
 
 
-def load_settings(env: Optional[Iterable[tuple[str, str]]] = None) -> Settings:
+def load_settings(
+    env: Optional[Iterable[tuple[str, str]]] = None,
+    *,
+    config_data: dict | None = None,
+    config_file: Path | str | None = None,
+    config_dir: Optional[Path] = None,
+) -> Settings:
     """
     Load Settings from environment variables.
 
@@ -65,22 +64,25 @@ def load_settings(env: Optional[Iterable[tuple[str, str]]] = None) -> Settings:
         A Settings object with validated configuration.
     """
     raw_env = dict(env or os.environ.items())
+    _require_keys(raw_env, REQUIRED_SECRET_KEYS)
 
-    _require_keys(raw_env, REQUIRED_KEYS)
+    config_section, config_root = _resolve_business_central_config(
+        config_data, config_file, config_dir
+    )
 
-    page_size = _read_page_size(raw_env)
-    tables = _read_tables(raw_env)
-    output_dir = _read_output_dir(raw_env)
+    page_size = _read_page_size(config_section)
+    tables = _read_tables(config_section, config_root)
+    output_dir = _read_output_dir(config_section, config_root)
 
     return Settings(
-        tenant_id=raw_env["BC_TENANT_ID"],
-        environment=raw_env["BC_ENVIRONMENT"],
-        client_id=raw_env["BC_CLIENT_ID"],
+        tenant_id=config_section["tenant_id"],
+        environment=config_section["environment"],
+        client_id=config_section["client_id"],
         client_secret=raw_env["BC_CLIENT_SECRET"],
-        scope=raw_env["BC_SCOPE"],
-        token_url=raw_env["BC_TOKEN_URL"],
-        company_id=_read_optional(raw_env, "BC_COMPANY_ID"),
-        company_name=raw_env["BC_COMPANY_NAME"],
+        scope=config_section["scope"],
+        token_url=config_section["token_url"],
+        company_id=config_section.get("company_id"),
+        company_name=config_section["company_name"],
         tables=tables,
         page_size=page_size,
         output_dir=output_dir,
@@ -99,9 +101,9 @@ def _require_keys(env: Dict[str, str], keys: List[str]) -> None:
         raise ValueError(f"Missing required configuration: {missing_str}")
 
 
-def _read_page_size(env: Dict[str, str]) -> int:
-    raw = env.get("BC_PAGE_SIZE")
-    if not raw:
+def _read_page_size(config: Dict[str, Any]) -> int:
+    raw = config.get("page_size")
+    if raw is None:
         return DEFAULT_PAGE_SIZE
 
     try:
@@ -115,9 +117,11 @@ def _read_page_size(env: Dict[str, str]) -> int:
     return page_size
 
 
-def _read_tables(env: Dict[str, str]) -> List[TableConfig]:
-    tables_file = env.get("BC_TABLES_FILE", "tables.yaml")
-    path = Path(tables_file).expanduser().resolve()
+def _read_tables(config: Dict[str, str], root: Path) -> List[TableConfig]:
+    tables_file = config.get("tables_file", "tables.yaml")
+    path = Path(tables_file)
+    if not path.is_absolute():
+        path = (root / path).resolve()
 
     if not path.is_absolute():
         raise ValueError(f"Tables file must be an absolute path: {path}")
@@ -127,8 +131,10 @@ def _read_tables(env: Dict[str, str]) -> List[TableConfig]:
     return _load_tables_from_file(path)
 
 
-def _read_output_dir(env: Dict[str, str]) -> Path:
-    path = Path(env["BC_OUTPUT_DIR"]).expanduser().resolve()
+def _read_output_dir(config: Dict[str, str], root: Path) -> Path:
+    path = Path(config["output_dir"])
+    if not path.is_absolute():
+        path = (root / path).resolve()
 
     if not path.is_absolute():
         raise ValueError(f"Output directory must be an absolute path: {path}")
@@ -183,3 +189,21 @@ def _parse_table_entry(entry: object, path: Path) -> TableConfig:
         raise ValueError(f"Invalid table entry in {path}: missing/empty 'url'")
 
     return TableConfig(name=name.strip(), url=url.strip())
+
+
+def _resolve_business_central_config(
+    config_data: dict | None,
+    config_file: Path | str | None,
+    config_dir: Optional[Path],
+) -> tuple[dict, Path]:
+    if config_data is not None:
+        section = config_data.get("business_central")
+        if not isinstance(section, dict):
+            raise ValueError("Configuration file missing 'business_central' section")
+        return section, config_dir or Path.cwd()
+
+    data, root = load_config_data(config_file)
+    section = data.get("business_central")
+    if not isinstance(section, dict):
+        raise ValueError("Configuration file missing 'business_central' section")
+    return section, root

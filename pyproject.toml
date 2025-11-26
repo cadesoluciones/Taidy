@@ -4,7 +4,13 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["requests>=2.32.5", "responses>=0.25.8", "tenacity>=9.1.2"]
+dependencies = [
+    "requests>=2.32.5",
+    "responses>=0.25.8",
+    "tenacity>=9.1.2",
+    "azure-identity>=1.17.1",
+    "azure-storage-file-datalake>=12.17.0",
+]
 
 [dependency-groups]
 

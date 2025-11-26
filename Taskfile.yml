@@ -4,6 +4,9 @@ version: "3"
 vars:
   VENV: .venv
 
+env:
+  UV_CACHE_DIR: .uv-cache
+
 tasks:
   # Default task that lists available tasks
   default:
@@ -76,3 +79,10 @@ tasks:
       PYTHONPATH: .
     cmds:
       - time uv run python src/main.py {{.CLI_ARGS}}
+
+  fabric:upload:
+    desc: Upload existing CSV exports to Fabric OneLake
+    env:
+      PYTHONPATH: .
+    cmds:
+      - uv run python -m src.fabric_upload.cli {{.CLI_ARGS}}

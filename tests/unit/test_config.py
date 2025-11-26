@@ -21,29 +21,38 @@ def _write_tables_file(
     return path
 
 
-def _base_env(tmp_path: Path) -> dict[str, str]:
-    # Provide a complete set of environment variables for successful parsing.
+def _base_config(tmp_path: Path, *, page_size: int | None = None) -> tuple[dict, Path]:
     tables_file = _write_tables_file(tmp_path)
-    return {
-        "BC_TENANT_ID": "tenant",
-        "BC_ENVIRONMENT": "SANDBOX",
-        "BC_CLIENT_ID": "client",
-        "BC_CLIENT_SECRET": "secret",
-        "BC_SCOPE": "scope",
-        "BC_TOKEN_URL": "https://example.com/token",
-        "BC_COMPANY_ID": "123",
-        "BC_COMPANY_NAME": "Some Company",
-        "BC_OUTPUT_DIR": "./out",
-        "BC_TABLES_FILE": str(tables_file),
-        "BC_PAGE_SIZE": "500",
+    config = {
+        "business_central": {
+            "tenant_id": "tenant",
+            "environment": "SANDBOX",
+            "client_id": "client",
+            "scope": "scope",
+            "token_url": "https://example.com/token",
+            "company_id": "123",
+            "company_name": "Some Company",
+            "tables_file": tables_file.name,
+            "page_size": 500 if page_size is None else page_size,
+            "output_dir": "./out",
+        },
+        "fabric_upload": {
+            "tenant_id": "fabric",
+            "client_id": "fabric-client",
+            "workspace_name": "Sandbox",
+            "lakehouse_name": "Lakehouse",
+        },
     }
+    return config, tmp_path
 
 
 def test_load_settings_success(tmp_path: Path) -> None:
-    env = _base_env(tmp_path)
-    env["BC_OUTPUT_DIR"] = str(tmp_path / "exports")
-
-    settings = load_settings(env.items())
+    config, config_dir = _base_config(tmp_path)
+    settings = load_settings(
+        [("BC_CLIENT_SECRET", "secret")],
+        config_data=config,
+        config_dir=config_dir,
+    )
 
     assert isinstance(settings, Settings)
     assert settings.tenant_id == "tenant"
@@ -52,102 +61,126 @@ def test_load_settings_success(tmp_path: Path) -> None:
         TableConfig(name="Table B", url="https://example.com/b"),
     ]
     assert settings.page_size == 500
-    assert settings.output_dir == Path(env["BC_OUTPUT_DIR"]).expanduser()
+    expected_output = (config_dir / "out").resolve()
+    assert settings.output_dir == expected_output
 
 
-@pytest.mark.parametrize(
-    "missing_key",
-    [
-        "BC_TENANT_ID",
-        "BC_CLIENT_SECRET",
-    ],
-)
-def test_load_settings_missing_required_key(tmp_path: Path, missing_key: str) -> None:
-    env = _base_env(tmp_path)
-    env.pop(missing_key)
+def test_load_settings_missing_required_secret(tmp_path: Path) -> None:
+    config, config_dir = _base_config(tmp_path)
 
     with pytest.raises(ValueError) as exc:
-        load_settings(env.items())
+        load_settings(config_data=config, config_dir=config_dir)
 
-    assert missing_key in str(exc.value)
+    assert "BC_CLIENT_SECRET" in str(exc.value)
 
 
 def test_load_settings_invalid_page_size(tmp_path: Path) -> None:
-    env = _base_env(tmp_path)
-    env["BC_PAGE_SIZE"] = "0"
+    config, config_dir = _base_config(tmp_path, page_size=0)
 
     with pytest.raises(ValueError) as exc:
-        load_settings(env.items())
+        load_settings(
+            [("BC_CLIENT_SECRET", "secret")],
+            config_data=config,
+            config_dir=config_dir,
+        )
 
     assert "BC_PAGE_SIZE" in str(exc.value)
 
 
-def test_load_settings_default_env(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    env = _base_env(tmp_path)
-    # Push the env vars into the process so load_settings uses the defaults.
-    for key, value in env.items():
-        monkeypatch.setenv(key, value)
+def test_load_settings_default_config(tmp_path: Path) -> None:
+    config, config_dir = _base_config(tmp_path)
+    settings = load_settings(
+        [("BC_CLIENT_SECRET", "secret")],
+        config_data=config,
+        config_dir=config_dir,
+    )
 
-    settings = load_settings()
-
-    assert settings.client_id == env["BC_CLIENT_ID"]
+    assert settings.client_id == config["business_central"]["client_id"]
     assert [table.name for table in settings.tables] == ["Table A", "Table B"]
 
 
 def test_load_settings_invalid_table_entry(tmp_path: Path) -> None:
-    env = _base_env(tmp_path)
-    tables_file = Path(env["BC_TABLES_FILE"])
-    # Break the tables file so load_settings surfaces parsing errors.
-    tables_file.write_text("tables: invalid", encoding="utf-8")
+    config, config_dir = _base_config(tmp_path)
+    tables_path = tmp_path / "tables.yaml"
+    tables_path.write_text("tables: invalid", encoding="utf-8")
+    config["business_central"]["tables_file"] = tables_path.name
 
     with pytest.raises(ValueError) as exc:
-        load_settings(env.items())
+        load_settings(
+            [("BC_CLIENT_SECRET", "secret")],
+            config_data=config,
+            config_dir=config_dir,
+        )
 
     assert "tables" in str(exc.value)
 
 
 def test_load_settings_company_id_optional(tmp_path: Path) -> None:
-    env = _base_env(tmp_path)
-    env.pop("BC_COMPANY_ID")
+    config, config_dir = _base_config(tmp_path)
+    config["business_central"].pop("company_id", None)
 
-    settings = load_settings(env.items())
+    settings = load_settings(
+        [("BC_CLIENT_SECRET", "secret")],
+        config_data=config,
+        config_dir=config_dir,
+    )
 
     assert settings.company_id is None
 
 
 def test_load_settings_tables_file_missing(tmp_path: Path) -> None:
-    env = _base_env(tmp_path)
-    env["BC_TABLES_FILE"] = str(tmp_path / "missing.yaml")
+    config, config_dir = _base_config(tmp_path)
+    config["business_central"]["tables_file"] = "missing.yaml"
 
     with pytest.raises(ValueError) as exc:
-        load_settings(env.items())
+        load_settings(
+            [("BC_CLIENT_SECRET", "secret")],
+            config_data=config,
+            config_dir=config_dir,
+        )
 
     assert "missing.yaml" in str(exc.value)
 
 
-def test_load_settings_tables_file_default(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    _write_tables_file(tmp_path)
-    monkeypatch.chdir(tmp_path)
+def test_load_settings_tables_file_default(tmp_path: Path) -> None:
+    tables_file = _write_tables_file(tmp_path)
+    config = {
+        "business_central": {
+            "tenant_id": "tenant",
+            "environment": "SANDBOX",
+            "client_id": "client",
+            "scope": "scope",
+            "token_url": "https://example.com/token",
+            "company_id": "123",
+            "company_name": "Some Company",
+            "tables_file": tables_file.name,
+            "output_dir": "./out",
+        },
+        "fabric_upload": {
+            "tenant_id": "fabric",
+            "client_id": "fabric-client",
+            "workspace_name": "Sandbox",
+            "lakehouse_name": "Lakehouse",
+        },
+    }
 
-    env = _base_env(tmp_path)
-    # Remove BC_TABLES_FILE so load_settings falls back to cwd tables.yaml.
-    env.pop("BC_TABLES_FILE")
-    for key, value in env.items():
-        monkeypatch.setenv(key, value)
-
-    settings = load_settings()
+    settings = load_settings(
+        [("BC_CLIENT_SECRET", "secret")],
+        config_data=config,
+        config_dir=tmp_path,
+    )
 
     assert [table.name for table in settings.tables] == ["Table A", "Table B"]
 
 
 def test_load_settings_defaults_page_size_when_missing(tmp_path: Path) -> None:
-    env = _base_env(tmp_path)
-    env.pop("BC_PAGE_SIZE")
+    config, config_dir = _base_config(tmp_path)
+    config["business_central"].pop("page_size", None)
 
-    settings = load_settings(env.items())
+    settings = load_settings(
+        [("BC_CLIENT_SECRET", "secret")],
+        config_data=config,
+        config_dir=config_dir,
+    )
 
     assert settings.page_size == DEFAULT_PAGE_SIZE

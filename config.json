@@ -1,0 +1,27 @@
+{
+  "business_central": {
+    "tenant_id": "2d6ec162-8eb4-42d3-93e2-7ee771e85da5",
+    "environment": "SANDBOX_CADE",
+    "client_id": "9e6fdf36-87c3-46fe-aa67-d294eb3ef774",
+    "scope": "https://api.businesscentral.dynamics.com/.default",
+    "token_url": "https://login.microsoftonline.com/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/oauth2/v2.0/token",
+    "company_id": null,
+    "company_name": "CADE Soluciones",
+    "tables_file": "tables.yaml",
+    "page_size": 100,
+    "output_dir": "./exports"
+  },
+  "fabric_upload": {
+    "tenant_id": "2d6ec162-8eb4-42d3-93e2-7ee771e85da5",
+    "client_id": "13457bce-b857-4544-8d36-73ab06ca8e92",
+    "workspace_name": "Sandbox",
+    "lakehouse_name": "Lakehouse",
+    "workspace_id": "44b1286f-484d-41b1-9259-6904105d8d09",
+    "lakehouse_id": "1287f84f-d048-4967-a27f-b3f3019345d9",
+    "path_prefix": "raw/exports",
+    "source_name": "business_central",
+    "overwrite": false,
+    "max_retries": 3,
+    "enabled": true
+  }
+}
