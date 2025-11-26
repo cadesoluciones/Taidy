@@ -4,7 +4,7 @@ from typing import Callable
 import pytest
 import responses
 
-from bc_client.auth import OAuthTokenProvider
+from src.bc_client.auth import OAuthTokenProvider
 
 
 def _build_provider(now_fn: Callable[[], datetime] | None = None) -> OAuthTokenProvider:

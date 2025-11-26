@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from bc_client.config import DEFAULT_PAGE_SIZE, Settings, TableConfig, load_settings
+from src.bc_client.config import DEFAULT_PAGE_SIZE, Settings, TableConfig, load_settings
 
 
 def _write_tables_file(

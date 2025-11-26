@@ -6,6 +6,13 @@ from urllib.parse import urljoin
 
 import requests
 from requests import Response, Session
+from requests.exceptions import ChunkedEncodingError
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from .auth import TokenProvider
 from .config import Settings
@@ -87,6 +94,14 @@ class BusinessCentralClient:
                 f"Response from {url} was not valid JSON"
             ) from exc
 
+    @retry(
+        retry=retry_if_exception_type(
+            (requests.ConnectionError, requests.Timeout, ChunkedEncodingError)
+        ),
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=1, min=2, max=30),
+        reraise=True,
+    )
     def _get(self, url: str) -> Response:
         """Low-level GET with auth + error checking."""
         token = self._token_provider.get_access_token()
@@ -97,7 +112,16 @@ class BusinessCentralClient:
         }
 
         logger.debug("GET %s (page size: %s)", url, self._page_size)
-        response = self._session.get(url, headers=headers, timeout=self._timeout)
+
+        try:
+            response = self._session.get(url, headers=headers, timeout=self._timeout)
+        except (
+            requests.ConnectionError,
+            requests.Timeout,
+            ChunkedEncodingError,
+        ) as exc:
+            logger.warning("Network error on GET %s, will retry: %s", url, exc)
+            raise
 
         if response.status_code >= 400:
             message = (

@@ -15,10 +15,10 @@ from typing import Iterable, List, Optional
 
 from dotenv import load_dotenv
 
-from bc_client.auth import OAuthTokenProvider
-from bc_client.config import DEFAULT_PAGE_SIZE, Settings, TableConfig, load_settings
-from bc_client.api import BusinessCentralClient
-from bc_client.exporter import export_table
+from src.bc_client.auth import OAuthTokenProvider
+from src.bc_client.config import DEFAULT_PAGE_SIZE, Settings, TableConfig, load_settings
+from src.bc_client.api import BusinessCentralClient
+from src.bc_client.exporter import export_table
 
 
 # ---------------------------

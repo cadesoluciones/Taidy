@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-import main
-from bc_client.config import Settings, TableConfig
+from src import main
+from src.bc_client.config import Settings, TableConfig
 
 
 class DummyClient:

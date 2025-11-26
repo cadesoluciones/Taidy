@@ -2,9 +2,9 @@ from pathlib import Path
 import pytest
 import responses
 
-from bc_client.api import BusinessCentralClient
-from bc_client.auth import TokenProvider
-from bc_client.config import Settings, TableConfig
+from src.bc_client.api import BusinessCentralClient
+from src.bc_client.auth import TokenProvider
+from src.bc_client.config import Settings, TableConfig
 
 
 class StubTokenProvider(TokenProvider):

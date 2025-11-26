@@ -72,5 +72,7 @@ tasks:
   # ------------------------------
   ingest:
     desc: Run Business Central data ingestion
+    env:
+      PYTHONPATH: .
     cmds:
       - uv run python src/main.py {{.CLI_ARGS}}

@@ -1,7 +1,7 @@
 import csv
 from pathlib import Path
 
-from bc_client import exporter
+from src.bc_client import exporter
 
 
 def test_export_table_writes_csv(tmp_path: Path) -> None:
