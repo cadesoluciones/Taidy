@@ -51,22 +51,27 @@ class BusinessCentralClient:
         Returns:
             A list of dicts, one per row.
         """
+        # Use provided label or URL for logging
         table_name = label or table_url
         all_rows: List[Dict[str, Any]] = []
 
         logger.info("Fetching rows for table '%s'...", table_name)
 
+        # Process all pages using OData pagination
         page_number = 1
         url: Optional[str] = table_url
 
         while url:
+            # Log progress periodically to avoid spam
             if page_number == 1 or page_number % progress_every_pages == 0:
                 logger.info("Table '%s': fetched %d page(s)", table_name, page_number)
 
+            # Fetch current page and extract rows
             payload = self._fetch_page(url)
             rows = self._read_rows(payload, url)
             all_rows.extend(rows)
 
+            # Get next page URL from OData response
             url = self._next_page_url(payload, url)
             page_number += 1
 

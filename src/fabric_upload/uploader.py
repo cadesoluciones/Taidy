@@ -5,7 +5,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote
-from typing import Callable, Iterable, List, Optional, Protocol
+from typing import Any, Callable, Iterable, List, Optional
 
 from azure.core.exceptions import (
     HttpResponseError,
@@ -18,20 +18,7 @@ from .config import FabricUploadSettings
 logger = logging.getLogger(__name__)
 
 
-class FileClientProtocol(Protocol):
-    """Interface subset used from azure.storage.filedatalake.DataLakeFileClient."""
-
-    def upload_data(self, data: bytes, *, overwrite: bool) -> None: ...
-
-    def get_file_properties(self) -> dict: ...
-
-
-class FileSystemClientProtocol(Protocol):
-    """Protocol for the file-system level client used by FabricUploader."""
-
-    def get_file_client(self, file_path: str) -> FileClientProtocol: ...
-
-    def create_directory(self, directory: str, *, exist_ok: bool = False) -> None: ...
+# Note: Using Azure SDK clients directly instead of protocols for simplicity
 
 
 class FabricUploader:
@@ -41,7 +28,7 @@ class FabricUploader:
         self,
         settings: FabricUploadSettings,
         *,
-        file_system_client: Optional[FileSystemClientProtocol] = None,
+        file_system_client: Optional[Any] = None,
         now_fn: Optional[Callable[[], datetime]] = None,
         sleep_fn: Optional[Callable[[float], None]] = None,
     ) -> None:
@@ -52,18 +39,20 @@ class FabricUploader:
 
     def discover_csv_files(self) -> List[Path]:
         """Return a sorted list of CSV files available under the export root."""
-
+        # Check if export directory exists
         root = self._settings.local_export_root
         if not root.exists():
             logger.debug("Fabric upload root '%s' does not exist", root)
             return []
+
+        # Find all CSV files recursively and sort them
         csv_files = sorted(path for path in root.rglob("*.csv") if path.is_file())
         logger.debug("Discovered %d CSV file(s) under '%s'", len(csv_files), root)
         return csv_files
 
     def upload_files(self, files: Iterable[Path]) -> None:
         """Upload the provided CSV files to OneLake."""
-
+        # Sort files for consistent processing order
         paths = sorted(files)
         if not paths:
             logger.info(
@@ -72,10 +61,13 @@ class FabricUploader:
             )
             return
 
+        # Process each file individually
         for local_path in paths:
+            # Build the target path in OneLake with date structure
             remote_path = self._build_remote_path(local_path)
             logger.info("Uploading '%s' to Fabric OneLake", local_path.name)
             logger.debug("Remote path: %s", remote_path)
+            # Upload with automatic retry on transient failures
             self._upload_with_retry(local_path, remote_path)
 
     def _upload_with_retry(self, local_path: Path, remote_path: str) -> None:
@@ -104,20 +96,25 @@ class FabricUploader:
                 self._sleep(float(delay))
 
     def _upload_once(self, local_path: Path, remote_path: str) -> None:
+        # Get Azure client for the target file
         file_client = self._file_system.get_file_client(remote_path)
+
+        # Check if file already exists in OneLake
         exists = self._file_exists(file_client)
         if not self._settings.overwrite and exists:
             logger.info("Skipping '%s' (already exists)", local_path.name)
             return
 
+        # Create parent directories if file doesn't exist
         if not exists:
             self._ensure_remote_parent(remote_path)
 
+        # Read local file and upload to OneLake
         data = local_path.read_bytes()
         overwrite_flag = self._settings.overwrite or not exists
         file_client.upload_data(data, overwrite=overwrite_flag)
 
-    def _file_exists(self, file_client: FileClientProtocol) -> bool:
+    def _file_exists(self, file_client: Any) -> bool:
         try:
             file_client.get_file_properties()
             return True
@@ -145,6 +142,7 @@ class FabricUploader:
             )
 
     def _build_remote_path(self, local_path: Path) -> str:
+        # Validate file is within export root directory
         try:
             _ = local_path.resolve().relative_to(self._settings.local_export_root)
         except ValueError as exc:  # pragma: no cover - defensive
@@ -152,9 +150,14 @@ class FabricUploader:
                 f"File {local_path} is outside the export root {self._settings.local_export_root}"
             ) from exc
 
+        # Extract table name from filename and sanitize it
         table_segment = self._sanitize_table(local_path.stem)
+
+        # Build date-based path structure: YYYY/MM/DD
         today = self._now()
         date_segments = [f"{today.year:04d}", f"{today.month:02d}", f"{today.day:02d}"]
+
+        # Construct full OneLake path: prefix/source/table/YYYY/MM/DD/filename.csv
         remote_path = PurePosixPath(self._settings.path_prefix)
         remote_path /= self._settings.source_name
         remote_path /= table_segment
@@ -181,7 +184,7 @@ class FabricUploader:
             return bool(status and status >= 500)
         return False
 
-    def _build_file_system_client(self) -> FileSystemClientProtocol:
+    def _build_file_system_client(self) -> Any:
         from azure.identity import ClientSecretCredential
         from azure.storage.filedatalake import DataLakeServiceClient
 

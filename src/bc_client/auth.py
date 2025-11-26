@@ -70,12 +70,15 @@ class OAuthTokenProvider:
         """
         Return a cached token if still valid, otherwise request a new one.
         """
+        # Thread-safe token access and refresh
         with self._lock:
             now = self._now()
 
+            # Return cached token if still valid
             if self._cached_token and now < self._cached_token.expires_at:
                 return self._cached_token.value
 
+            # Fetch new token and cache it
             self._cached_token = self._fetch_new_token(now)
             return self._cached_token.value
 
