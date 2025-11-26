@@ -11,8 +11,7 @@ uv pip install -r requirements.txt
 
 # 2. Configurar credenciales y configuración
 cp .env.example .env
-cp tables.example.yaml tables.yaml
-# Editar .env con tus secretos de Azure AD y actualizar config.json
+# Editar .env con tus secretos de Azure AD y actualizar config.json y tables.yaml
 
 # 3. Probar configuración
 task ingest -- --dry-run --verbose
@@ -95,6 +94,12 @@ task ingest -- --parallel 4
 
 # Directorio personalizado
 task ingest -- --output-dir ./exports_$(date +%Y%m%d)
+
+# Subir a Fabric (sobrescribe archivos existentes por defecto)
+task fabric:upload -- --output-dir ./exports
+
+# Saltar archivos que ya existen en Fabric
+task fabric:upload -- --output-dir ./exports --skip-existing
 ```
 
 ## ☁️ Subir CSV directamente a Microsoft Fabric OneLake

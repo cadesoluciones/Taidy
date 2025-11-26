@@ -59,7 +59,7 @@ def load_fabric_settings(
     source_name = _sanitize_segment(
         config_section.get("source_name", "business_central")
     )
-    overwrite = bool(config_section.get("overwrite", False))
+    overwrite = bool(config_section.get("overwrite", True))
     max_retries = _parse_retries(str(config_section.get("max_retries", 3)))
 
     return FabricUploadSettings(

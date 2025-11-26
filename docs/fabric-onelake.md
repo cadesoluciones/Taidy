@@ -162,7 +162,7 @@ Edita tu archivo `config.json` y agrega/actualiza la sección `fabric_upload`:
     "lakehouse_id": "1287f84f-d048-4967-a27f-b3f3019345d9",
     "path_prefix": "raw/exports",
     "source_name": "business_central",
-    "overwrite": false,
+    "overwrite": true,
     "max_retries": 3,
     "enabled": true
   }
@@ -201,6 +201,11 @@ task ingest -- --verbose
 
 # 2. Subir a Fabric OneLake
 task fabric:upload -- --output-dir ./exports --verbose
+
+# Opciones adicionales:
+# --skip-existing: Saltar archivos que ya existen (por defecto sobrescribe)
+# --dry-run: Ver qué archivos se subirían sin subirlos
+task fabric:upload -- --output-dir ./exports --skip-existing
 ```
 
 ### 7.3 Verificar en Fabric
@@ -224,7 +229,7 @@ task fabric:upload -- --output-dir ./exports --verbose
 |-----------|-------------|-------------------|
 | `path_prefix` | Prefijo de ruta en OneLake | `raw/exports` |
 | `source_name` | Nombre del sistema fuente | `business_central` |
-| `overwrite` | Sobrescribir archivos existentes | `false` |
+| `overwrite` | Sobrescribir archivos existentes | `true` |
 | `max_retries` | Reintentos en caso de error | `3` |
 | `enabled` | Habilitar subidas automáticas | `true` |
 

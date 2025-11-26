@@ -1,5 +1,0 @@
-tables:
-  - name: Customers
-    url: https://api.businesscentral.dynamics.com/v2.0/<TENANT>/<ENV>/api/data/companies(<COMPANY_ID>)/customers
-  - name: Vendors
-    url: https://api.businesscentral.dynamics.com/v2.0/<TENANT>/<ENV>/api/data/companies(<COMPANY_ID>)/vendors

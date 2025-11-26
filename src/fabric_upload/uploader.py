@@ -93,13 +93,9 @@ class FabricUploader:
             return
 
         for local_path in paths:
-            logger.info("Discovered CSV for Fabric upload: %s", local_path)
             remote_path = self._build_remote_path(local_path)
-            logger.info(
-                "Uploading '%s' to Fabric path '%s'",
-                local_path.name,
-                remote_path,
-            )
+            logger.info("Uploading '%s' to Fabric OneLake", local_path.name)
+            logger.debug("Remote path: %s", remote_path)
             self._upload_with_retry(local_path, remote_path)
 
     def _upload_with_retry(self, local_path: Path, remote_path: str) -> None:
@@ -107,11 +103,7 @@ class FabricUploader:
         for attempt in range(1, attempts + 1):
             try:
                 self._upload_once(local_path, remote_path)
-                logger.info(
-                    "Uploaded '%s' to Fabric path '%s'",
-                    local_path.name,
-                    remote_path,
-                )
+                logger.info("Successfully uploaded '%s'", local_path.name)
                 return
             except Exception as exc:  # pragma: no cover - exercised in tests via mocks
                 if not self._is_retryable(exc) or attempt == attempts:
@@ -135,10 +127,7 @@ class FabricUploader:
         file_client = self._file_system.get_file_client(remote_path)
         exists = self._file_exists(file_client)
         if not self._settings.overwrite and exists:
-            logger.info(
-                "Skipping upload for '%s'; remote file already exists",
-                remote_path,
-            )
+            logger.info("Skipping '%s' (already exists)", local_path.name)
             return
 
         if not exists:

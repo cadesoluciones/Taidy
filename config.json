@@ -20,7 +20,7 @@
     "lakehouse_id": "1287f84f-d048-4967-a27f-b3f3019345d9",
     "path_prefix": "raw/exports",
     "source_name": "business_central",
-    "overwrite": false,
+    "overwrite": true,
     "max_retries": 3,
     "enabled": true
   }

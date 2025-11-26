@@ -33,12 +33,27 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="List files without uploading",
     )
+    parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="Skip existing files (default: overwrite)",
+    )
     return parser.parse_args(list(argv) if argv is not None else None)
 
 
 def configure_logging(verbose: bool) -> None:
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(level=level, format="%(asctime)s %(levelname)s %(message)s")
+
+    # Suppress verbose Azure SDK logging
+    azure_loggers = [
+        "azure.core.pipeline.policies.http_logging_policy",
+        "azure.identity",
+        "azure.storage",
+        "urllib3.connectionpool",
+    ]
+    for logger_name in azure_loggers:
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
 
 
 def _resolve_output_dir(raw: str) -> Path:
@@ -58,6 +73,11 @@ def run(argv: Optional[Iterable[str]] = None) -> int:
         load_dotenv()
         output_dir = _resolve_output_dir(args.output_dir)
         settings = load_fabric_settings(output_dir, force_enable=True)
+        # Override config with CLI flag - default to overwrite existing files
+        if settings and args.skip_existing:
+            from dataclasses import replace
+
+            settings = replace(settings, overwrite=False)
         uploader = FabricUploader(settings)
         files = uploader.discover_csv_files()
         if args.dry_run:
