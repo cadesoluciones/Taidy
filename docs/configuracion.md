@@ -90,8 +90,6 @@ FABRIC_UPLOAD_ENABLED=true  # opcional, override del campo 'enabled'
 
 ## Configuración de Tablas
 
-### Configuración de Tablas
-
 El archivo `tables.yaml` contiene la configuración de las tablas a extraer. Personalízalo según tus necesidades:
 
 ```yaml
@@ -102,15 +100,17 @@ tables:
     url: https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/data/companies({company})/vendors
 ```
 
-#### Estructura de URLs
+### Estructura de URLs
 
 **Patrón estándar de Business Central:**
-```
+
+```text
 https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/data/companies({company})/{tabla}
 ```
 
 **Patrón OData personalizado:**
-```
+
+```text
 https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/ODataV4/Company('{company_name}')/{api_endpoint}
 ```
 

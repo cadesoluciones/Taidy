@@ -13,7 +13,7 @@ Guía completa para configurar la subida automática de archivos CSV a Microsoft
 
 ## 🏗️ Arquitectura de la Solución
 
-```
+```text
 Business Central API → CSV Exports → Fabric OneLake
                                         ↓
                                    Lakehouse Files
@@ -44,10 +44,12 @@ Business Central API → CSV Exports → Fabric OneLake
 
 1. Una vez en el workspace, copia la URL del navegador
 2. Extrae el **Workspace ID** de la URL:
-   ```
+
+   ```text
    https://app.fabric.microsoft.com/groups/44b1286f-484d-41b1-9259-6904105d8d09/...
                                           ↑ Este es tu Workspace ID
    ```
+
 3. Guarda este ID para la configuración posterior
 
 ### 2. Crear Lakehouse
@@ -64,21 +66,25 @@ Business Central API → CSV Exports → Fabric OneLake
 1. Abre el Lakehouse recién creado
 2. Ve a la sección **Files** (no Tables)
 3. Crea la estructura de carpetas:
-   ```
+
+   ```text
    Files/
    └── raw/
        └── exports/
            └── business_central/
    ```
+
 4. Para crear carpetas: clic derecho en Files → **Nueva carpeta**
 
 #### 2.3 Obtener IDs del Lakehouse
 
 1. Copia la URL del Lakehouse:
-   ```
+
+   ```text
    https://app.fabric.microsoft.com/groups/.../lakehouses/1287f84f-d048-4967-a27f-b3f3019345d9/...
                                                         ↑ Este es tu Lakehouse ID
    ```
+
 2. Guarda este ID para la configuración
 
 ### 3. Configurar Tenant de Fabric
@@ -214,7 +220,8 @@ task fabric:upload -- --output-dir ./exports --skip-existing
 2. Abre el Lakehouse
 3. Navega a **Files** → **raw** → **exports** → **business_central**
 4. Verifica que aparecen las carpetas por tabla y fecha:
-   ```
+
+   ```text
    business_central/
    ├── customers/2025/11/26/customers.csv
    ├── vendors/2025/11/26/vendors.csv
@@ -237,7 +244,7 @@ task fabric:upload -- --output-dir ./exports --skip-existing
 
 Los archivos se organizan automáticamente con esta estructura:
 
-```
+```text
 Files/
 └── {path_prefix}/           # raw/exports
     └── {source_name}/       # business_central
@@ -278,18 +285,22 @@ task fabric:upload -- --output-dir ./exports --dry-run
 ### Errores Comunes
 
 **Error: `FriendlyNameSupportDisabled`**
+
 - **Causa**: Configuración incorrecta de workspace/lakehouse IDs
 - **Solución**: Verificar que `workspace_name` y `lakehouse_name` son correctos
 
 **Error: `Missing required Fabric upload configuration`**
+
 - **Causa**: Falta `FABRIC_CLIENT_SECRET` en `.env`
 - **Solución**: Agregar el secreto al archivo `.env`
 
 **Error: `403 Forbidden`**
+
 - **Causa**: La aplicación no tiene permisos en el workspace
 - **Solución**: Verificar que está agregada como Colaborador
 
 **Error: `Tenant settings not enabled`**
+
 - **Causa**: Configuraciones del tenant no habilitadas
 - **Solución**: Contactar al administrador de Fabric
 
