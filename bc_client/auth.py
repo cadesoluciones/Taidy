@@ -1,7 +1,5 @@
 """Authentication helpers for Business Central API access."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional, Protocol

@@ -1,0 +1,68 @@
+version: "3"
+
+# Define default variables, which can be overridden at runtime
+vars:
+  VENV: .venv
+
+tasks:
+  # Default task that lists available tasks
+  default:
+    cmds:
+      - task --list
+    silent: true
+
+  # ------------------------------
+  # 🛠 Environment Setup
+  # ------------------------------
+  check-vars:
+    # Ensure required variables are provided
+    silent: true
+    cmds:
+      - |
+        if [ -z "{{.STAGE}}" ]; then
+          echo "❌ Missing required variable: STAGE"; exit 1;
+        fi
+        if [ -z "{{.DEPLOY_ID}}" ]; then
+          echo "❌ Missing required variable: DEPLOY_ID"; exit 1;
+        fi
+
+  deps:install:
+    desc: Create virtual environment and sync Python dependencies
+    cmds:
+      - uv venv --clear {{.VENV}}
+      - uv sync --all-groups
+      - uv run pre-commit install --hook-type pre-commit
+
+  # ------------------------------
+  # ✅ Code Quality & Tests
+  # ------------------------------
+  test:run:
+    desc: Run pytest with coverage report on the src folder
+    vars:
+      TEST_DIR: test
+      COV_DIR: src
+      BADGE_DIR: docs
+      # Set PARALLEL=true to enable pytest-xdist auto parallelism
+      PAR_FLAG: '{{if .PARALLEL}}-n auto{{end}}'
+      # Pass BADGE=true to generate docs/coverage.svg
+      BADGE: '{{ .BADGE | default "false" }}'
+    cmds:
+      # Run all tests, measure coverage on your package
+      - uv run pytest -vsx --cov={{.COV_DIR}} --cov-report=term {{.PAR_FLAG}} {{.TEST_DIR}}
+      # Optionally generate/update the coverage badge in docs/
+      - |
+        if [ "{{.BADGE}}" = "true" ]; then
+          uv run coverage-badge -o {{.BADGE_DIR}}/coverage.svg -f
+        fi
+
+  lint:check:
+    desc: "Run linters and formatters in check mode"
+    cmds:
+      - uv run ruff check
+      - uv run ruff format --check
+
+  lint:format:
+    desc: "Format code using ruff"
+    cmds:
+      - uv run ruff format
+      - uv run ruff check --fix

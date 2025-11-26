@@ -1,7 +1,5 @@
 """Business Central API wrapper."""
 
-from __future__ import annotations
-
 from typing import Any, Dict, Iterable
 from urllib.parse import urljoin
 
@@ -37,13 +35,17 @@ class BusinessCentralClient:
             rows = payload.get("value", [])
 
             if not isinstance(rows, list):
-                raise RuntimeError("Unexpected Business Central response: 'value' not a list")
+                raise RuntimeError(
+                    "Unexpected Business Central response: 'value' not a list"
+                )
 
             for row in rows:
                 if isinstance(row, dict):
                     yield row
                 else:
-                    raise RuntimeError("Unexpected row format returned by Business Central")
+                    raise RuntimeError(
+                        "Unexpected row format returned by Business Central"
+                    )
 
             next_link = payload.get("@odata.nextLink")
             if isinstance(next_link, str) and next_link:

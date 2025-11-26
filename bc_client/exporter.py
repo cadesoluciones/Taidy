@@ -1,7 +1,5 @@
 """CSV export helpers."""
 
-from __future__ import annotations
-
 import csv
 import re
 from pathlib import Path
@@ -15,7 +13,9 @@ def _sanitize_table_name(table_name: str) -> str:
     return f"{cleaned}.csv"
 
 
-def export_table(table_name: str, rows: Iterable[Mapping[str, object]], output_dir: Path) -> Path:
+def export_table(
+    table_name: str, rows: Iterable[Mapping[str, object]], output_dir: Path
+) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     filename = _sanitize_table_name(table_name)

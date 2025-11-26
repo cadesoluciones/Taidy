@@ -5,8 +5,6 @@ script expects configuration via environment variables (see `.env.example`) and
 supports basic CLI overrides for ad-hoc experimentation.
 """
 
-from __future__ import annotations
-
 import argparse
 import logging
 import sys
@@ -17,13 +15,15 @@ from typing import Iterable
 from dotenv import load_dotenv
 
 from bc_client.auth import OAuthTokenProvider
-from bc_client.config import DEFAULT_PAGE_SIZE, Settings, TableConfig, load_settings
+from bc_client.config import DEFAULT_PAGE_SIZE, Settings, load_settings
 from bc_client.api import BusinessCentralClient
 from bc_client.exporter import export_table
 
 
 def _parse_args(argv: Iterable[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Download Business Central tables to CSV")
+    parser = argparse.ArgumentParser(
+        description="Download Business Central tables to CSV"
+    )
     parser.add_argument("--tables", nargs="*", help="Override configured table list")
     parser.add_argument("--output-dir", help="Override CSV output directory")
     parser.add_argument(
@@ -31,7 +31,9 @@ def _parse_args(argv: Iterable[str] | None) -> argparse.Namespace:
         type=int,
         help=f"Override Business Central page size (defaults to BC_PAGE_SIZE or {DEFAULT_PAGE_SIZE})",
     )
-    parser.add_argument("--dry-run", action="store_true", help="Log actions without calling the API")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Log actions without calling the API"
+    )
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
     return parser.parse_args(list(argv) if argv is not None else None)
 
@@ -46,7 +48,9 @@ def _apply_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
     if args.tables:
         requested = [name for name in args.tables if name]
         if not requested:
-            raise ValueError("At least one table name must be provided when using --tables")
+            raise ValueError(
+                "At least one table name must be provided when using --tables"
+            )
 
         table_map = {table.name: table for table in settings.tables}
         missing = [name for name in requested if name not in table_map]
@@ -64,7 +68,9 @@ def _apply_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
             raise ValueError("--page-size must be greater than zero")
         page_size = args.page_size
 
-    return replace(settings, tables=list(tables), output_dir=output_dir, page_size=page_size)
+    return replace(
+        settings, tables=list(tables), output_dir=output_dir, page_size=page_size
+    )
 
 
 def _create_token_provider(settings: Settings) -> OAuthTokenProvider:
@@ -78,7 +84,9 @@ def _create_token_provider(settings: Settings) -> OAuthTokenProvider:
     )
 
 
-def _create_client(settings: Settings, token_provider: OAuthTokenProvider) -> BusinessCentralClient:
+def _create_client(
+    settings: Settings, token_provider: OAuthTokenProvider
+) -> BusinessCentralClient:
     return BusinessCentralClient(
         settings=settings,
         token_provider=token_provider,

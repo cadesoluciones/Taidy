@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from pathlib import Path
 import pytest
 import responses
@@ -27,7 +25,12 @@ def _settings() -> Settings:
         token_url="https://example.com/token",
         company_id="00000000-0000-0000-0000-000000000000",
         company_name="Company",
-        tables=[TableConfig(name="customers", url="https://api.businesscentral.dynamics.com/v2.0/tenant/Sandbox/api/data/companies(00000000-0000-0000-0000-000000000000)/customers")],
+        tables=[
+            TableConfig(
+                name="customers",
+                url="https://api.businesscentral.dynamics.com/v2.0/tenant/Sandbox/api/data/companies(00000000-0000-0000-0000-000000000000)/customers",
+            )
+        ],
         page_size=2,
         output_dir=Path("/tmp"),
     )

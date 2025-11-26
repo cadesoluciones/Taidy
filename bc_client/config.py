@@ -1,7 +1,5 @@
 """Configuration helpers for Business Central client PoC."""
 
-from __future__ import annotations
-
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -89,7 +87,9 @@ def load_settings(_env: Iterable[tuple[str, str]] | None = None) -> Settings:
 
     missing = [key for key in REQUIRED_KEYS if key not in raw_env or not raw_env[key]]
     if missing:
-        raise ValueError(f"Missing required configuration: {', '.join(sorted(missing))}")
+        raise ValueError(
+            f"Missing required configuration: {', '.join(sorted(missing))}"
+        )
 
     page_size_raw = raw_env.get("BC_PAGE_SIZE")
     if page_size_raw:

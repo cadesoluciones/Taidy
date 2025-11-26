@@ -1,6 +1,3 @@
-from __future__ import annotations
-
-import os
 from pathlib import Path
 
 import pytest
@@ -8,7 +5,9 @@ import pytest
 from bc_client.config import DEFAULT_PAGE_SIZE, Settings, TableConfig, load_settings
 
 
-def _write_tables_file(directory: Path, entries: list[tuple[str, str]] | None = None) -> Path:
+def _write_tables_file(
+    directory: Path, entries: list[tuple[str, str]] | None = None
+) -> Path:
     entries = entries or [
         ("Table A", "https://example.com/a"),
         ("Table B", "https://example.com/b"),
@@ -55,10 +54,13 @@ def test_load_settings_success(tmp_path: Path) -> None:
     assert settings.output_dir == Path(env["BC_OUTPUT_DIR"]).expanduser()
 
 
-@pytest.mark.parametrize("missing_key", [
-    "BC_TENANT_ID",
-    "BC_CLIENT_SECRET",
-])
+@pytest.mark.parametrize(
+    "missing_key",
+    [
+        "BC_TENANT_ID",
+        "BC_CLIENT_SECRET",
+    ],
+)
 def test_load_settings_missing_required_key(tmp_path: Path, missing_key: str) -> None:
     env = _base_env(tmp_path)
     env.pop(missing_key)
@@ -79,7 +81,9 @@ def test_load_settings_invalid_page_size(tmp_path: Path) -> None:
     assert "BC_PAGE_SIZE" in str(exc.value)
 
 
-def test_load_settings_default_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_load_settings_default_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     env = _base_env(tmp_path)
     for key, value in env.items():
         monkeypatch.setenv(key, value)
@@ -120,8 +124,9 @@ def test_load_settings_tables_file_missing(tmp_path: Path) -> None:
     assert "missing.yaml" in str(exc.value)
 
 
-def test_load_settings_tables_file_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    default_file = tmp_path / "tables.yaml"
+def test_load_settings_tables_file_default(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     _write_tables_file(tmp_path)
     monkeypatch.chdir(tmp_path)
 

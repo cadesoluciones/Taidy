@@ -1,25 +1,25 @@
-# Business Central Data Extraction PoC
+# Extracción de Datos de Business Central - PoC
 
-This proof of concept demonstrates how to authenticate against Microsoft Dynamics 365 Business Central, retrieve table data through the OData API, and export the full result set to CSV files. Pagination relies on Business Central’s `@odata.nextLink` along with the `Prefer: odata.maxpagesize=<N>` header so that tables larger than 100 rows are streamed completely. The codebase follows a test-driven approach so that core behaviours (configuration loading, authentication, pagination, exporting, orchestration) remain covered by unit tests.
+Esta prueba de concepto demuestra cómo autenticarse contra Microsoft Dynamics 365 Business Central, recuperar datos de tablas a través de la API OData, y exportar el conjunto completo de resultados a archivos CSV. La paginación se basa en `@odata.nextLink` de Business Central junto con el encabezado `Prefer: odata.maxpagesize=<N>` para que las tablas con más de 100 filas se transmitan completamente. El código sigue un enfoque dirigido por pruebas para que los comportamientos principales (carga de configuración, autenticación, paginación, exportación, orquestación) estén cubiertos por pruebas unitarias.
 
-## Project Layout
+## Estructura del Proyecto
 
-- `api_test.py` – CLI entry point that wires configuration, authentication, API client, and CSV exporter.
-- `bc_client/` – Supporting modules:
-  - `config.py` – environment-driven settings loader
-  - `auth.py` – OAuth client credentials flow with token caching
-  - `api.py` – Business Central OData wrapper with pagination
-  - `exporter.py` – CSV export helpers with safe filenames
-- `tests/` – unit tests covering the modules above; hermetic via mocks.
+- `api_test.py` – Punto de entrada CLI que conecta configuración, autenticación, cliente API y exportador CSV
+- `bc_client/` – Módulos de soporte:
+  - `config.py` – Cargador de configuración basado en variables de entorno
+  - `auth.py` – Flujo OAuth client credentials con caché de tokens
+  - `api.py` – Wrapper OData de Business Central con paginación
+  - `exporter.py` – Utilidades de exportación CSV con nombres de archivo seguros
+- `tests/` – Pruebas unitarias que cubren los módulos anteriores; herméticas mediante mocks
 
-## Prerequisites
+## Requisitos Previos
 
 - Python 3.12+
-- Access to Business Central with an Azure AD application configured for client-credentials.
+- Acceso a Business Central con una aplicación Azure AD configurada para client-credentials
 
-## Setup Instructions
+## Instrucciones de Configuración
 
-1. **Create virtual environment and install dependencies (via `uv`)**
+1. **Crear entorno virtual e instalar dependencias (vía `uv`)**
 
    ```bash
    uv venv
@@ -27,9 +27,9 @@ This proof of concept demonstrates how to authenticate against Microsoft Dynamic
    uv pip install -r requirements.txt
    ```
 
-2. **Provide configuration**
+2. **Proporcionar configuración**
 
-   Copy `.env.example` to `.env` for credentials and general settings, then copy `tables.example.yaml` to `tables.yaml` (or another path of your choice) to declare the tables you want to export.
+   Copia `.env.example` a `.env` para credenciales y configuración general, luego copia `tables.example.yaml` a `tables.yaml` (o otra ruta de tu elección) para declarar las tablas que quieres exportar.
 
    ```bash
    cp .env.example .env
@@ -38,18 +38,18 @@ This proof of concept demonstrates how to authenticate against Microsoft Dynamic
    $EDITOR tables.yaml
    ```
 
-   Key variables:
+   Variables clave:
 
-   - `BC_TENANT_ID` – Azure AD tenant ID (GUID).
-   - `BC_ENVIRONMENT` – Business Central environment name (e.g., `Sandbox`, `Production`).
-   - `BC_CLIENT_ID` / `BC_CLIENT_SECRET` – app registration credentials.
-   - `BC_SCOPE` – usually `https://api.businesscentral.dynamics.com/.default`.
-   - `BC_COMPANY_ID` – *optional* GUID of the target company (discover via `.../api/data/companies`; leave blank if unknown).
-   - `BC_TABLES_FILE` – path to the YAML file describing table names and URLs (defaults to `tables.yaml` if omitted).
-   - `BC_PAGE_SIZE` – *optional* pagination chunk size override; defaults to 1000 rows per request and controls the `Prefer: odata.maxpagesize` header.
-   - `BC_OUTPUT_DIR` – directory where CSV files will be written.
+   - `BC_TENANT_ID` – ID del tenant de Azure AD (GUID)
+   - `BC_ENVIRONMENT` – Nombre del entorno de Business Central (ej., `Sandbox`, `Production`)
+   - `BC_CLIENT_ID` / `BC_CLIENT_SECRET` – Credenciales del registro de aplicación
+   - `BC_SCOPE` – Usualmente `https://api.businesscentral.dynamics.com/.default`
+   - `BC_COMPANY_ID` – *Opcional* GUID de la empresa objetivo (descubrir vía `.../api/data/companies`; dejar en blanco si es desconocido)
+   - `BC_TABLES_FILE` – Ruta al archivo YAML que describe nombres y URLs de tablas (por defecto `tables.yaml` si se omite)
+   - `BC_PAGE_SIZE` – *Opcional* Anulación del tamaño de chunk de paginación; por defecto 1000 filas por solicitud y controla el encabezado `Prefer: odata.maxpagesize`
+   - `BC_OUTPUT_DIR` – Directorio donde se escribirán los archivos CSV
 
-   The YAML file should look like this:
+   El archivo YAML debe verse así:
 
    ```yaml
    tables:
@@ -59,49 +59,51 @@ This proof of concept demonstrates how to authenticate against Microsoft Dynamic
        url: https://api.businesscentral.dynamics.com/v2.0/<TENANT>/<ENV>/api/data/companies(<COMPANY_ID>)/vendors
    ```
 
-   Choose compact `name` values—they will be used for CLI overrides (e.g., `--tables Customers`).
+   Elige valores `name` compactos—se usarán para anulaciones CLI (ej., `--tables Customers`).
 
-## Running the Automated Tests
+## Ejecutar las Pruebas Automatizadas
 
-Unit tests validate configuration parsing, token lifecycle, pagination logic, CSV exporting, and CLI behaviour. Execute them after each change.
+Las pruebas unitarias validan el análisis de configuración, ciclo de vida de tokens, lógica de paginación, exportación CSV y comportamiento CLI. Ejécutalas después de cada cambio.
 
 ```bash
 uv run pytest -q
 ```
 
-The suite is hermetic and does not require live Business Central access. When you later add integration tests, mark them with `@pytest.mark.integration` so they can be skipped by default.
+La suite es hermética y no requiere acceso en vivo a Business Central. Cuando agregues pruebas de integración más tarde, márcalas con `@pytest.mark.integration` para que puedan omitirse por defecto.
 
-## Manual Verification Workflow
+## Flujo de Verificación Manual
 
-1. **Dry run** – confirm configuration and table selection without hitting the API:
+1. **Ejecución en seco** – Confirma configuración y selección de tablas sin llamar a la API:
 
    ```bash
    uv run python api_test.py --dry-run --verbose
+   ```
 
-2. **Fetch data** – remove `--dry-run` once credentials are confirmed:
+2. **Obtener datos** – Remueve `--dry-run` una vez que las credenciales estén confirmadas:
 
    ```bash
    uv run python api_test.py --verbose
+   ```
 
-   Optional overrides:
+   Anulaciones opcionales:
 
-   - `--tables Customers Vendors` – fetch only the listed table names defined in your YAML configuration.
-   - `--page-size 1000` – adjust the `Prefer: odata.maxpagesize` hint for large datasets (defaults to 1000 when not set).
-   - `--output-dir ./exports_run_$(date +%Y%m%d)` – customize output location.
+   - `--tables Customers Vendors` – Obtiene solo los nombres de tabla listados definidos en tu configuración YAML
+   - `--page-size 1000` – Ajusta la sugerencia `Prefer: odata.maxpagesize` para conjuntos de datos grandes (por defecto 1000 cuando no se establece)
+   - `--output-dir ./exports_run_$(date +%Y%m%d)` – Personaliza la ubicación de salida
 
-3. Inspect the generated CSV files under `BC_OUTPUT_DIR`. Files are named after the table (lowercase with underscores) and written atomically to avoid partial results.
+3. Inspecciona los archivos CSV generados bajo `BC_OUTPUT_DIR`. Los archivos se nombran según la tabla (minúsculas con guiones bajos) y se escriben atómicamente para evitar resultados parciales.
 
-## Extending the PoC
+## Extendiendo el PoC
 
-- Add integration tests that call the live API using credentials loaded from `.env`, guarded behind an opt-in flag (e.g., `pytest -m integration`).
-- Introduce retry/backoff policies (e.g., via `tenacity`) around API calls if rate limiting becomes an issue.
-- Stream rows directly to cloud storage (S3, Azure Blob) once CSV export is validated locally.
-- Implement incremental sync strategies by tracking last-modified timestamps or using OData filters.
+- Agregar pruebas de integración que llamen a la API en vivo usando credenciales cargadas desde `.env`, protegidas detrás de una bandera opt-in (ej., `pytest -m integration`)
+- Introducir políticas de reintento/backoff (ej., vía `tenacity`) alrededor de llamadas API si la limitación de velocidad se convierte en un problema
+- Transmitir filas directamente al almacenamiento en la nube (S3, Azure Blob) una vez que la exportación CSV esté validada localmente
+- Implementar estrategias de sincronización incremental rastreando timestamps de última modificación o usando filtros OData
 
-## Troubleshooting
+## Solución de Problemas
 
-- **Authentication failures** – verify the Azure AD app registration has the `Dynamics 365 Business Central` delegated/ application permissions and that the secret is current.
-- **`Missing required configuration` errors** – ensure your `.env` matches `.env.example` and that no keys are blank.
-- **Unexpected schema issues** – confirm the table names reference Business Central API entities (see `https://api.businesscentral.dynamics.com/v2.0/<tenant>/<environment>/api/data/$metadata`).
+- **Fallas de autenticación** – Verifica que el registro de aplicación Azure AD tenga los permisos delegados/de aplicación de `Dynamics 365 Business Central` y que el secreto esté vigente
+- **Errores de `Missing required configuration`** – Asegúrate de que tu `.env` coincida con `.env.example` y que ninguna clave esté en blanco
+- **Problemas de esquema inesperados** – Confirma que los nombres de tabla referencien entidades de la API de Business Central (ver `https://api.businesscentral.dynamics.com/v2.0/<tenant>/<environment>/api/data/$metadata`)
 
-For further debugging, rerun with `--verbose` to emit debug-level logging and inspect HTTP responses.
+Para depuración adicional, vuelve a ejecutar con `--verbose` para emitir logging de nivel debug e inspeccionar respuestas HTTP.

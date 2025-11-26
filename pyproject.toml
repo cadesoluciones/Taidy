@@ -1,19 +1,22 @@
 [project]
-name = "poc-cade-api"
+name = "cade-ingesta-bc"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = [
-    "requests>=2.32.5",
-    "responses>=0.25.8",
-    "tenacity>=9.1.2",
-]
+dependencies = ["requests>=2.32.5", "responses>=0.25.8", "tenacity>=9.1.2"]
 
 [dependency-groups]
-dev = [
+
+test = [
+    "python-dotenv>=1.2.1",
     "ipykernel>=7.1.0",
     "jupyterlab>=4.4.10",
-    "pytest>=8.4.2",
-    "python-dotenv>=1.2.1",
+    "pytest-cov>=6.2.1",
+    "ruff",                 # Fast Python linter and formatter
+    "pytest",               # Testing framework
+    "pytest-cov",           # Code coverage plugin for pytest
+    "pytest-xdist",         # Distributed testing plugin for pytest
+    "pre-commit",           # Git hooks framework for code quality checks
+    "coverage-badge",       # Generates coverage badges for documentation
 ]
