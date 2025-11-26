@@ -1,6 +1,12 @@
+
 # 📊 Extracción de Datos de Business Central - PoC
 
 Herramienta para extraer datos completos de Microsoft Dynamics 365 Business Central a archivos CSV. Incluye autenticación OAuth, paginación automática, procesamiento paralelo y exportación atómica.
+
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![Pytest](https://img.shields.io/badge/Pytest-✔e06?style=flat-square&logo=pytest&logoColor=white)](https://pytest.org)
+[![Taskfile](https://img.shields.io/badge/Taskfile-4d2a85?style=flat-square)](https://taskfile.dev)
+![coverage](./docs/coverage.svg)
 
 ## 🚀 Inicio Rápido
 
