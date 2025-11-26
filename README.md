@@ -90,6 +90,7 @@ La suite es hermética y no requiere acceso en vivo a Business Central. Cuando a
    - `--tables Customers Vendors` – Obtiene solo los nombres de tabla listados definidos en tu configuración YAML
    - `--page-size 1000` – Ajusta la sugerencia `Prefer: odata.maxpagesize` para conjuntos de datos grandes (por defecto 1000 cuando no se establece)
    - `--output-dir ./exports_run_$(date +%Y%m%d)` – Personaliza la ubicación de salida
+   - `--parallel 4` – Exporta hasta 4 tablas en paralelo (útil para conjuntos grandes; úsalo con cuidado frente a límites de rate)
 
 3. Inspecciona los archivos CSV generados bajo `BC_OUTPUT_DIR`. Los archivos se nombran según la tabla (minúsculas con guiones bajos) y se escriben atómicamente para evitar resultados parciales.
 

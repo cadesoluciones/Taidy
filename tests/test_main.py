@@ -11,12 +11,11 @@ class DummyClient:
         self._rows_by_url = rows_by_url
         self.called_urls: list[str] = []
 
-    def iter_table_rows(
+    def get_table_rows(
         self, table_url: str, *, label: str | None = None
-    ):  # pragma: no cover - generator stub
+    ) -> list[dict[str, object]]:
         self.called_urls.append(table_url)
-        for row in self._rows_by_url.get(table_url, []):
-            yield row
+        return self._rows_by_url.get(table_url, [])
 
 
 class DummyTokenProvider:
@@ -25,6 +24,14 @@ class DummyTokenProvider:
 
     def get_access_token(self) -> str:  # pragma: no cover - unused in test
         return "token"
+
+
+class RecordingClient(DummyClient):
+    created: list["RecordingClient"] = []
+
+    def __init__(self, rows_by_url: dict[str, list[dict[str, object]]]) -> None:
+        super().__init__(rows_by_url)
+        self.__class__.created.append(self)
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -172,3 +179,38 @@ def test_run_returns_failure_on_exception(
     exit_code = main.run([])
 
     assert exit_code == 1
+
+
+def test_run_supports_parallel_exports(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    settings = _settings(tmp_path)
+    rows = {
+        "https://example.com/customers": [{"id": 1}],
+        "https://example.com/vendors": [{"id": 2}],
+    }
+    RecordingClient.created.clear()
+
+    monkeypatch.setattr(main, "load_dotenv", lambda *_, **__: True)
+    monkeypatch.setattr(main, "load_settings", lambda: settings)
+    monkeypatch.setattr(
+        main, "OAuthTokenProvider", lambda **kwargs: DummyTokenProvider()
+    )
+    monkeypatch.setattr(
+        main, "BusinessCentralClient", lambda **kwargs: RecordingClient(rows)
+    )
+
+    exported: list[str] = []
+
+    def fake_export(table_name, rows_iter, output_dir):
+        exported.append(table_name)
+        list(rows_iter)
+        return output_dir / f"{table_name}.csv"
+
+    monkeypatch.setattr(main, "export_table", fake_export)
+
+    exit_code = main.run(["--parallel", "2"])
+
+    assert exit_code == 0
+    assert sorted(exported) == ["customers", "vendors"]
+    assert len(RecordingClient.created) == 2

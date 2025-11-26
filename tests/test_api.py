@@ -46,7 +46,7 @@ def _client(token: str = "token") -> BusinessCentralClient:
 
 
 @responses.activate
-def test_iter_table_rows_single_page() -> None:
+def test_get_table_rows_single_page() -> None:
     settings = _settings()
     table = settings.tables[0]
     responses.add(
@@ -57,7 +57,7 @@ def test_iter_table_rows_single_page() -> None:
     )
 
     client = _client()
-    rows = list(client.iter_table_rows(table.url))
+    rows = client.get_table_rows(table.url)
 
     assert rows == [{"id": 1}, {"id": 2}]
     assert len(responses.calls) == 1
@@ -65,7 +65,7 @@ def test_iter_table_rows_single_page() -> None:
 
 
 @responses.activate
-def test_iter_table_rows_paginates() -> None:
+def test_get_table_rows_paginates() -> None:
     settings = _settings()
     table = settings.tables[0]
     next_url = "https://api.businesscentral.dynamics.com/v2.0/tenant/Sandbox/api/data/companies({})/customers?$skiptoken=abc".format(
@@ -89,14 +89,14 @@ def test_iter_table_rows_paginates() -> None:
     )
 
     client = _client()
-    rows = list(client.iter_table_rows(table.url))
+    rows = client.get_table_rows(table.url)
 
     assert rows == [{"id": 1}, {"id": 2}]
     assert len(responses.calls) == 2
 
 
 @responses.activate
-def test_iter_table_rows_raises_on_error() -> None:
+def test_get_table_rows_raises_on_error() -> None:
     settings = _settings()
     table = settings.tables[0]
     responses.add(
@@ -109,11 +109,11 @@ def test_iter_table_rows_raises_on_error() -> None:
     client = _client()
 
     with pytest.raises(RuntimeError):
-        list(client.iter_table_rows(table.url))
+        client.get_table_rows(table.url)
 
 
 @responses.activate
-def test_iter_table_rows_sets_prefer_header_for_page_size() -> None:
+def test_get_table_rows_sets_prefer_header_for_page_size() -> None:
     settings = _settings()
     table = settings.tables[0]
     responses.add(
@@ -124,7 +124,7 @@ def test_iter_table_rows_sets_prefer_header_for_page_size() -> None:
     )
 
     client = _client()
-    list(client.iter_table_rows(table.url))
+    client.get_table_rows(table.url)
 
     headers = responses.calls[0].request.headers
     assert headers["Prefer"] == f"odata.maxpagesize={settings.page_size}"

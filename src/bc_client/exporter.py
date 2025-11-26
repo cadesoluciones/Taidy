@@ -10,9 +10,11 @@ logger = logging.getLogger(__name__)
 
 
 def _sanitize_table_name(table_name: str) -> str:
-    cleaned = re.sub(r"[^A-Za-z0-9]+", "_", table_name.strip().lower()).strip("_")
-    if not cleaned:
-        cleaned = "table"
+    if not table_name or not isinstance(table_name, str):
+        raise ValueError("Table name must be a non-empty string")
+    cleaned = re.sub(r"[^a-z0-9_-]", "_", table_name.strip().lower()).strip("_")
+    if not cleaned or len(cleaned) > 255:
+        raise ValueError(f"Invalid table name: {table_name}")
     return f"{cleaned}.csv"
 
 
@@ -44,23 +46,28 @@ def export_table(
     fieldnames = [str(name) for name in first_row.keys()]
     temp_path = output_dir / f".{filename}.tmp"
 
-    with temp_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerow(first_row)
-        row_count = 1
-        logger.debug(
-            "Writing export header for table '%s': %s (first row fields)",
-            table_name,
-            fieldnames,
-        )
-        for row in iterator:
-            if not isinstance(row, Mapping):
-                raise ValueError("Rows must be mappings")
-            writer.writerow(row)
-            row_count += 1
+    try:
+        with temp_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerow(first_row)
+            row_count = 1
+            logger.debug(
+                "Writing export header for table '%s': %s (first row fields)",
+                table_name,
+                fieldnames,
+            )
+            for row in iterator:
+                if not isinstance(row, Mapping):
+                    raise ValueError("Rows must be mappings")
+                writer.writerow(row)
+                row_count += 1
 
-    temp_path.replace(destination)
+        temp_path.replace(destination)
+    except (OSError, csv.Error) as exc:
+        if temp_path.exists():
+            temp_path.unlink()
+        raise RuntimeError(f"Failed to export table '{table_name}': {exc}") from exc
     logger.info(
         "Table '%s' export complete; %s rows written to '%s'",
         table_name,
