@@ -123,7 +123,7 @@ def run(argv: Iterable[str] | None = None) -> int:
             logging.info("Exporting table '%s'", table.name)
             destination = export_table(
                 table.name,
-                client.iter_table_rows(table.url),
+                client.iter_table_rows(table.url, label=table.name),
                 settings.output_dir,
             )
             logging.info("Saved %s", destination)

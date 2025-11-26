@@ -11,7 +11,9 @@ class DummyClient:
         self._rows_by_url = rows_by_url
         self.called_urls: list[str] = []
 
-    def iter_table_rows(self, table_url: str):  # pragma: no cover - generator stub
+    def iter_table_rows(
+        self, table_url: str, *, label: str | None = None
+    ):  # pragma: no cover - generator stub
         self.called_urls.append(table_url)
         for row in self._rows_by_url.get(table_url, []):
             yield row

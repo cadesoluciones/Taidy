@@ -39,7 +39,7 @@ tasks:
   test:run:
     desc: Run pytest with coverage report on the src folder
     vars:
-      TEST_DIR: test
+      TEST_DIR: tests
       COV_DIR: src
       BADGE_DIR: docs
       # Set PARALLEL=true to enable pytest-xdist auto parallelism
@@ -72,6 +72,5 @@ tasks:
   # ------------------------------
   ingest:
     desc: Run Business Central data ingestion
-    dir: src
     cmds:
-      - uv run python main.py {{.CLI_ARGS}}
+      - uv run python src/main.py {{.CLI_ARGS}}
