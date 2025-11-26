@@ -10,6 +10,7 @@ dependencies = [
     "tenacity>=9.1.2",
     "azure-identity>=1.17.1",
     "azure-storage-file-datalake>=12.17.0",
+    "rich>=13.7.0",
 ]
 
 [dependency-groups]

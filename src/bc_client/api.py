@@ -1,6 +1,5 @@
 """Business Central API wrapper."""
 
-import logging
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
 
@@ -16,8 +15,9 @@ from tenacity import (
 
 from .auth import TokenProvider
 from .config import Settings
+from ..utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class BusinessCentralError(RuntimeError):

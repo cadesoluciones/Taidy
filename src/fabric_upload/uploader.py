@@ -1,6 +1,5 @@
 """Fabric OneLake uploader implementation."""
 
-import logging
 import time
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -14,8 +13,9 @@ from azure.core.exceptions import (
 )
 
 from .config import FabricUploadSettings
+from ..utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # Note: Using Azure SDK clients directly instead of protocols for simplicity

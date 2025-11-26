@@ -1,12 +1,13 @@
 """CSV export helpers."""
 
 import csv
-import logging
 import re
 from pathlib import Path
 from typing import Iterable, Mapping
 
-logger = logging.getLogger(__name__)
+from ..utils import get_logger
+
+logger = get_logger(__name__)
 
 
 def _sanitize_table_name(table_name: str) -> str:

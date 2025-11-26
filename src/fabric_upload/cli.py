@@ -10,6 +10,9 @@ from dotenv import load_dotenv
 
 from .config import load_fabric_settings
 from .uploader import FabricUploader
+from ..utils import configure_logging as configure_rich_logging, get_logger
+
+logger = get_logger(__name__)
 
 
 def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
@@ -40,8 +43,9 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
 
 
 def configure_logging(verbose: bool) -> None:
+    """Set up Rich logging for the upload CLI."""
     level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(level=level, format="%(asctime)s %(levelname)s %(message)s")
+    configure_rich_logging(level)
 
     # Suppress verbose Azure SDK logging
     azure_loggers = [
@@ -80,9 +84,9 @@ def run(argv: Optional[Iterable[str]] = None) -> int:
         files = uploader.discover_csv_files()
         if args.dry_run:
             for csv_file in files:
-                logging.info("[dry-run] would upload %s", csv_file)
+                logger.info("[dry-run] would upload %s", csv_file)
             if not files:
-                logging.info(
+                logger.info(
                     "[dry-run] no CSV files found under '%s'",
                     settings.local_export_root,
                 )
@@ -90,7 +94,7 @@ def run(argv: Optional[Iterable[str]] = None) -> int:
         uploader.upload_files(files)
         return 0
     except Exception as exc:  # pragma: no cover - defensive
-        logging.exception("Fabric upload failed: %s", exc)
+        logger.exception("Fabric upload failed: %s", exc)
         return 1
 
 

@@ -19,6 +19,9 @@ from src.bc_client.auth import OAuthTokenProvider
 from src.bc_client.config import DEFAULT_PAGE_SIZE, Settings, TableConfig, load_settings
 from src.bc_client.api import BusinessCentralClient
 from src.bc_client.exporter import export_table
+from src.utils import configure_logging as configure_rich_logging, get_logger
+
+logger = get_logger(__name__)
 
 
 # ---------------------------
@@ -57,7 +60,7 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
 
 def configure_logging(verbose: bool) -> None:
     level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(level=level, format="%(asctime)s %(levelname)s %(message)s")
+    configure_rich_logging(level)
 
 
 def apply_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
@@ -149,12 +152,12 @@ def export_single_table(
     client: BusinessCentralClient,
     output_dir: Path,
 ) -> Path:
-    logging.info("Exporting table '%s'", table.name)
+    logger.info("Exporting table '%s'", table.name)
 
     rows = client.get_table_rows(table.url, label=table.name)
     destination = export_table(table.name, rows, output_dir)
 
-    logging.info("Saved %s", destination)
+    logger.info("Saved %s", destination)
     return destination
 
 
@@ -170,7 +173,7 @@ def export_tables(
             export_single_table(table, client, settings.output_dir)
         return
 
-    logging.info("Running exports with up to %d parallel workers", parallel_workers)
+    logger.info("Running exports with up to %d parallel workers", parallel_workers)
 
     # Each worker uses its own client (safer for requests sessions).
     def worker(table: TableConfig) -> Path:
@@ -183,7 +186,7 @@ def export_tables(
             try:
                 _ = result  # ensures exceptions surface here
             except Exception as exc:
-                logging.exception("Export failed for table '%s'", table.name)
+                logger.exception("Export failed for table '%s'", table.name)
                 errors.append(exc)
 
     if errors:
@@ -206,7 +209,7 @@ def run(argv: Optional[Iterable[str]] = None) -> int:
         settings = apply_overrides(settings, args)
 
         tables = list(settings.tables)
-        logging.info("Requesting up to %d rows per page", settings.page_size)
+        logger.info("Requesting up to %d rows per page", settings.page_size)
 
         if args.dry_run:
             log_dry_run(tables, settings.output_dir)
@@ -222,13 +225,13 @@ def run(argv: Optional[Iterable[str]] = None) -> int:
         return 0
 
     except Exception as exc:  # pragma: no cover
-        logging.exception("Failed to export tables: %s", exc)
+        logger.exception("Failed to export tables: %s", exc)
         return 1
 
 
 def log_dry_run(tables: List[TableConfig], output_dir: Path) -> None:
     for table in tables:
-        logging.info(
+        logger.info(
             "[dry-run] would export table '%s' from %s to %s",
             table.name,
             table.url,
