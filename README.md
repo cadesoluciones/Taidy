@@ -20,10 +20,10 @@ cp .env.example .env
 # Editar .env con tus secretos de Azure AD y actualizar config.json y tables.yaml
 
 # 3. Probar configuración
-task ingest -- --dry-run --verbose
+task extract:bc -- --dry-run --verbose
 
 # 4. Extraer datos
-task ingest -- --verbose
+task extract:bc -- --verbose
 ```
 
 ## 📚 Documentación Adicional
@@ -88,28 +88,31 @@ pytest -m acceptance -v
 
 ```bash
 # Validar configuración (sin llamar API)
-task ingest -- --dry-run --verbose
+task extract:bc -- --dry-run --verbose
 
 # Extraer tablas específicas
-task ingest -- --tables Customers Vendors
+task extract:bc -- --tables Customers Vendors
 
 # Procesamiento paralelo
-task ingest -- --parallel 4
+task extract:bc -- --parallel 4
 
 # Directorio raíz personalizado (se creará full/ o incremental/... dentro)
-task ingest -- --output-dir /tmp/bc_exports
+task extract:bc -- --output-dir /tmp/bc_exports
 
 # Snapshot completo (CSV en exports/full/)
-task ingest -- --mode full
+task extract:bc -- --mode full
 
 # Incremental (default) → CSV en exports/incremental/<timestamp>/
-task ingest -- --mode incremental
+task extract:bc -- --mode incremental
 
 # Subir a Fabric una carpeta exportada (p.ej., la última corrida incremental)
-task fabric:upload -- --output-dir ./exports/incremental/20240512T101500Z
+task push:fabric -- --output-dir ./exports/incremental/20240512T101500Z
 
 # Saltar archivos que ya existen en Fabric
-task fabric:upload -- --output-dir ./exports/full --skip-existing
+task push:fabric -- --output-dir ./exports/full --skip-existing
+
+# Ejecutar pipeline completo (extrae y sube la carpeta generada)
+task sync -- --mode incremental
 ```
 
 ### Ingesta incremental con checkpoints en OneLake
@@ -118,16 +121,18 @@ Cada tabla puede activar incremental marcando `incremental: true` en `tables.yam
 
 ```bash
 # Ejecutar incremental (default)
-task ingest -- --mode incremental
+task extract:bc -- --mode incremental
 
 # Forzar snapshot completo pero actualizando el checkpoint al finalizar
-task ingest -- --mode full
+task extract:bc -- --mode full
 
 # Eliminar checkpoints antes de correr (reinicia la ingesta)
-task ingest -- --reset-watermarks
+task extract:bc -- --reset-watermarks
 ```
 
 Puedes redefinir la ruta remota de checkpoints con `checkpoint_path` en `config.json` o `--checkpoint-path` en la CLI cuando necesites separar entornos o pipelines.
+
+> 💡 También podés usar `task sync` para ejecutar la extracción y subir automáticamente la carpeta resultante a Fabric en un solo comando.
 
 ## ☁️ Subir CSV directamente a Microsoft Fabric OneLake
 
@@ -138,9 +143,9 @@ Ahora las cargas a Fabric se ejecutan en un paso independiente para poder valida
    - `FABRIC_WORKSPACE_NAME`, `FABRIC_LAKEHOUSE_NAME`
    - Opcional: `FABRIC_WORKSPACE_ID`, `FABRIC_LAKEHOUSE_ID` (recomendado: usa los GUID del portal para garantizar nombres compatibles con OneLake)
    - Opcional: `FABRIC_PATH_PREFIX`, `FABRIC_SOURCE_NAME`, `FABRIC_OVERWRITE`, `FABRIC_MAX_RETRIES`
-2. Ejecuta `task ingest -- --verbose` (modo incremental por defecto) y revisa los CSV en `exports/incremental/<timestamp>/...` o `exports/full/` si usaste `--mode full`.
+2. Ejecuta `task extract:bc -- --verbose` (modo incremental por defecto) y revisa los CSV en `exports/incremental/<timestamp>/...` o `exports/full/` si usaste `--mode full`.
 3. Revisa/valida los CSV generados.
-4. Ejecuta `task fabric:upload -- --output-dir <carpeta_exportada>` para subir los CSV (ej., `./exports/incremental/20240512T101500Z`).
+4. Ejecuta `task push:fabric -- --output-dir <carpeta_exportada>` para subir los CSV (ej., `./exports/incremental/20240512T101500Z`).
 
 El comando de subida admite `--dry-run` (lista los archivos sin subirlos) y respeta `FABRIC_OVERWRITE`/`FABRIC_MAX_RETRIES`. Para evitar errores `ArtifactNotFound`, especifica `FABRIC_WORKSPACE_ID`/`FABRIC_LAKEHOUSE_ID` con los GUID que aparecen en las URLs del portal (`.../groups/<workspaceId>/lakehouses/<lakehouseId>`) y recuerda que OneLake usa la ruta `https://onelake.dfs.fabric.microsoft.com/<workspace>/<lakehouse>.Lakehouse/Files/...`. El uploader crea las carpetas intermedias automáticamente y los reintentos manejan errores transitorios de red.
 
@@ -159,7 +164,7 @@ El comando de subida admite `--dry-run` (lista los archivos sin subirlos) y resp
 env | grep BC_
 
 # Probar configuración
-task ingest -- --dry-run --verbose
+task extract:bc -- --dry-run --verbose
 ```
 
 ### Problemas de red

@@ -152,7 +152,9 @@ def _resolve_run_output_dir(
     return base_dir / "incremental" / timestamp
 
 
-def run(argv: Optional[Iterable[str]] = None) -> int:
+def run_extract(
+    argv: Optional[Iterable[str]] = None,
+) -> tuple[int, Optional[Path]]:
     args = parse_args(argv)
     configure_logging(args.verbose)
 
@@ -182,22 +184,23 @@ def run(argv: Optional[Iterable[str]] = None) -> int:
 
         if args.dry_run:
             log_dry_run(jobs, settings.output_dir)
-            return 0
+            return 0, settings.output_dir
 
         parallel_workers = args.parallel
         if parallel_workers <= 0:
             raise ValueError("--parallel must be greater than zero")
 
         run_exports(jobs, settings, checkpoint_store, parallel_workers)
-        return 0
+        return 0, settings.output_dir
 
     except Exception as exc:  # pragma: no cover
         logger.exception("Failed to export tables: %s", exc)
-        return 1
+        return 1, None
 
 
 def main() -> None:
-    sys.exit(run())
+    status, _ = run_extract()
+    sys.exit(status)
 
 
 if __name__ == "__main__":

@@ -59,7 +59,7 @@ def test_run_triggers_exports(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
 
     monkeypatch.setattr(main, "run_exports", fake_run_exports)
 
-    exit_code = main.run([])
+    exit_code, _ = main.run_extract([])
 
     assert exit_code == 0
     assert captured["jobs"] == jobs
@@ -83,7 +83,7 @@ def test_run_tables_override_filters_targets(
     monkeypatch.setattr(main, "prepare_export_jobs", fake_prepare)
     monkeypatch.setattr(main, "run_exports", lambda *_, **__: None)
 
-    exit_code = main.run(["--tables", "customers"])
+    exit_code, _ = main.run_extract(["--tables", "customers"])
 
     assert exit_code == 0
     assert captured["names"] == ["customers"]
@@ -98,7 +98,7 @@ def test_run_unknown_table_returns_failure(
     monkeypatch.setattr(main, "prepare_export_jobs", lambda *_, **__: [])
     monkeypatch.setattr(main, "run_exports", lambda *_, **__: None)
 
-    exit_code = main.run(["--tables", "missing"])
+    exit_code, _ = main.run_extract(["--tables", "missing"])
 
     assert exit_code == 1
 
@@ -120,7 +120,7 @@ def test_run_respects_dry_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
         lambda *_, **__: (_ for _ in ()).throw(AssertionError("should not run")),
     )
 
-    exit_code = main.run(["--dry-run"])
+    exit_code, _ = main.run_extract(["--dry-run"])
 
     assert exit_code == 0
     assert called["dry_run"] is True
@@ -138,7 +138,7 @@ def test_run_returns_failure_on_exception(
 
     monkeypatch.setattr(main, "prepare_export_jobs", fail_prepare)
 
-    exit_code = main.run([])
+    exit_code, _ = main.run_extract([])
 
     assert exit_code == 1
 
@@ -157,7 +157,7 @@ def test_run_supports_parallel_exports(
 
     monkeypatch.setattr(main, "run_exports", fake_run_exports)
 
-    exit_code = main.run(["--parallel", "2"])
+    exit_code, _ = main.run_extract(["--parallel", "2"])
 
     assert exit_code == 0
     assert captured["workers"] == 2
@@ -178,7 +178,7 @@ def test_run_full_mode_uses_full_output(
 
     monkeypatch.setattr(main, "run_exports", fake_run_exports)
 
-    exit_code = main.run(["--mode", "full"])
+    exit_code, _ = main.run_extract(["--mode", "full"])
 
     assert exit_code == 0
     assert str(captured["output_dir"].as_posix()).endswith("full_dir")

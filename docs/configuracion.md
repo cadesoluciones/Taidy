@@ -170,7 +170,7 @@ tables:
 
 ```bash
 # Ejecución en seco para validar todo
-task ingest -- --dry-run --verbose
+task extract:bc -- --dry-run --verbose
 ```
 
 Este comando verifica:
@@ -188,20 +188,20 @@ Si tienes múltiples empresas, crea archivos YAML separados:
 
 ```bash
 # tables-empresa1.yaml
-BC_TABLES_FILE=tables-empresa1.yaml BC_COMPANY_ID=guid1 task ingest
+BC_TABLES_FILE=tables-empresa1.yaml BC_COMPANY_ID=guid1 task extract:bc
 
 # tables-empresa2.yaml  
-BC_TABLES_FILE=tables-empresa2.yaml BC_COMPANY_ID=guid2 task ingest
+BC_TABLES_FILE=tables-empresa2.yaml BC_COMPANY_ID=guid2 task extract:bc
 ```
 
 ### Entornos Diferentes
 
 ```bash
 # Sandbox
-BC_ENVIRONMENT=Sandbox task ingest
+BC_ENVIRONMENT=Sandbox task extract:bc
 
 # Production
-BC_ENVIRONMENT=Production task ingest
+BC_ENVIRONMENT=Production task extract:bc
 ```
 
 ### Exportación Programada
@@ -209,7 +209,7 @@ BC_ENVIRONMENT=Production task ingest
 ```bash
 # Crear directorio con timestamp
 export OUTPUT_DIR="exports_$(date +%Y%m%d_%H%M%S)"
-task ingest -- --output-dir "$OUTPUT_DIR" --verbose
+task extract:bc -- --output-dir "$OUTPUT_DIR" --verbose
 ```
 
 ---

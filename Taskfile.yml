@@ -73,16 +73,23 @@ tasks:
   # ------------------------------
   # 📊 Data Ingestion
   # ------------------------------
-  ingest:
+  extract:bc:
     desc: Run Business Central data ingestion
     env:
       PYTHONPATH: .
     cmds:
       - time uv run python src/main.py {{.CLI_ARGS}}
 
-  fabric:upload:
+  push:fabric:
     desc: Upload existing CSV exports to Fabric OneLake
     env:
       PYTHONPATH: .
     cmds:
       - uv run python -m src.fabric_upload.cli {{.CLI_ARGS}}
+
+  sync:
+    desc: Run extract + Fabric upload pipeline
+    env:
+      PYTHONPATH: .
+    cmds:
+      - time uv run python -m src.cli.sync {{.CLI_ARGS}}

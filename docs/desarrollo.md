@@ -136,7 +136,7 @@ pytest -n auto
 
 ```bash
 # Logs detallados
-task ingest -- --verbose --dry-run
+task extract:bc -- --verbose --dry-run
 
 # Verificar configuración
 cat config.json

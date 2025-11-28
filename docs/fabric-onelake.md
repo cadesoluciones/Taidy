@@ -197,22 +197,24 @@ CONFIG_FILE=./config.json
 
 ```bash
 # Verificar que la configuración es correcta (usa una carpeta exportada)
-task fabric:upload -- --output-dir ./exports/full --dry-run --verbose
+task push:fabric -- --output-dir ./exports/full --dry-run --verbose
 ```
 
 ### 7.2 Subida de Prueba
 
 ```bash
 # 1. Extraer datos de Business Central (incremental por defecto)
-task ingest -- --verbose
+task extract:bc -- --verbose
 
 # 2. Subir a Fabric OneLake apuntando a la carpeta generada (p.ej., incremental más reciente)
-task fabric:upload -- --output-dir ./exports/incremental/20240512T101500Z --verbose
+task push:fabric -- --output-dir ./exports/incremental/20240512T101500Z --verbose
 
 # Opciones adicionales:
 # --skip-existing: Saltar archivos que ya existen (por defecto sobrescribe)
 # --dry-run: Ver qué archivos se subirían sin subirlos
-task fabric:upload -- --output-dir ./exports/full --skip-existing
+task push:fabric -- --output-dir ./exports/full --skip-existing
+
+> 💡 Alternativa: `task sync -- --mode incremental` ejecuta ambos pasos (extract + upload) de manera automática y sube la carpeta recién generada.
 ```
 
 ### 7.3 Verificar en Fabric
@@ -250,9 +252,9 @@ Ejemplo de archivo:
 
 ### Operaciones comunes
 
-- **Cambiar la ubicación remota:** define `checkpoint_path` en `config.json` o ejecuta `task ingest -- --checkpoint-path raw/checkpoints/otra_ruta`.
-- **Reiniciar un dataset:** `task ingest -- --reset-watermarks` eliminará los JSON antes de correr.
-- **Forzar snapshot completo:** usa `task ingest -- --mode full`; la corrida ignora filtros pero vuelve a escribir el checkpoint.
+- **Cambiar la ubicación remota:** define `checkpoint_path` en `config.json` o ejecuta `task extract:bc -- --checkpoint-path raw/checkpoints/otra_ruta`.
+- **Reiniciar un dataset:** `task extract:bc -- --reset-watermarks` eliminará los JSON antes de correr.
+- **Forzar snapshot completo:** usa `task extract:bc -- --mode full`; la corrida ignora filtros pero vuelve a escribir el checkpoint.
 
 > 💡 **Tip:** Mantén los checkpoints en el mismo workspace/lakehouse para que múltiples workers compartan estado consistente.
 
@@ -302,10 +304,10 @@ Files/
 
 ```bash
 # Logs detallados para troubleshooting
-task fabric:upload -- --output-dir ./exports/full --verbose
+task push:fabric -- --output-dir ./exports/full --verbose
 
 # Verificar archivos sin subirlos
-task fabric:upload -- --output-dir ./exports/incremental/20240512T101500Z --dry-run
+task push:fabric -- --output-dir ./exports/incremental/20240512T101500Z --dry-run
 ```
 
 ## 🚨 Troubleshooting
@@ -339,7 +341,7 @@ task fabric:upload -- --output-dir ./exports/incremental/20240512T101500Z --dry-
 env | grep FABRIC_
 
 # Probar conectividad
-task fabric:upload -- --dry-run --verbose
+task push:fabric -- --dry-run --verbose
 
 # Verificar estructura de archivos
 ls -la exports/
@@ -354,10 +356,10 @@ ls -la exports/
 # Script de ejemplo para automatización
 
 # 1. Extraer datos
-task ingest -- --verbose --output-dir "./exports_$(date +%Y%m%d)"
+task extract:bc -- --verbose --output-dir "./exports_$(date +%Y%m%d)"
 
 # 2. Subir a Fabric
-task fabric:upload -- --output-dir "./exports_$(date +%Y%m%d)" --verbose
+task push:fabric -- --output-dir "./exports_$(date +%Y%m%d)" --verbose
 
 # 3. Limpiar archivos locales antiguos (opcional)
 find ./exports_* -type d -mtime +7 -exec rm -rf {} \;
