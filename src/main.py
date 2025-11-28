@@ -8,18 +8,19 @@ supports basic CLI overrides for ad-hoc experimentation.
 import argparse
 import logging
 import sys
-from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from dataclasses import replace
 from pathlib import Path
 from typing import Iterable, List, Optional
 
 from dotenv import load_dotenv
 
-from src.bc_client.auth import OAuthTokenProvider
 from src.bc_client.config import DEFAULT_PAGE_SIZE, Settings, TableConfig, load_settings
-from src.bc_client.api import BusinessCentralClient
-from src.bc_client.exporter import export_table
+from src.ingest.checkpoints import build_checkpoint_store, reset_checkpoints
+from src.ingest.executor import log_dry_run, run_exports
+from src.ingest.jobs import prepare_export_jobs
 from src.utils import configure_logging as configure_rich_logging, get_logger
+
 
 logger = get_logger(__name__)
 
@@ -33,7 +34,11 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Download Business Central tables to CSV"
     )
-    parser.add_argument("--tables", nargs="*", help="Override configured table list")
+    parser.add_argument(
+        "--tables",
+        nargs="*",
+        help="Override configured table list (pass table names as defined in tables.yaml, e.g., --tables bc_job_headers bc_job_planning_lines)",
+    )
     parser.add_argument("--output-dir", help="Override CSV output directory")
     parser.add_argument(
         "--page-size",
@@ -55,12 +60,32 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
         default=1,
         help="Number of tables to export concurrently (default: 1)",
     )
+    parser.add_argument(
+        "--mode",
+        choices=("incremental", "full"),
+        default="incremental",
+        help=(
+            "Choose incremental or full snapshot mode (incremental tables use SystemModifiedAt checkpoints; non-incremental tables always do full exports)."
+        ),
+    )
+    parser.add_argument(
+        "--reset-watermarks",
+        action="store_true",
+        help="Delete stored Fabric checkpoints before running (forces full reload for tables marked incremental)",
+    )
+    parser.add_argument(
+        "--checkpoint-path",
+        help="Override Fabric checkpoint path inside OneLake Files (default: raw/checkpoints/business_central)",
+    )
     return parser.parse_args(list(argv) if argv is not None else None)
 
 
 def configure_logging(verbose: bool) -> None:
     level = logging.DEBUG if verbose else logging.INFO
     configure_rich_logging(level)
+    if not verbose:
+        for name in ("azure", "azure.identity", "azure.core"):
+            logging.getLogger(name).setLevel(logging.WARNING)
 
 
 def apply_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
@@ -114,88 +139,17 @@ def _override_page_size(configured: int, override: Optional[int]) -> int:
     return override
 
 
-# ---------------------------
-# Client creation
-# ---------------------------
-
-
-def create_token_provider(settings: Settings) -> OAuthTokenProvider:
-    return OAuthTokenProvider(
-        token_url=settings.token_url,
-        client_id=settings.client_id,
-        client_secret=settings.client_secret,
-        scope=settings.scope,
-        session=None,
-        timeout=30,
-    )
-
-
-def create_client(
-    settings: Settings,
-    token_provider: OAuthTokenProvider,
-) -> BusinessCentralClient:
-    return BusinessCentralClient(
-        settings=settings,
-        token_provider=token_provider,
-        session=None,
-        timeout=30,
-    )
-
-
-# ---------------------------
-# Export logic
-# ---------------------------
-
-
-def export_single_table(
-    table: TableConfig,
-    client: BusinessCentralClient,
-    output_dir: Path,
+def _resolve_run_output_dir(
+    base_dir: Path,
+    mode: str,
+    *,
+    now: Optional[datetime] = None,
 ) -> Path:
-    logger.info("Exporting table '%s'", table.name)
-
-    rows = client.get_table_rows(table.url, label=table.name)
-    destination = export_table(table.name, rows, output_dir)
-
-    logger.info("Saved %s", destination)
-    return destination
-
-
-def export_tables(
-    tables: List[TableConfig],
-    settings: Settings,
-    token_provider: OAuthTokenProvider,
-    parallel_workers: int,
-) -> None:
-    if parallel_workers <= 1:
-        client = create_client(settings, token_provider)
-        for table in tables:
-            export_single_table(table, client, settings.output_dir)
-        return
-
-    logger.info("Running exports with up to %d parallel workers", parallel_workers)
-
-    # Each worker uses its own client (safer for requests sessions).
-    def worker(table: TableConfig) -> Path:
-        client = create_client(settings, token_provider)
-        return export_single_table(table, client, settings.output_dir)
-
-    errors: List[Exception] = []
-    with ThreadPoolExecutor(max_workers=parallel_workers) as executor:
-        for table, result in zip(tables, executor.map(worker, tables)):
-            try:
-                _ = result  # ensures exceptions surface here
-            except Exception as exc:
-                logger.exception("Export failed for table '%s'", table.name)
-                errors.append(exc)
-
-    if errors:
-        raise RuntimeError("One or more table exports failed") from errors[0]
-
-
-# ---------------------------
-# Main run
-# ---------------------------
+    current = now or datetime.now(timezone.utc)
+    if mode == "full":
+        return base_dir / "full"
+    timestamp = current.strftime("%Y%m%dT%H%M%SZ")
+    return base_dir / "incremental" / timestamp
 
 
 def run(argv: Optional[Iterable[str]] = None) -> int:
@@ -209,34 +163,37 @@ def run(argv: Optional[Iterable[str]] = None) -> int:
         settings = apply_overrides(settings, args)
 
         tables = list(settings.tables)
+        base_output_dir = settings.output_dir
+        checkpoint_store = build_checkpoint_store(
+            tables,
+            base_output_dir,
+            args.checkpoint_path,
+        )
+        if args.reset_watermarks and checkpoint_store:
+            logger.info("Resetting Fabric checkpoints for incremental tables")
+            reset_checkpoints(checkpoint_store, tables)
+
+        run_output_dir = _resolve_run_output_dir(base_output_dir, args.mode)
+        settings = replace(settings, output_dir=run_output_dir)
+
+        jobs = prepare_export_jobs(tables, checkpoint_store, mode=args.mode)
+        logger.info("Writing CSVs to %s", settings.output_dir)
         logger.info("Requesting up to %d rows per page", settings.page_size)
 
         if args.dry_run:
-            log_dry_run(tables, settings.output_dir)
+            log_dry_run(jobs, settings.output_dir)
             return 0
 
         parallel_workers = args.parallel
         if parallel_workers <= 0:
             raise ValueError("--parallel must be greater than zero")
 
-        token_provider = create_token_provider(settings)
-
-        export_tables(tables, settings, token_provider, parallel_workers)
+        run_exports(jobs, settings, checkpoint_store, parallel_workers)
         return 0
 
     except Exception as exc:  # pragma: no cover
         logger.exception("Failed to export tables: %s", exc)
         return 1
-
-
-def log_dry_run(tables: List[TableConfig], output_dir: Path) -> None:
-    for table in tables:
-        logger.info(
-            "[dry-run] would export table '%s' from %s to %s",
-            table.name,
-            table.url,
-            output_dir,
-        )
 
 
 def main() -> None:

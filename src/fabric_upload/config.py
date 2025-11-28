@@ -21,6 +21,7 @@ class FabricUploadSettings:
     lakehouse_id: Optional[str]
     path_prefix: str
     source_name: str
+    checkpoint_path: str
     overwrite: bool
     max_retries: int
     local_export_root: Path
@@ -37,6 +38,7 @@ def load_fabric_settings(
     config_data: dict | None = None,
     config_file: Path | str | None = None,
     config_dir: Optional[Path] = None,
+    checkpoint_path_override: Optional[str] = None,
 ) -> Optional[FabricUploadSettings]:
     """Load Fabric upload settings from configuration + secrets."""
 
@@ -57,6 +59,10 @@ def load_fabric_settings(
     source_name = _sanitize_segment(
         config_section.get("source_name", "business_central")
     )
+    checkpoint_source = checkpoint_path_override or config_section.get(
+        "checkpoint_path", "raw/checkpoints/business_central"
+    )
+    checkpoint_path = _normalize_prefix(checkpoint_source)
     overwrite = bool(config_section.get("overwrite", True))
     max_retries = _parse_retries(str(config_section.get("max_retries", 3)))
 
@@ -70,6 +76,7 @@ def load_fabric_settings(
         lakehouse_id=(config_section.get("lakehouse_id") or "").strip() or None,
         path_prefix=path_prefix,
         source_name=source_name,
+        checkpoint_path=checkpoint_path,
         overwrite=overwrite,
         max_retries=max_retries,
         local_export_root=output_dir.expanduser().resolve(),

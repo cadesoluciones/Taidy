@@ -19,6 +19,7 @@ from src.config_loader import load_config_data
 class TableConfig:
     name: str
     url: str
+    incremental: bool = False
 
 
 @dataclass
@@ -142,11 +143,6 @@ def _read_output_dir(config: Dict[str, str], root: Path) -> Path:
     return path
 
 
-def _read_optional(env: Dict[str, str], key: str) -> Optional[str]:
-    value = env.get(key)
-    return value.strip() if value and value.strip() else None
-
-
 def _load_tables_from_file(path: Path) -> List[TableConfig]:
     data = _read_yaml(path)
 
@@ -182,13 +178,18 @@ def _parse_table_entry(entry: object, path: Path) -> TableConfig:
 
     name = entry.get("name")
     url = entry.get("url")
+    incremental = bool(entry.get("incremental", False))
 
     if not isinstance(name, str) or not name.strip():
         raise ValueError(f"Invalid table entry in {path}: missing/empty 'name'")
     if not isinstance(url, str) or not url.strip():
         raise ValueError(f"Invalid table entry in {path}: missing/empty 'url'")
 
-    return TableConfig(name=name.strip(), url=url.strip())
+    return TableConfig(
+        name=name.strip(),
+        url=url.strip(),
+        incremental=incremental,
+    )
 
 
 def _resolve_business_central_config(
@@ -207,3 +208,21 @@ def _resolve_business_central_config(
     if not isinstance(section, dict):
         raise ValueError("Configuration file missing 'business_central' section")
     return section, root
+
+
+def _clean_str(
+    value: Optional[object],
+    path: Path,
+    field_name: str,
+    *,
+    required: bool = True,
+) -> Optional[str]:
+    if value is None:
+        if required:
+            raise ValueError(f"Invalid table entry in {path}: missing '{field_name}'")
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(
+            f"Invalid table entry in {path}: field '{field_name}' must be a non-empty string"
+        )
+    return value.strip()

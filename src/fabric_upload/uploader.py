@@ -3,7 +3,6 @@
 import time
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
-from urllib.parse import quote
 from typing import Any, Callable, Iterable, List, Optional
 
 from azure.core.exceptions import (
@@ -12,6 +11,7 @@ from azure.core.exceptions import (
     ServiceRequestError,
 )
 
+from .client_factory import create_file_system_client
 from .config import FabricUploadSettings
 from ..utils import get_logger
 
@@ -33,7 +33,7 @@ class FabricUploader:
         sleep_fn: Optional[Callable[[float], None]] = None,
     ) -> None:
         self._settings = settings
-        self._file_system = file_system_client or self._build_file_system_client()
+        self._file_system = file_system_client or create_file_system_client(settings)
         self._now = now_fn or (lambda: datetime.now(timezone.utc))
         self._sleep = sleep_fn or time.sleep
 
@@ -183,31 +183,6 @@ class FabricUploader:
             status = getattr(exc, "status_code", None)
             return bool(status and status >= 500)
         return False
-
-    def _build_file_system_client(self) -> Any:
-        from azure.identity import ClientSecretCredential
-        from azure.storage.filedatalake import DataLakeServiceClient
-
-        credential = ClientSecretCredential(
-            tenant_id=self._settings.tenant_id,
-            client_id=self._settings.client_id,
-            client_secret=self._settings.client_secret,
-        )
-        service_client = DataLakeServiceClient(
-            account_url=self._account_url,
-            credential=credential,
-        )
-        return service_client.get_file_system_client("Files")
-
-    @property
-    def _account_url(self) -> str:
-        base = "https://onelake.dfs.fabric.microsoft.com"
-        # OneLake requires workspace and lakehouse names in the URL, not GUIDs
-        workspace_value = self._settings.workspace_name or self._settings.workspace_id
-        lakehouse_value = self._settings.lakehouse_name or self._settings.lakehouse_id
-        workspace_segment = quote(workspace_value)
-        lakehouse_segment = f"{quote(lakehouse_value)}.Lakehouse"
-        return f"{base}/{workspace_segment}/{lakehouse_segment}"
 
 
 def upload_exports_if_enabled(output_dir: Path, *, force: bool = False) -> None:

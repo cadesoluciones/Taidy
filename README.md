@@ -38,6 +38,7 @@ task ingest -- --verbose
 - **Procesamiento paralelo** de múltiples tablas
 - **Exportación atómica** para evitar archivos parciales
 - **Pruebas comprehensivas** (unit/integration/acceptance)
+- **Ingesta incremental** usando columnas watermark y checkpoints en Fabric OneLake
 
 ## 📋 Requisitos
 
@@ -89,24 +90,44 @@ pytest -m acceptance -v
 # Validar configuración (sin llamar API)
 task ingest -- --dry-run --verbose
 
-# Extraer todas las tablas
-task ingest -- --verbose
-
 # Extraer tablas específicas
 task ingest -- --tables Customers Vendors
 
 # Procesamiento paralelo
 task ingest -- --parallel 4
 
-# Directorio personalizado
-task ingest -- --output-dir ./exports_$(date +%Y%m%d)
+# Directorio raíz personalizado (se creará full/ o incremental/... dentro)
+task ingest -- --output-dir /tmp/bc_exports
 
-# Subir a Fabric (sobrescribe archivos existentes por defecto)
-task fabric:upload -- --output-dir ./exports
+# Snapshot completo (CSV en exports/full/)
+task ingest -- --mode full
+
+# Incremental (default) → CSV en exports/incremental/<timestamp>/
+task ingest -- --mode incremental
+
+# Subir a Fabric una carpeta exportada (p.ej., la última corrida incremental)
+task fabric:upload -- --output-dir ./exports/incremental/20240512T101500Z
 
 # Saltar archivos que ya existen en Fabric
-task fabric:upload -- --output-dir ./exports --skip-existing
+task fabric:upload -- --output-dir ./exports/full --skip-existing
 ```
+
+### Ingesta incremental con checkpoints en OneLake
+
+Cada tabla puede activar incremental marcando `incremental: true` en `tables.yaml`. Eso implica que el API expone `SystemModifiedAt`, columna que usamos como watermark único. El progreso se guarda en `Files/raw/checkpoints/.../<tabla>.json` dentro del Lakehouse. Usa los flags de CLI para controlar el modo:
+
+```bash
+# Ejecutar incremental (default)
+task ingest -- --mode incremental
+
+# Forzar snapshot completo pero actualizando el checkpoint al finalizar
+task ingest -- --mode full
+
+# Eliminar checkpoints antes de correr (reinicia la ingesta)
+task ingest -- --reset-watermarks
+```
+
+Puedes redefinir la ruta remota de checkpoints con `checkpoint_path` en `config.json` o `--checkpoint-path` en la CLI cuando necesites separar entornos o pipelines.
 
 ## ☁️ Subir CSV directamente a Microsoft Fabric OneLake
 
@@ -117,9 +138,9 @@ Ahora las cargas a Fabric se ejecutan en un paso independiente para poder valida
    - `FABRIC_WORKSPACE_NAME`, `FABRIC_LAKEHOUSE_NAME`
    - Opcional: `FABRIC_WORKSPACE_ID`, `FABRIC_LAKEHOUSE_ID` (recomendado: usa los GUID del portal para garantizar nombres compatibles con OneLake)
    - Opcional: `FABRIC_PATH_PREFIX`, `FABRIC_SOURCE_NAME`, `FABRIC_OVERWRITE`, `FABRIC_MAX_RETRIES`
-2. Ejecuta `task ingest -- --verbose` para descargar las tablas a `exports/`.
+2. Ejecuta `task ingest -- --verbose` (modo incremental por defecto) y revisa los CSV en `exports/incremental/<timestamp>/...` o `exports/full/` si usaste `--mode full`.
 3. Revisa/valida los CSV generados.
-4. Ejecuta `task fabric:upload -- --output-dir ./exports` para subir todos los CSV encontrados a `Files/<prefijo>/<source>/<tabla>/<yyyy>/<mm>/<dd>/<archivo>.csv` usando tu aplicación de Entra ID.
+4. Ejecuta `task fabric:upload -- --output-dir <carpeta_exportada>` para subir los CSV (ej., `./exports/incremental/20240512T101500Z`).
 
 El comando de subida admite `--dry-run` (lista los archivos sin subirlos) y respeta `FABRIC_OVERWRITE`/`FABRIC_MAX_RETRIES`. Para evitar errores `ArtifactNotFound`, especifica `FABRIC_WORKSPACE_ID`/`FABRIC_LAKEHOUSE_ID` con los GUID que aparecen en las URLs del portal (`.../groups/<workspaceId>/lakehouses/<lakehouseId>`) y recuerda que OneLake usa la ruta `https://onelake.dfs.fabric.microsoft.com/<workspace>/<lakehouse>.Lakehouse/Files/...`. El uploader crea las carpetas intermedias automáticamente y los reintentos manejan errores transitorios de red.
 

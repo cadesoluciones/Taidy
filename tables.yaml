@@ -1,65 +1,80 @@
 tables:
-  # Existing tables with descriptions added
   - name: bc_job_headers
     description: "JobHeader API - Cabeceras de proyectos"
     url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/SANDBOX_CADE/ODataV4/Company(%27CADE%20Soluciones%27)/APIsdadfxvc0xewdf
+    incremental: true
 
   - name: bc_job_planning_lines
     description: "JobPlanningLines API - Líneas de planificación de proyectos"
     url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/SANDBOX_CADE/ODataV4/Company(%27CADE%20Soluciones%27)/APIasdadacds23rweff2
+    incremental: true
 
   - name: bc_job_task_schedules
     description: "JobTask API - Tareas de proyectos"
     url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/SANDBOX_CADE/ODataV4/Company(%27CADE%20Soluciones%27)/APIsdaopopmoi324er
+    incremental: true
 
   - name: bc_customer_head
     description: "Customer Head API - Cabeceras de clientes"
     url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/SANDBOX_CADE/ODataV4/Company(%27CADE%20Soluciones%27)/APi122wfdfs
+    incremental: true
 
   - name: bc_purchase_order_head
     description: "Ord Compra Head - Cabeceras de órdenes de compra"
     url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/SANDBOX_CADE/ODataV4/Company(%27CADE%20Soluciones%27)/API1e1edsafdsdfmoir23
+    incremental: true
 
   - name: bc_gl_account_list
     description: "GLAccount List API - Lista de cuentas contables"
     url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/SANDBOX_CADE/ODataV4/Company(%27CADE%20Soluciones%27)/APIadsasc0909da
+    incremental: true
 
   - name: bc_jobs_movements
     description: "Jobs Mov API - Movimientos de proyectos"
     url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/SANDBOX_CADE/ODataV4/Company(%27CADE%20Soluciones%27)/APIadsmdoi00103
+    incremental: true
 
   - name: bc_sales_invoice_lines_credit
     description: "Hist.Fact.Vent.Lin.abono API - Líneas de abono de facturas de venta históricas"
     url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/SANDBOX_CADE/ODataV4/Company(%27CADE%20Soluciones%27)/APIakmlmkod3kmo209
+    incremental: true
 
   - name: bc_vendor_movements_detail
     description: "Mov Proveedor Detalle - Detalle de movimientos de proveedores"
     url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/SANDBOX_CADE/ODataV4/Company(%27CADE%20Soluciones%27)/APIam12e1m09ads0noi23
+    incremental: true
 
   - name: bc_customer_list
     description: "Customer List API - Lista de clientes"
     url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/SANDBOX_CADE/ODataV4/Company(%27CADE%20Soluciones%27)/APIe1eommkdsfm013e12
+    incremental: true
 
   - name: bc_purchase_order_lines
     description: "Ord Compra Line - Líneas de órdenes de compra"
     url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/SANDBOX_CADE/ODataV4/Company(%27CADE%20Soluciones%27)/APIjijnoireaefa0032423
+    incremental: true
 
   - name: bc_customer_movements_detail
     description: "Mov Cliente Detalle API - Detalle de movimientos de clientes"
     url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/SANDBOX_CADE/ODataV4/Company(%27CADE%20Soluciones%27)/APIjnkidas090
+    incremental: true
 
   - name: bc_sales_invoices_history
     description: "Historico Facturas Venta API - Histórico de facturas de venta"
     url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/SANDBOX_CADE/ODataV4/Company(%27CADE%20Soluciones%27)/APIkmomo1230k9
+    incremental: true
 
   - name: bc_customer_movements
     description: "Mov Cliente API - Movimientos de clientes"
     url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/SANDBOX_CADE/ODataV4/Company(%27CADE%20Soluciones%27)/APImkom1o21
+    incremental: true
 
   - name: bc_vendor_movements
     description: "Mov Proveedor API - Movimientos de proveedores"
     url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/SANDBOX_CADE/ODataV4/Company(%27CADE%20Soluciones%27)/APIpi0pkm0podasdampo
+    incremental: true
 
   - name: bc_general_journal_lines
     description: "Lin.Diario Gen.Regis API - Líneas de diario general registradas"
     url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/SANDBOX_CADE/ODataV4/Company(%27CADE%20Soluciones%27)/APIadqdiomomiasd
+    incremental: true

@@ -8,7 +8,7 @@
     "company_id": null,
     "company_name": "CADE Soluciones",
     "tables_file": "tables.yaml",
-    "page_size": 100,
+    "page_size": 1000,
     "output_dir": "./exports"
   },
   "fabric_upload": {

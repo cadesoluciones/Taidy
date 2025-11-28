@@ -1,37 +1,11 @@
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
 from src import main
 from src.bc_client.config import Settings, TableConfig
-
-
-class DummyClient:
-    def __init__(self, rows_by_url: dict[str, list[dict[str, object]]]) -> None:
-        self._rows_by_url = rows_by_url
-        self.called_urls: list[str] = []
-
-    def get_table_rows(
-        self, table_url: str, *, label: str | None = None
-    ) -> list[dict[str, object]]:
-        self.called_urls.append(table_url)
-        return self._rows_by_url.get(table_url, [])
-
-
-class DummyTokenProvider:
-    def __init__(self, *_, **__) -> None:
-        self.called = True
-
-    def get_access_token(self) -> str:  # pragma: no cover - unused in test
-        return "token"
-
-
-class RecordingClient(DummyClient):
-    created: list["RecordingClient"] = []
-
-    def __init__(self, rows_by_url: dict[str, list[dict[str, object]]]) -> None:
-        super().__init__(rows_by_url)
-        self.__class__.created.append(self)
+from src.ingest.jobs import compute_new_watermark, prepare_export_jobs
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -53,70 +27,66 @@ def _settings(tmp_path: Path) -> Settings:
     )
 
 
-def test_run_triggers_exports(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    settings = _settings(tmp_path)
-    client = DummyClient(
-        {
-            "https://example.com/customers": [{"id": 1}],
-            "https://example.com/vendors": [{"id": 2}],
-        }
-    )
-    # Capture every export so we can assert the exported rows.
-    exported: list[tuple[str, list[dict[str, object]]]] = []
-
-    # Prevent dotenv/real API calls; tests inject their own settings.
+def _mock_default_env(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
     monkeypatch.setattr(main, "load_dotenv", lambda *_, **__: True)
     monkeypatch.setattr(main, "load_settings", lambda: settings)
+    monkeypatch.setattr(main, "build_checkpoint_store", lambda *_, **__: None)
     monkeypatch.setattr(
-        main, "OAuthTokenProvider", lambda **kwargs: DummyTokenProvider()
+        main,
+        "_resolve_run_output_dir",
+        lambda base, mode, now=None: base / f"{mode}_dir",
     )
-    monkeypatch.setattr(main, "BusinessCentralClient", lambda **kwargs: client)
 
-    def fake_export(table_name, rows, output_dir):
-        exported.append((table_name, list(rows)))
-        return output_dir / f"{table_name}.csv"
 
-    monkeypatch.setattr(main, "export_table", fake_export)
+def test_run_triggers_exports(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    _mock_default_env(monkeypatch, settings)
+
+    jobs = ["job1"]
+    captured: dict[str, object] = {}
+
+    def fake_prepare(tables, store, mode):
+        captured["tables"] = tables
+        captured["mode"] = mode
+        return jobs
+
+    monkeypatch.setattr(main, "prepare_export_jobs", fake_prepare)
+
+    def fake_run_exports(jobs_arg, settings_arg, store_arg, workers_arg):
+        captured["jobs"] = jobs_arg
+        captured["workers"] = workers_arg
+        captured["output_dir"] = settings_arg.output_dir
+
+    monkeypatch.setattr(main, "run_exports", fake_run_exports)
 
     exit_code = main.run([])
 
     assert exit_code == 0
-    assert exported == [
-        ("customers", [{"id": 1}]),
-        ("vendors", [{"id": 2}]),
-    ]
+    assert captured["jobs"] == jobs
+    assert captured["workers"] == 1
+    assert captured["mode"] == "incremental"
+    assert str(captured["output_dir"].as_posix()).endswith("incremental_dir")
 
 
 def test_run_tables_override_filters_targets(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     settings = _settings(tmp_path)
-    client = DummyClient(
-        {
-            "https://example.com/customers": [{"id": 1}],
-            "https://example.com/vendors": [{"id": 2}],
-        }
-    )
+    _mock_default_env(monkeypatch, settings)
 
-    monkeypatch.setattr(main, "load_dotenv", lambda *_, **__: True)
-    monkeypatch.setattr(main, "load_settings", lambda: settings)
-    monkeypatch.setattr(
-        main, "OAuthTokenProvider", lambda **kwargs: DummyTokenProvider()
-    )
-    monkeypatch.setattr(main, "BusinessCentralClient", lambda **kwargs: client)
+    captured: dict[str, object] = {}
 
-    exported: list[str] = []
+    def fake_prepare(tables, store, mode):
+        captured["names"] = [table.name for table in tables]
+        return []
 
-    def fake_export(table_name, rows, output_dir):
-        exported.append(table_name)
-        return output_dir / f"{table_name}.csv"
-
-    monkeypatch.setattr(main, "export_table", fake_export)
+    monkeypatch.setattr(main, "prepare_export_jobs", fake_prepare)
+    monkeypatch.setattr(main, "run_exports", lambda *_, **__: None)
 
     exit_code = main.run(["--tables", "customers"])
 
     assert exit_code == 0
-    assert exported == ["customers"]
+    assert captured["names"] == ["customers"]
 
 
 def test_run_unknown_table_returns_failure(
@@ -124,14 +94,9 @@ def test_run_unknown_table_returns_failure(
 ) -> None:
     settings = _settings(tmp_path)
 
-    monkeypatch.setattr(main, "load_dotenv", lambda *_, **__: True)
-    monkeypatch.setattr(main, "load_settings", lambda: settings)
-    monkeypatch.setattr(
-        main, "OAuthTokenProvider", lambda **kwargs: DummyTokenProvider()
-    )
-    # Client returns no rows so run() treats requested table as missing.
-    monkeypatch.setattr(main, "BusinessCentralClient", lambda **kwargs: DummyClient({}))
-    monkeypatch.setattr(main, "export_table", lambda *_, **__: None)
+    _mock_default_env(monkeypatch, settings)
+    monkeypatch.setattr(main, "prepare_export_jobs", lambda *_, **__: [])
+    monkeypatch.setattr(main, "run_exports", lambda *_, **__: None)
 
     exit_code = main.run(["--tables", "missing"])
 
@@ -141,25 +106,24 @@ def test_run_unknown_table_returns_failure(
 def test_run_respects_dry_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
 
-    monkeypatch.setattr(main, "load_dotenv", lambda *_, **__: True)
-    monkeypatch.setattr(main, "load_settings", lambda: settings)
+    _mock_default_env(monkeypatch, settings)
+    monkeypatch.setattr(main, "prepare_export_jobs", lambda *_, **__: ["job"])
+    called = {"dry_run": False}
+
+    def fake_log(jobs, output_dir):
+        called["dry_run"] = True
+
+    monkeypatch.setattr(main, "log_dry_run", fake_log)
     monkeypatch.setattr(
-        main, "OAuthTokenProvider", lambda **kwargs: DummyTokenProvider()
+        main,
+        "run_exports",
+        lambda *_, **__: (_ for _ in ()).throw(AssertionError("should not run")),
     )
-    monkeypatch.setattr(main, "BusinessCentralClient", lambda **kwargs: DummyClient({}))
-
-    called = []
-
-    def fake_export(table_name, rows, output_dir):
-        called.append(table_name)
-        return output_dir / f"{table_name}.csv"
-
-    monkeypatch.setattr(main, "export_table", fake_export)
 
     exit_code = main.run(["--dry-run"])
 
     assert exit_code == 0
-    assert called == []
+    assert called["dry_run"] is True
 
 
 def test_run_returns_failure_on_exception(
@@ -167,17 +131,12 @@ def test_run_returns_failure_on_exception(
 ) -> None:
     settings = _settings(tmp_path)
 
-    monkeypatch.setattr(main, "load_dotenv", lambda *_, **__: True)
-    monkeypatch.setattr(main, "load_settings", lambda: settings)
+    _mock_default_env(monkeypatch, settings)
 
-    def fail_export(*_, **__):
+    def fail_prepare(*_, **__):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(main, "export_table", fail_export)
-    monkeypatch.setattr(
-        main, "OAuthTokenProvider", lambda **kwargs: DummyTokenProvider()
-    )
-    monkeypatch.setattr(main, "BusinessCentralClient", lambda **kwargs: DummyClient({}))
+    monkeypatch.setattr(main, "prepare_export_jobs", fail_prepare)
 
     exit_code = main.run([])
 
@@ -188,33 +147,104 @@ def test_run_supports_parallel_exports(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     settings = _settings(tmp_path)
-    rows = {
-        "https://example.com/customers": [{"id": 1}],
-        "https://example.com/vendors": [{"id": 2}],
-    }
-    RecordingClient.created.clear()
+    _mock_default_env(monkeypatch, settings)
+    monkeypatch.setattr(main, "prepare_export_jobs", lambda *_, **__: ["job"])
+    captured = {}
 
-    monkeypatch.setattr(main, "load_dotenv", lambda *_, **__: True)
-    monkeypatch.setattr(main, "load_settings", lambda: settings)
-    monkeypatch.setattr(
-        main, "OAuthTokenProvider", lambda **kwargs: DummyTokenProvider()
-    )
-    monkeypatch.setattr(
-        main, "BusinessCentralClient", lambda **kwargs: RecordingClient(rows)
-    )
+    def fake_run_exports(jobs, _settings, store, workers):
+        captured["workers"] = workers
+        captured["output_dir"] = _settings.output_dir
 
-    # Each worker should trigger an export for its assigned table.
-    exported: list[str] = []
-
-    def fake_export(table_name, rows_iter, output_dir):
-        exported.append(table_name)
-        list(rows_iter)
-        return output_dir / f"{table_name}.csv"
-
-    monkeypatch.setattr(main, "export_table", fake_export)
+    monkeypatch.setattr(main, "run_exports", fake_run_exports)
 
     exit_code = main.run(["--parallel", "2"])
 
     assert exit_code == 0
-    assert sorted(exported) == ["customers", "vendors"]
-    assert len(RecordingClient.created) == 2
+    assert captured["workers"] == 2
+    assert str(captured["output_dir"].as_posix()).endswith("incremental_dir")
+
+
+def test_run_full_mode_uses_full_output(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    settings = _settings(tmp_path)
+    _mock_default_env(monkeypatch, settings)
+    monkeypatch.setattr(main, "prepare_export_jobs", lambda *_, **__: ["job"])
+
+    captured = {}
+
+    def fake_run_exports(jobs, updated_settings, store, workers):
+        captured["output_dir"] = updated_settings.output_dir
+
+    monkeypatch.setattr(main, "run_exports", fake_run_exports)
+
+    exit_code = main.run(["--mode", "full"])
+
+    assert exit_code == 0
+    assert str(captured["output_dir"].as_posix()).endswith("full_dir")
+
+
+def test_resolve_run_output_dir_incremental_uses_timestamp(tmp_path: Path) -> None:
+    base = tmp_path / "exports"
+    now = datetime(2024, 5, 1, 12, 34, 56, tzinfo=timezone.utc)
+
+    result = main._resolve_run_output_dir(base, "incremental", now=now)
+
+    assert result == base / "incremental" / "20240501T123456Z"
+
+
+def test_resolve_run_output_dir_full(tmp_path: Path) -> None:
+    base = tmp_path / "exports"
+
+    result = main._resolve_run_output_dir(base, "full")
+
+    assert result == base / "full"
+
+
+def test_prepare_export_jobs_adds_filter() -> None:
+    table = TableConfig(
+        name="customers",
+        url="https://example.com/customers",
+        incremental=True,
+    )
+
+    class DummyStore:
+        def load(self, table_name: str):
+            assert table_name == "customers"
+            return type("Checkpoint", (), {"watermark_value": "2024-01-01T00:00:00Z"})()
+
+    jobs = prepare_export_jobs([table], DummyStore(), mode="incremental")
+
+    assert len(jobs) == 1
+    assert "%24filter" in jobs[0].request_url
+    assert "SystemModifiedAt+gt+2024-01-01T00%3A00%3A00Z" in jobs[0].request_url
+
+
+def test_prepare_export_jobs_full_mode_omits_filter() -> None:
+    table = TableConfig(
+        name="customers",
+        url="https://example.com/customers",
+        incremental=True,
+    )
+
+    class DummyStore:
+        def load(self, table_name: str):
+            return type("Checkpoint", (), {"watermark_value": "2024-01-01T00:00:00Z"})()
+
+    jobs = prepare_export_jobs([table], DummyStore(), mode="full")
+
+    assert len(jobs) == 1
+    assert "%24filter" not in jobs[0].request_url
+    assert "%24orderby=SystemModifiedAt+asc" in jobs[0].request_url
+
+
+def test_compute_new_watermark_uses_system_modified_at() -> None:
+    rows = [
+        {"SystemModifiedAt": "2024-05-01T10:00:00Z"},
+        {"SystemModifiedAt": "2024-05-01T11:00:00Z"},
+        {"SystemModifiedAt": "2024-05-02T01:00:00Z"},
+    ]
+
+    result = compute_new_watermark(rows)
+
+    assert result == "2024-05-02T01:00:00Z"

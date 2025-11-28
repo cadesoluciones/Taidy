@@ -168,6 +168,7 @@ Edita tu archivo `config.json` y agrega/actualiza la sección `fabric_upload`:
     "lakehouse_id": "1287f84f-d048-4967-a27f-b3f3019345d9",
     "path_prefix": "raw/exports",
     "source_name": "business_central",
+    "checkpoint_path": "raw/checkpoints/business_central",
     "overwrite": true,
     "max_retries": 3,
     "enabled": true
@@ -195,23 +196,23 @@ CONFIG_FILE=./config.json
 ### 7.1 Validar Configuración
 
 ```bash
-# Verificar que la configuración es correcta
-task fabric:upload -- --output-dir ./exports --dry-run --verbose
+# Verificar que la configuración es correcta (usa una carpeta exportada)
+task fabric:upload -- --output-dir ./exports/full --dry-run --verbose
 ```
 
 ### 7.2 Subida de Prueba
 
 ```bash
-# 1. Extraer datos de Business Central
+# 1. Extraer datos de Business Central (incremental por defecto)
 task ingest -- --verbose
 
-# 2. Subir a Fabric OneLake
-task fabric:upload -- --output-dir ./exports --verbose
+# 2. Subir a Fabric OneLake apuntando a la carpeta generada (p.ej., incremental más reciente)
+task fabric:upload -- --output-dir ./exports/incremental/20240512T101500Z --verbose
 
 # Opciones adicionales:
 # --skip-existing: Saltar archivos que ya existen (por defecto sobrescribe)
 # --dry-run: Ver qué archivos se subirían sin subirlos
-task fabric:upload -- --output-dir ./exports --skip-existing
+task fabric:upload -- --output-dir ./exports/full --skip-existing
 ```
 
 ### 7.3 Verificar en Fabric
@@ -227,6 +228,33 @@ task fabric:upload -- --output-dir ./exports --skip-existing
    ├── vendors/2025/11/26/vendors.csv
    └── items/2025/11/26/items.csv
    ```
+
+## 🧩 Checkpoints para Ingesta Incremental
+
+Las marcas de tiempo por tabla se almacenan como archivos JSON dentro de `checkpoint_path` (por defecto `Files/raw/checkpoints/business_central`). Cada ejecución incremental:
+
+1. Lee `Files/raw/checkpoints/business_central/<tabla>.json` para conocer el último watermark.
+2. Aplica un `$filter` OData a la tabla usando esa columna (`SystemModifiedAt`, `Posting_Date`, etc.).
+3. Tras exportar, sube un nuevo JSON con el watermark máximo encontrado.
+
+Ejemplo de archivo:
+
+```json
+{
+  "table": "bc_job_headers",
+  "watermark_column": "SystemModifiedAt",
+  "watermark_value": "2024-05-10T12:34:56Z",
+  "updated_at": "2024-05-11T08:00:01.123456+00:00"
+}
+```
+
+### Operaciones comunes
+
+- **Cambiar la ubicación remota:** define `checkpoint_path` en `config.json` o ejecuta `task ingest -- --checkpoint-path raw/checkpoints/otra_ruta`.
+- **Reiniciar un dataset:** `task ingest -- --reset-watermarks` eliminará los JSON antes de correr.
+- **Forzar snapshot completo:** usa `task ingest -- --mode full`; la corrida ignora filtros pero vuelve a escribir el checkpoint.
+
+> 💡 **Tip:** Mantén los checkpoints en el mismo workspace/lakehouse para que múltiples workers compartan estado consistente.
 
 ## 🔧 Configuración Avanzada
 
@@ -274,10 +302,10 @@ Files/
 
 ```bash
 # Logs detallados para troubleshooting
-task fabric:upload -- --output-dir ./exports --verbose
+task fabric:upload -- --output-dir ./exports/full --verbose
 
 # Verificar archivos sin subirlos
-task fabric:upload -- --output-dir ./exports --dry-run
+task fabric:upload -- --output-dir ./exports/incremental/20240512T101500Z --dry-run
 ```
 
 ## 🚨 Troubleshooting

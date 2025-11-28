@@ -184,3 +184,31 @@ def test_load_settings_defaults_page_size_when_missing(tmp_path: Path) -> None:
     )
 
     assert settings.page_size == DEFAULT_PAGE_SIZE
+
+
+def test_load_settings_marks_incremental_tables(tmp_path: Path) -> None:
+    config, config_dir = _base_config(tmp_path)
+    tables_file = config_dir / config["business_central"]["tables_file"]
+    tables_file.write_text(
+        "\n".join(
+            [
+                "tables:",
+                "  - name: Incremental",
+                "    url: https://example.com/incremental",
+                "    incremental: true",
+                "  - name: Snapshot",
+                "    url: https://example.com/snapshot",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    settings = load_settings(
+        [("BC_CLIENT_SECRET", "secret")],
+        config_data=config,
+        config_dir=config_dir,
+    )
+
+    assert settings.tables[0].incremental is True
+    assert settings.tables[1].incremental is False

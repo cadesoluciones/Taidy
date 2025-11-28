@@ -177,6 +177,34 @@ cat config.json
 - **Cloud Storage** - S3, Azure Blob, Google Cloud
 - **Monitoreo** - Métricas y alertas
 
+## Referencia de SystemModifiedAt
+
+| Tabla | ¿Expone `SystemModifiedAt`? | Estrategia actual |
+| --- | --- | --- |
+| `bc_job_headers` | Sí | Incremental habilitado |
+| `bc_job_planning_lines` | Sí | Incremental habilitado |
+| `bc_job_task_schedules` | Sí | Incremental habilitado |
+| `bc_purchase_order_head` | No | Snapshot completo hasta que el API exponga la columna |
+| `bc_purchase_order_lines` | No | Snapshot completo |
+| `bc_jobs_movements` | No | Snapshot completo |
+| `bc_customer_movements` | No | Snapshot completo |
+| `bc_customer_movements_detail` | No | Snapshot completo |
+| `bc_vendor_movements` | No | Snapshot completo |
+| `bc_vendor_movements_detail` | No | Snapshot completo |
+| `bc_general_journal_lines` | No | Snapshot completo |
+| `bc_sales_invoice_lines_credit` | No | Snapshot completo |
+| `bc_sales_invoices_history` | No | Snapshot completo |
+| `bc_customer_head` | No | Snapshot completo |
+| `bc_customer_list` | No | Snapshot completo |
+| `bc_gl_account_list` | No | Snapshot completo |
+
+> 📌 **Regla:** Solo las tablas con `incremental: true` en `tables.yaml` usan `SystemModifiedAt` como watermark. El resto permanece en modo snapshot hasta que Business Central exponga esa columna.
+
+## Estructura de Exportación Local
+
+- `output_dir/full/` → CSVs de corridas `--mode full` (uno por tabla, sobrescrito en cada snapshot).
+- `output_dir/incremental/<timestamp>/` → CSVs de cada corrida incremental; el timestamp está en formato `YYYYMMDDTHHMMSSZ` (UTC) para poder distinguir ventanas pendientes antes de subir a Fabric.
+
 ## Contribuir al Proyecto
 
 ### Flujo de Desarrollo

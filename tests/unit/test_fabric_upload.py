@@ -11,6 +11,8 @@ import pytest
 from unittest.mock import Mock
 
 from src.fabric_upload.config import FabricUploadSettings, load_fabric_settings
+from src.fabric_upload.checkpoints import FabricCheckpointStore
+from src.fabric_upload.client_factory import _account_url
 from src.fabric_upload import uploader
 from src.fabric_upload.uploader import (
     FabricUploader,
@@ -30,12 +32,14 @@ class DummyFileClient:
         self.failures: List[Exception] = []
         self.properties_requested = 0
         self.properties_error: Exception | None = None
+        self.download_payload: bytes = b""
 
     def upload_data(self, data: bytes, *, overwrite: bool) -> None:
         if self.failures:
             raise self.failures.pop(0)
         self.uploads.append(data)
         self.overwrite_flags.append(overwrite)
+        self.download_payload = data
 
     def get_file_properties(self) -> dict:
         self.properties_requested += 1
@@ -46,6 +50,20 @@ class DummyFileClient:
         if not self.exists:
             raise ResourceNotFoundError("missing")
         return {}
+
+    def download_file(self):
+        return _DownloadResponse(self.download_payload)
+
+    def delete_file(self) -> None:
+        self.exists = False
+
+
+class _DownloadResponse:
+    def __init__(self, data: bytes) -> None:
+        self._data = data
+
+    def readall(self) -> bytes:
+        return self._data
 
 
 class RecordingFileSystem:
@@ -90,6 +108,7 @@ def _settings(root: Path, **overrides: object) -> FabricUploadSettings:
         lakehouse_id=None,
         path_prefix="raw/exports",
         source_name="business_central",
+        checkpoint_path="raw/checkpoints/business_central",
         overwrite=False,
         max_retries=3,
         local_export_root=root,
@@ -261,17 +280,14 @@ def test_upload_retries_on_transient_error(tmp_path: Path) -> None:
 def test_account_url_uses_onelake_extensions(tmp_path: Path) -> None:
     exports = tmp_path / "exports"
     exports.mkdir()
-    uploader_instance = FabricUploader(
-        _settings(
-            exports,
-            workspace_name="Sandbox Workspace",
-            lakehouse_name="MyLakehouse",
-        ),
-        file_system_client=RecordingFileSystem(),
+    settings = _settings(
+        exports,
+        workspace_name="Sandbox Workspace",
+        lakehouse_name="MyLakehouse",
     )
 
     assert (
-        uploader_instance._account_url
+        _account_url(settings)
         == "https://onelake.dfs.fabric.microsoft.com/Sandbox%20Workspace/MyLakehouse.Lakehouse"
     )
 
@@ -279,19 +295,16 @@ def test_account_url_uses_onelake_extensions(tmp_path: Path) -> None:
 def test_account_url_prefers_artifact_names(tmp_path: Path) -> None:
     exports = tmp_path / "exports"
     exports.mkdir()
-    uploader_instance = FabricUploader(
-        _settings(
-            exports,
-            workspace_name="Friendly",
-            lakehouse_name="Display",
-            workspace_id="44b1286f-484d-41b1-9259-6904105d8d09",
-            lakehouse_id="1287f84f-d048-4967-a27f-b3f3019345d9",
-        ),
-        file_system_client=RecordingFileSystem(),
+    settings = _settings(
+        exports,
+        workspace_name="Friendly",
+        lakehouse_name="Display",
+        workspace_id="44b1286f-484d-41b1-9259-6904105d8d09",
+        lakehouse_id="1287f84f-d048-4967-a27f-b3f3019345d9",
     )
 
     assert (
-        uploader_instance._account_url
+        _account_url(settings)
         == "https://onelake.dfs.fabric.microsoft.com/Friendly/Display.Lakehouse"
     )
 
@@ -468,3 +481,42 @@ def test_cli_errors_when_output_dir_missing(
     exit_code = fabric_cli.run(["--output-dir", str(tmp_path / "missing")])
 
     assert exit_code == 1
+
+
+def test_checkpoint_store_saves_and_loads(tmp_path: Path) -> None:
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    client = DummyFileClient()
+    fs = RecordingFileSystem(client)
+
+    def fixed_now() -> datetime:
+        return datetime(2024, 5, 10, tzinfo=timezone.utc)
+
+    store = FabricCheckpointStore(
+        _settings(exports, checkpoint_path="raw/checkpoints/bc"),
+        file_system_client=fs,
+        now_fn=fixed_now,
+    )
+
+    store.save(
+        "Customers",
+        "2024-05-09T12:00:00Z",
+        watermark_column="SystemModifiedAt",
+    )
+
+    checkpoint = store.load("Customers")
+
+    assert fs.last_requested_path == "raw/checkpoints/bc/customers.json"
+    assert checkpoint is not None
+    assert checkpoint.watermark_value == "2024-05-09T12:00:00Z"
+
+
+def test_checkpoint_delete_missing_is_noop(tmp_path: Path) -> None:
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    fs = RecordingFileSystem(DummyFileClient())
+
+    store = FabricCheckpointStore(_settings(exports), file_system_client=fs)
+
+    # Should not raise even if the file does not exist.
+    store.delete("Vendors")

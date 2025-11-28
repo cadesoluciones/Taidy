@@ -75,7 +75,7 @@ Dentro de `config.json` debes rellenar al menos las secciones `business_central`
 }
 ```
 
-Los valores `tables_file` y `output_dir` pueden ser rutas relativas; se resolverán respecto al directorio que contiene `config.json`. Para más detalles consulta `config.example.json`.
+Los valores `tables_file` y `output_dir` pueden ser rutas relativas; se resolverán respecto al directorio que contiene `config.json`. El `output_dir` actúa como raíz y el sistema creará automáticamente subcarpetas `full/` para snapshots completos o `incremental/<timestamp>/` para corridas incrementales. Para más detalles consulta `config.example.json`.
 
 ## Variables de Entorno (solo secretos)
 
@@ -146,6 +146,23 @@ tables:
   - name: GeneralLedgerEntries
     url: https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/data/companies({company})/generalLedgerEntries
 ```
+
+### Campos Opcionales para Ingesta Incremental
+
+Cada tabla puede activar la sincronización incremental declarando `incremental: true`. Esto asume que el endpoint expone la columna `SystemModifiedAt`. Si la columna no existe, simplemente omite la clave para que la tabla se procese como snapshot completo.
+
+```yaml
+tables:
+  - name: bc_job_headers
+    url: https://.../jobs
+    incremental: true   # Usa SystemModifiedAt automáticamente
+
+  - name: bc_customer_list  # sin SystemModifiedAt
+    url: https://.../customers
+    # incremental ausente => snapshot completo
+```
+
+> ⚠️ No hay soporte para otras columnas: si `SystemModifiedAt` no está disponible, la tabla se queda como carga completa.
 
 ## Validación de Configuración
 
