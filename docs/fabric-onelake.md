@@ -18,10 +18,9 @@ Business Central API → CSV Exports → Fabric OneLake
                                         ↓
                                    Lakehouse Files
                                         ↓
-                              raw/exports/business_central/
-                                   ├── tabla1/2025/11/26/
-                                   ├── tabla2/2025/11/26/
-                                   └── tabla3/2025/11/26/
+                              raw/business_central/
+                                   ├── full/<tabla>.csv
+                                   └── incremental/<tabla>/<run_timestamp>/<tabla>.csv
 ```
 
 ## 🚀 Configuración Paso a Paso
@@ -70,8 +69,9 @@ Business Central API → CSV Exports → Fabric OneLake
    ```text
    Files/
    └── raw/
-       └── exports/
-           └── business_central/
+       └── business_central/
+           ├── full/
+           └── incremental/
    ```
 
 4. Para crear carpetas: clic derecho en Files → **Nueva carpeta**
@@ -166,7 +166,7 @@ Edita tu archivo `config.json` y agrega/actualiza la sección `fabric_upload`:
     "lakehouse_name": "BusinessCentralLakehouse",
     "workspace_id": "44b1286f-484d-41b1-9259-6904105d8d09",
     "lakehouse_id": "1287f84f-d048-4967-a27f-b3f3019345d9",
-    "path_prefix": "raw/exports",
+    "path_prefix": "raw",
     "source_name": "business_central",
     "checkpoint_path": "raw/checkpoints/business_central",
     "overwrite": true,
@@ -221,14 +221,15 @@ task push:fabric -- --output-dir ./exports/full --skip-existing
 
 1. Ve a tu workspace en Fabric
 2. Abre el Lakehouse
-3. Navega a **Files** → **raw** → **exports** → **business_central**
-4. Verifica que aparecen las carpetas por tabla y fecha:
+3. Navega a **Files** → **raw** → **business_central**
+4. Verifica que existen las carpetas `full/` e `incremental/` con el contenido esperado:
 
    ```text
    business_central/
-   ├── customers/2025/11/26/customers.csv
-   ├── vendors/2025/11/26/vendors.csv
-   └── items/2025/11/26/items.csv
+   ├── full/
+   │   └── customers.csv
+   └── incremental/
+       └── customers/2025-11-28T13-54-46Z/customers.csv
    ```
 
 ## 🧩 Checkpoints para Ingesta Incremental
@@ -264,7 +265,7 @@ Ejemplo de archivo:
 
 | Parámetro | Descripción | Valor por Defecto |
 |-----------|-------------|-------------------|
-| `path_prefix` | Prefijo de ruta en OneLake | `raw/exports` |
+| `path_prefix` | Prefijo de ruta en OneLake | `raw` |
 | `source_name` | Nombre del sistema fuente | `business_central` |
 | `overwrite` | Sobrescribir archivos existentes | `true` |
 | `max_retries` | Reintentos en caso de error | `3` |
@@ -276,13 +277,14 @@ Los archivos se organizan automáticamente con esta estructura:
 
 ```text
 Files/
-└── {path_prefix}/           # raw/exports
-    └── {source_name}/       # business_central
-        └── {tabla}/         # customers, vendors, etc.
-            └── {año}/       # 2025
-                └── {mes}/   # 11
-                    └── {día}/ # 26
-                        └── {tabla}.csv
+└── raw/
+    └── business_central/
+        ├── full/
+        │   └── {tabla}.csv
+        └── incremental/
+            └── {tabla}/
+                └── {run_timestamp}/
+                    └── {tabla}.csv
 ```
 
 ## 🔒 Seguridad y Mejores Prácticas

@@ -58,6 +58,29 @@ def configure_logging(verbose: bool) -> None:
         logging.getLogger(logger_name).setLevel(logging.WARNING)
 
 
+def _log_summary(
+    *,
+    header: str,
+    files: int,
+    uploaded: int,
+    skipped: int,
+    source: Path,
+) -> None:
+    logger.info(
+        "\n========== %s =========="
+        "\nFiles discovered: %d"
+        "\nUploaded        : %d"
+        "\nSkipped         : %d"
+        "\nLocal source    : %s"
+        "\n===============================",
+        header,
+        files,
+        uploaded,
+        skipped,
+        source,
+    )
+
+
 def _resolve_output_dir(raw: str) -> Path:
     output_dir = Path(raw).expanduser().resolve()
     if not output_dir.exists():
@@ -85,13 +108,22 @@ def run(argv: Optional[Iterable[str]] = None) -> int:
         if args.dry_run:
             for csv_file in files:
                 logger.info("[dry-run] would upload %s", csv_file)
-            if not files:
-                logger.info(
-                    "[dry-run] no CSV files found under '%s'",
-                    settings.local_export_root,
-                )
+            _log_summary(
+                header="Fabric Upload (dry-run)",
+                files=len(files),
+                uploaded=len(files),
+                skipped=0,
+                source=settings.local_export_root,
+            )
             return 0
-        uploader.upload_files(files)
+        uploaded, skipped = uploader.upload_files(files)
+        _log_summary(
+            header="Fabric Upload",
+            files=len(files),
+            uploaded=uploaded,
+            skipped=skipped,
+            source=settings.local_export_root,
+        )
         return 0
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("Fabric upload failed: %s", exc)

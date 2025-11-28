@@ -69,13 +69,15 @@ Dentro de `config.json` debes rellenar al menos las secciones `business_central`
     "lakehouse_name": "Lakehouse",
     "workspace_id": "...",
     "lakehouse_id": "...",
-    "path_prefix": "raw/exports",
+    "path_prefix": "raw",
     "source_name": "business_central"
   }
 }
 ```
 
 Los valores `tables_file` y `output_dir` pueden ser rutas relativas; se resolverán respecto al directorio que contiene `config.json`. El `output_dir` actúa como raíz y el sistema creará automáticamente subcarpetas `full/` para snapshots completos o `incremental/<timestamp>/` para corridas incrementales. Para más detalles consulta `config.example.json`.
+
+> 📁 **OneLake:** con esta configuración los snapshots completos subirán a `raw/business_central/full/<tabla>.csv` y las corridas incrementales a `raw/business_central/incremental/<tabla>/<run_timestamp>/<tabla>.csv`. Los checkpoints permanecen en `raw/checkpoints/business_central/<tabla>.json`.
 
 ## Variables de Entorno (solo secretos)
 

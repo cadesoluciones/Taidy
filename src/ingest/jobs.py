@@ -27,6 +27,7 @@ class TableExportResult:
     job: TableExportJob
     destination: Path
     new_watermark: Optional[str]
+    written: bool
 
 
 def prepare_export_jobs(

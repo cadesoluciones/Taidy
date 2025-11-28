@@ -22,15 +22,17 @@ def run_exports(
     settings: Settings,
     checkpoint_store: Optional[FabricCheckpointStore],
     parallel_workers: int,
-) -> None:
+) -> tuple[int, int]:
     token_provider = _create_token_provider(settings)
 
     if parallel_workers <= 1:
         client = _create_client(settings, token_provider)
+        written = 0
         for job in jobs:
             result = _export_single_table(job, client, settings.output_dir)
             _persist_checkpoint(result, checkpoint_store)
-        return
+            written += int(result.written)
+        return len(jobs), written
 
     logger.info("Running exports with up to %d parallel workers", parallel_workers)
 
@@ -40,15 +42,20 @@ def run_exports(
 
     errors: List[Exception] = []
     with ThreadPoolExecutor(max_workers=parallel_workers) as executor:
-        for job, result in zip(jobs, executor.map(worker, jobs)):
-            try:
-                _persist_checkpoint(result, checkpoint_store)
-            except Exception as exc:  # pragma: no cover - defensive
-                logger.exception("Export failed for table '%s'", job.table.name)
-                errors.append(exc)
+        results = list(executor.map(worker, jobs))
+
+    written = 0
+    for job, result in zip(jobs, results):
+        try:
+            _persist_checkpoint(result, checkpoint_store)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.exception("Export failed for table '%s'", job.table.name)
+            errors.append(exc)
+        written += int(result.written)
 
     if errors:
         raise RuntimeError("One or more table exports failed") from errors[0]
+    return len(jobs), written
 
 
 def log_dry_run(jobs: List[TableExportJob], output_dir: Path) -> None:
@@ -76,13 +83,15 @@ def _export_single_table(
             table.name,
         )
         destination = output_dir / f"{table.name}.csv"
-        return TableExportResult(job=job, destination=destination, new_watermark=None)
+        return TableExportResult(
+            job=job, destination=destination, new_watermark=None, written=False
+        )
     destination = export_table(table.name, rows, output_dir)
     new_watermark = compute_new_watermark(rows)
 
     logger.info("Saved %s", destination)
     return TableExportResult(
-        job=job, destination=destination, new_watermark=new_watermark
+        job=job, destination=destination, new_watermark=new_watermark, written=True
     )
 
 

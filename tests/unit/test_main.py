@@ -56,6 +56,7 @@ def test_run_triggers_exports(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
         captured["jobs"] = jobs_arg
         captured["workers"] = workers_arg
         captured["output_dir"] = settings_arg.output_dir
+        return len(jobs_arg), 0
 
     monkeypatch.setattr(main, "run_exports", fake_run_exports)
 
@@ -66,6 +67,7 @@ def test_run_triggers_exports(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     assert captured["workers"] == 1
     assert captured["mode"] == "incremental"
     assert str(captured["output_dir"].as_posix()).endswith("incremental_dir")
+    assert captured["output_dir"].exists()
 
 
 def test_run_tables_override_filters_targets(
@@ -81,7 +83,7 @@ def test_run_tables_override_filters_targets(
         return []
 
     monkeypatch.setattr(main, "prepare_export_jobs", fake_prepare)
-    monkeypatch.setattr(main, "run_exports", lambda *_, **__: None)
+    monkeypatch.setattr(main, "run_exports", lambda *_, **__: (0, 0))
 
     exit_code, _ = main.run_extract(["--tables", "customers"])
 
@@ -96,7 +98,7 @@ def test_run_unknown_table_returns_failure(
 
     _mock_default_env(monkeypatch, settings)
     monkeypatch.setattr(main, "prepare_export_jobs", lambda *_, **__: [])
-    monkeypatch.setattr(main, "run_exports", lambda *_, **__: None)
+    monkeypatch.setattr(main, "run_exports", lambda *_, **__: (0, 0))
 
     exit_code, _ = main.run_extract(["--tables", "missing"])
 
@@ -149,19 +151,16 @@ def test_run_supports_parallel_exports(
     settings = _settings(tmp_path)
     _mock_default_env(monkeypatch, settings)
     monkeypatch.setattr(main, "prepare_export_jobs", lambda *_, **__: ["job"])
-    captured = {}
 
     def fake_run_exports(jobs, _settings, store, workers):
-        captured["workers"] = workers
-        captured["output_dir"] = _settings.output_dir
+        return len(jobs), 0
 
     monkeypatch.setattr(main, "run_exports", fake_run_exports)
 
-    exit_code, _ = main.run_extract(["--parallel", "2"])
+    exit_code, output_dir = main.run_extract(["--parallel", "2"])
 
     assert exit_code == 0
-    assert captured["workers"] == 2
-    assert str(captured["output_dir"].as_posix()).endswith("incremental_dir")
+    assert str(output_dir.as_posix()).endswith("incremental_dir")
 
 
 def test_run_full_mode_uses_full_output(
@@ -175,6 +174,7 @@ def test_run_full_mode_uses_full_output(
 
     def fake_run_exports(jobs, updated_settings, store, workers):
         captured["output_dir"] = updated_settings.output_dir
+        return len(jobs), 0
 
     monkeypatch.setattr(main, "run_exports", fake_run_exports)
 

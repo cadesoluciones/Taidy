@@ -106,7 +106,7 @@ def _settings(root: Path, **overrides: object) -> FabricUploadSettings:
         lakehouse_name="lakehouse",
         workspace_id=None,
         lakehouse_id=None,
-        path_prefix="raw/exports",
+        path_prefix="raw",
         source_name="business_central",
         checkpoint_path="raw/checkpoints/business_central",
         overwrite=False,
@@ -116,11 +116,30 @@ def _settings(root: Path, **overrides: object) -> FabricUploadSettings:
     return replace(base, **overrides)
 
 
+def _write_full_file(root: Path, name: str = "Customers.csv") -> tuple[Path, Path]:
+    folder = root / "full"
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / name
+    path.write_text("id\n1\n", encoding="utf-8")
+    return folder, path
+
+
+def _write_incremental_file(
+    root: Path, run_id: str = "20250102T010203Z", name: str = "Customers.csv"
+) -> tuple[Path, Path]:
+    folder = root / "incremental" / run_id
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / name
+    path.write_text("id\n1\n", encoding="utf-8")
+    return folder, path
+
+
 def test_discover_csv_files_finds_nested_exports(tmp_path: Path) -> None:
     exports = tmp_path / "exports"
-    nested = exports / "nested"
+    run_folder = exports / "incremental" / "run123"
+    nested = run_folder / "nested"
     nested.mkdir(parents=True)
-    customer = exports / "customers.csv"
+    customer = run_folder / "customers.csv"
     vendor = nested / "vendors.csv"
     customer.write_text("id\n1\n", encoding="utf-8")
     vendor.write_text("id\n2\n", encoding="utf-8")
@@ -136,11 +155,10 @@ def test_discover_csv_files_finds_nested_exports(tmp_path: Path) -> None:
     assert discovered == [customer, vendor]
 
 
-def test_builds_expected_remote_path(tmp_path: Path) -> None:
+def test_builds_expected_remote_path_for_incremental(tmp_path: Path) -> None:
     exports = tmp_path / "exports"
-    exports.mkdir()
-    file_path = exports / "Customers.csv"
-    file_path.write_text("id\n1\n", encoding="utf-8")
+    run_id = "20250102T010203Z"
+    run_root, file_path = _write_incremental_file(exports, run_id)
     client = DummyFileClient()
     fs = RecordingFileSystem(client)
 
@@ -148,7 +166,7 @@ def test_builds_expected_remote_path(tmp_path: Path) -> None:
         return datetime(2025, 1, 2, tzinfo=timezone.utc)
 
     uploader_instance = FabricUploader(
-        _settings(exports),
+        _settings(run_root),
         file_system_client=fs,
         now_fn=fixed_now,
     )
@@ -157,9 +175,25 @@ def test_builds_expected_remote_path(tmp_path: Path) -> None:
 
     assert (
         fs.last_requested_path
-        == "raw/exports/business_central/customers/2025/01/02/Customers.csv"
+        == f"raw/business_central/incremental/customers/{run_id}/Customers.csv"
     )
     assert client.uploads[0] == file_path.read_bytes()
+
+
+def test_builds_expected_remote_path_for_full(tmp_path: Path) -> None:
+    exports = tmp_path / "exports"
+    run_root, file_path = _write_full_file(exports)
+    client = DummyFileClient()
+    fs = RecordingFileSystem(client)
+
+    uploader_instance = FabricUploader(
+        _settings(run_root),
+        file_system_client=fs,
+    )
+
+    uploader_instance.upload_files([file_path])
+
+    assert fs.last_requested_path == "raw/business_central/full/customers.csv"
 
 
 def test_load_fabric_settings_disabled_when_flag_missing(tmp_path: Path) -> None:
@@ -192,15 +226,13 @@ def test_load_fabric_settings_validates_required(
 
 def test_upload_skips_when_remote_exists(tmp_path: Path) -> None:
     exports = tmp_path / "exports"
-    exports.mkdir()
-    file_path = exports / "Customers.csv"
-    file_path.write_text("id\n1\n", encoding="utf-8")
+    run_root, file_path = _write_full_file(exports)
     client = DummyFileClient()
     client.exists = True
     fs = RecordingFileSystem(client)
 
     uploader_instance = FabricUploader(
-        _settings(exports, overwrite=False),
+        _settings(run_root, overwrite=False),
         file_system_client=fs,
     )
 
@@ -212,15 +244,13 @@ def test_upload_skips_when_remote_exists(tmp_path: Path) -> None:
 
 def test_upload_overwrites_when_flag_true(tmp_path: Path) -> None:
     exports = tmp_path / "exports"
-    exports.mkdir()
-    file_path = exports / "Customers.csv"
-    file_path.write_text("id\n1\n", encoding="utf-8")
+    run_root, file_path = _write_full_file(exports)
     client = DummyFileClient()
     client.exists = True
     fs = RecordingFileSystem(client)
 
     uploader_instance = FabricUploader(
-        _settings(exports, overwrite=True),
+        _settings(run_root, overwrite=True),
         file_system_client=fs,
     )
 
@@ -232,41 +262,34 @@ def test_upload_overwrites_when_flag_true(tmp_path: Path) -> None:
 
 def test_upload_creates_parent_directories(tmp_path: Path) -> None:
     exports = tmp_path / "exports"
-    exports.mkdir()
-    file_path = exports / "Customers.csv"
-    file_path.write_text("id\n1\n", encoding="utf-8")
+    run_id = "20251126T101112Z"
+    run_root, file_path = _write_incremental_file(exports, run_id)
     client = DummyFileClient()
     fs = RecordingFileSystem(client)
 
-    def fixed_now() -> datetime:
-        return datetime(2025, 11, 26, tzinfo=timezone.utc)
-
     uploader_instance = FabricUploader(
-        _settings(exports, overwrite=False),
+        _settings(run_root, overwrite=False),
         file_system_client=fs,
-        now_fn=fixed_now,
     )
 
     uploader_instance.upload_files([file_path])
 
     assert any(
-        directory == "raw/exports/business_central/customers/2025/11/26"
+        directory == f"raw/business_central/incremental/customers/{run_id}"
         for directory, _ in fs.created_directories
     )
 
 
 def test_upload_retries_on_transient_error(tmp_path: Path) -> None:
     exports = tmp_path / "exports"
-    exports.mkdir()
-    file_path = exports / "Vendors.csv"
-    file_path.write_text("id\n2\n", encoding="utf-8")
+    run_root, file_path = _write_full_file(exports, name="Vendors.csv")
     client = DummyFileClient()
     client.failures.append(ServiceRequestError("timeout"))
     fs = RecordingFileSystem(client)
     sleeps: List[float] = []
 
     uploader_instance = FabricUploader(
-        _settings(exports, max_retries=3),
+        _settings(run_root, max_retries=3),
         file_system_client=fs,
         sleep_fn=lambda seconds: sleeps.append(seconds),
     )
@@ -337,9 +360,7 @@ def test_upload_exports_if_enabled_invokes_uploader(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     exports = tmp_path / "exports"
-    exports.mkdir()
-    file_path = exports / "Customers.csv"
-    file_path.write_text("id\n1\n", encoding="utf-8")
+    run_root, file_path = _write_full_file(exports)
 
     monkeypatch.setenv("FABRIC_UPLOAD_ENABLED", "true")
     monkeypatch.setenv("FABRIC_TENANT_ID", "tenant")
@@ -358,14 +379,15 @@ def test_upload_exports_if_enabled_invokes_uploader(
             calls["discover"] = True
             return [file_path]
 
-        def upload_files(self, files: List[Path]) -> None:
+        def upload_files(self, files: List[Path]) -> tuple[int, int]:
             calls["files"] = list(files)
+            return len(files), 0
 
     monkeypatch.setattr(uploader, "FabricUploader", DummyUploader)
 
-    upload_exports_if_enabled(exports)
+    upload_exports_if_enabled(run_root)
 
-    assert calls["settings"].local_export_root == exports
+    assert calls["settings"].local_export_root == run_root
     assert calls["discover"] is True
     assert calls["files"] == [file_path]
 
@@ -406,9 +428,7 @@ def test_cli_uploads_existing_exports(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     exports = tmp_path / "exports"
-    exports.mkdir()
-    file_path = exports / "Customers.csv"
-    file_path.write_text("id\n1\n", encoding="utf-8")
+    run_root, file_path = _write_full_file(exports)
 
     # Provide the minimal Fabric configuration.
     monkeypatch.setenv("FABRIC_TENANT_ID", "tenant")
@@ -426,15 +446,16 @@ def test_cli_uploads_existing_exports(
         def discover_csv_files(self) -> List[Path]:
             return [file_path]
 
-        def upload_files(self, files: List[Path]) -> None:
+        def upload_files(self, files: List[Path]) -> tuple[int, int]:
             calls["files"] = list(files)
+            return len(files), 0
 
     monkeypatch.setattr(fabric_cli, "FabricUploader", DummyUploader)
 
-    exit_code = fabric_cli.run(["--output-dir", str(exports)])
+    exit_code = fabric_cli.run(["--output-dir", str(run_root)])
 
     assert exit_code == 0
-    assert calls["settings"].local_export_root == exports
+    assert calls["settings"].local_export_root == run_root
     assert calls["files"] == [file_path]
 
 
@@ -442,9 +463,7 @@ def test_cli_dry_run_skips_upload(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     exports = tmp_path / "exports"
-    exports.mkdir()
-    file_path = exports / "Customers.csv"
-    file_path.write_text("id\n1\n", encoding="utf-8")
+    run_root, file_path = _write_full_file(exports)
 
     monkeypatch.setenv("FABRIC_TENANT_ID", "tenant")
     monkeypatch.setenv("FABRIC_CLIENT_ID", "client")
@@ -464,7 +483,7 @@ def test_cli_dry_run_skips_upload(
 
     monkeypatch.setattr(fabric_cli, "FabricUploader", DummyUploader)
 
-    exit_code = fabric_cli.run(["--output-dir", str(exports), "--dry-run"])
+    exit_code = fabric_cli.run(["--output-dir", str(run_root), "--dry-run"])
 
     assert exit_code == 0
 

@@ -50,33 +50,36 @@ class FabricUploader:
         logger.debug("Discovered %d CSV file(s) under '%s'", len(csv_files), root)
         return csv_files
 
-    def upload_files(self, files: Iterable[Path]) -> None:
+    def upload_files(self, files: Iterable[Path]) -> tuple[int, int]:
         """Upload the provided CSV files to OneLake."""
-        # Sort files for consistent processing order
         paths = sorted(files)
         if not paths:
             logger.info(
                 "No CSV files found for Fabric upload in '%s'",
                 self._settings.local_export_root,
             )
-            return
+            return 0, 0
 
-        # Process each file individually
+        uploaded = 0
+        skipped = 0
         for local_path in paths:
-            # Build the target path in OneLake with date structure
             remote_path = self._build_remote_path(local_path)
             logger.info("Uploading '%s' to Fabric OneLake", local_path.name)
             logger.debug("Remote path: %s", remote_path)
-            # Upload with automatic retry on transient failures
-            self._upload_with_retry(local_path, remote_path)
+            if self._upload_with_retry(local_path, remote_path):
+                uploaded += 1
+            else:
+                skipped += 1
+        return uploaded, skipped
 
-    def _upload_with_retry(self, local_path: Path, remote_path: str) -> None:
+    def _upload_with_retry(self, local_path: Path, remote_path: str) -> bool:
         attempts = self._settings.max_retries
         for attempt in range(1, attempts + 1):
             try:
-                self._upload_once(local_path, remote_path)
-                logger.info("Successfully uploaded '%s'", local_path.name)
-                return
+                uploaded = self._upload_once(local_path, remote_path)
+                if uploaded:
+                    logger.info("Successfully uploaded '%s'", local_path.name)
+                return uploaded
             except Exception as exc:  # pragma: no cover - exercised in tests via mocks
                 if not self._is_retryable(exc) or attempt == attempts:
                     logger.exception(
@@ -95,7 +98,7 @@ class FabricUploader:
                 )
                 self._sleep(float(delay))
 
-    def _upload_once(self, local_path: Path, remote_path: str) -> None:
+    def _upload_once(self, local_path: Path, remote_path: str) -> bool:
         # Get Azure client for the target file
         file_client = self._file_system.get_file_client(remote_path)
 
@@ -103,7 +106,7 @@ class FabricUploader:
         exists = self._file_exists(file_client)
         if not self._settings.overwrite and exists:
             logger.info("Skipping '%s' (already exists)", local_path.name)
-            return
+            return False
 
         # Create parent directories if file doesn't exist
         if not exists:
@@ -113,6 +116,7 @@ class FabricUploader:
         data = local_path.read_bytes()
         overwrite_flag = self._settings.overwrite or not exists
         file_client.upload_data(data, overwrite=overwrite_flag)
+        return True
 
     def _file_exists(self, file_client: Any) -> bool:
         try:
@@ -153,18 +157,21 @@ class FabricUploader:
         # Extract table name from filename and sanitize it
         table_segment = self._sanitize_table(local_path.stem)
 
-        # Build date-based path structure: YYYY/MM/DD
-        today = self._now()
-        date_segments = [f"{today.year:04d}", f"{today.month:02d}", f"{today.day:02d}"]
+        run_root = self._settings.local_export_root
+        base = PurePosixPath(self._settings.path_prefix)
+        base /= self._settings.source_name
 
-        # Construct full OneLake path: prefix/source/table/YYYY/MM/DD/filename.csv
-        remote_path = PurePosixPath(self._settings.path_prefix)
-        remote_path /= self._settings.source_name
-        remote_path /= table_segment
-        for segment in date_segments:
-            remote_path /= segment
-        remote_path /= local_path.name
-        return remote_path.as_posix()
+        if run_root.name == "full":
+            remote_path = base / "full" / f"{table_segment}.csv"
+            return remote_path.as_posix()
+
+        if run_root.parent.name == "incremental":
+            run_id = run_root.name
+            remote_path = base / "incremental" / table_segment / run_id
+            remote_path /= local_path.name
+            return remote_path.as_posix()
+
+        raise ValueError(f"Unsupported export layout in {run_root}")
 
     @staticmethod
     def _sanitize_table(raw: str) -> str:

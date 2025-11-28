@@ -119,6 +119,8 @@ task sync -- --mode incremental
 
 Cada tabla puede activar incremental marcando `incremental: true` en `tables.yaml`. Eso implica que el API expone `SystemModifiedAt`, columna que usamos como watermark único. El progreso se guarda en `Files/raw/checkpoints/.../<tabla>.json` dentro del Lakehouse. Usa los flags de CLI para controlar el modo:
 
+> 📁 **OneLake:** Las ejecuciones `--mode full` suben los CSV a `raw/business_central/full/<tabla>.csv`, mientras que las incrementales crean carpetas únicas `raw/business_central/incremental/<tabla>/<run_timestamp>/<tabla>.csv`.
+
 ```bash
 # Ejecutar incremental (default)
 task extract:bc -- --mode incremental

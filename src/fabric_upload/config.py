@@ -55,7 +55,7 @@ def load_fabric_settings(
     if not enabled:
         return None
 
-    path_prefix = _normalize_prefix(config_section.get("path_prefix", "raw/exports"))
+    path_prefix = _normalize_prefix(config_section.get("path_prefix", "raw"))
     source_name = _sanitize_segment(
         config_section.get("source_name", "business_central")
     )

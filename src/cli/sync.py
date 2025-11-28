@@ -11,15 +11,24 @@ from dotenv import load_dotenv
 
 from src.fabric_upload import cli as fabric_cli
 from src.main import run_extract
+from src.utils import get_logger
+
+logger = get_logger(__name__)
 
 
 def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run extract + Fabric upload")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Extract from Business Central using the usual ingest flags and then"
+            " upload only the newly-created folder to Fabric."
+        )
+    )
     parser.add_argument(
         "--upload-dir",
         help=(
             "Optional override for the directory to upload. By default, the"
-            " folder produced by the extract step is used."
+            " folder produced by the extract step is used"
+            " (e.g., exports/full/ or exports/incremental/<timestamp>/)."
         ),
     )
     parser.add_argument(
@@ -45,7 +54,15 @@ def run(argv: Optional[Iterable[str]] = None) -> int:
     if not upload_path:
         raise RuntimeError("Upload path could not be determined")
     fabric_args = ["--output-dir", str(upload_path)]
-    return fabric_cli.run(fabric_args)
+    result = fabric_cli.run(fabric_args)
+    if result == 0:
+        logger.info(
+            "\n========== Sync =========="
+            "\nUpload folder: %s"
+            "\n===============================",
+            upload_path,
+        )
+    return result
 
 
 def main() -> None:

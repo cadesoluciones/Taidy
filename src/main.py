@@ -88,6 +88,23 @@ def configure_logging(verbose: bool) -> None:
             logging.getLogger(name).setLevel(logging.WARNING)
 
 
+def _log_summary(*, header: str, tables: int, written: int, output: Path) -> None:
+    skipped = tables - written
+    logger.info(
+        "\n========== %s =========="
+        "\nTables processed: %d"
+        "\nNew files       : %d"
+        "\nTables skipped   : %d"
+        "\nOutput folder   : %s"
+        "\n===============================",
+        header,
+        tables,
+        written,
+        skipped,
+        output,
+    )
+
+
 def apply_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
     tables = _override_tables(settings.tables, args.tables)
     output_dir = _override_output_dir(settings.output_dir, args.output_dir)
@@ -176,6 +193,7 @@ def run_extract(
             reset_checkpoints(checkpoint_store, tables)
 
         run_output_dir = _resolve_run_output_dir(base_output_dir, args.mode)
+        run_output_dir.mkdir(parents=True, exist_ok=True)
         settings = replace(settings, output_dir=run_output_dir)
 
         jobs = prepare_export_jobs(tables, checkpoint_store, mode=args.mode)
@@ -184,13 +202,27 @@ def run_extract(
 
         if args.dry_run:
             log_dry_run(jobs, settings.output_dir)
+            _log_summary(
+                header="BC Extract (dry-run)",
+                tables=len(jobs),
+                written=0,
+                output=settings.output_dir,
+            )
             return 0, settings.output_dir
 
         parallel_workers = args.parallel
         if parallel_workers <= 0:
             raise ValueError("--parallel must be greater than zero")
 
-        run_exports(jobs, settings, checkpoint_store, parallel_workers)
+        processed, written = run_exports(
+            jobs, settings, checkpoint_store, parallel_workers
+        )
+        _log_summary(
+            header="BC Extract",
+            tables=processed,
+            written=written,
+            output=settings.output_dir,
+        )
         return 0, settings.output_dir
 
     except Exception as exc:  # pragma: no cover
