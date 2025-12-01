@@ -65,8 +65,11 @@ def test_load_settings_success(tmp_path: Path) -> None:
     assert settings.output_dir == expected_output
 
 
-def test_load_settings_missing_required_secret(tmp_path: Path) -> None:
+def test_load_settings_missing_required_secret(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     config, config_dir = _base_config(tmp_path)
+    monkeypatch.delenv("BC_CLIENT_SECRET", raising=False)
 
     with pytest.raises(ValueError) as exc:
         load_settings(config_data=config, config_dir=config_dir)
