@@ -24,7 +24,7 @@ from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
 
 from .client_factory import create_file_system_client
 from .config import FabricUploadSettings
-from ..utils import get_logger
+from ..utils import get_logger, table_filename
 
 # --------------------------------------------------------------------------------------
 # Constants and Global Variables
@@ -82,6 +82,7 @@ class FabricCheckpointStore:
         self._settings = settings
         self._file_system = file_system_client or create_file_system_client(settings)
         self._now = now_fn or (lambda: datetime.now(timezone.utc))
+        self._checkpoint_root = settings.checkpoint_root
 
     def load(self, table_name: str) -> Optional[TableCheckpoint]:
         """
@@ -98,7 +99,7 @@ class FabricCheckpointStore:
             otherwise `None`.
         """
         path = self._remote_path(table_name)
-        file_client = self._file_system.get_file_client(path)
+        file_client = self._file_system.get_file_client(path.as_posix())
 
         try:
             data = file_client.download_file().readall()
@@ -157,7 +158,7 @@ class FabricCheckpointStore:
         # Ensure the parent directory exists before trying to upload the file.
         self._ensure_remote_parent(path)
 
-        file_client = self._file_system.get_file_client(path)
+        file_client = self._file_system.get_file_client(path.as_posix())
         file_client.upload_data(json.dumps(payload).encode("utf-8"), overwrite=True)
 
         logger.debug(
@@ -179,7 +180,7 @@ class FabricCheckpointStore:
         If the file does not exist, this operation does nothing.
         """
         path = self._remote_path(table_name)
-        file_client = self._file_system.get_file_client(path)
+        file_client = self._file_system.get_file_client(path.as_posix())
         try:
             file_client.delete_file()
             logger.info("Deleted checkpoint for table '%s'", table_name)
@@ -189,24 +190,20 @@ class FabricCheckpointStore:
                 "Checkpoint file for table '%s' was already absent", table_name
             )
 
-    def _remote_path(self, table_name: str) -> str:
+    def _remote_path(self, table_name: str) -> PurePosixPath:
         """
         Constructs the full remote path for a table's checkpoint file.
 
         Example: `raw/checkpoints/business_central/my_table.json`
         """
-        root = PurePosixPath(self._settings.checkpoint_path)
-        # Sanitize the table name to ensure it's a valid filename.
-        filename = f"{self._sanitize_table(table_name)}.json"
-        # `as_posix` returns the path as a string with forward slashes.
-        return (root / filename).as_posix()
+        return self._checkpoint_root / table_filename(table_name, suffix=".json")
 
-    def _ensure_remote_parent(self, remote_path: str) -> None:
+    def _ensure_remote_parent(self, remote_path: PurePosixPath) -> None:
         """
         Creates the parent directory for a remote path if it doesn't exist.
         This is a "best-effort" operation.
         """
-        parent = PurePosixPath(remote_path).parent
+        parent = remote_path.parent
         # If the parent is the root ('.') or empty, there's nothing to create.
         if str(parent) in {"", "."}:
             return
@@ -218,17 +215,6 @@ class FabricCheckpointStore:
             logger.debug(
                 "Failed to create checkpoint directory '%s'", parent, exc_info=True
             )
-
-    @staticmethod
-    def _sanitize_table(raw: str) -> str:
-        """Cleans a table name to make it suitable for use as a filename."""
-        cleaned = raw.strip().lower().replace(" ", "_")
-        # Keep only alphanumeric characters, hyphens, and underscores.
-        cleaned = "".join(ch for ch in cleaned if ch.isalnum() or ch in {"-", "_"})
-        cleaned = cleaned.strip("_-")
-        if not cleaned:
-            raise ValueError("Table name must include alphanumeric characters")
-        return cleaned
 
 
 # --------------------------------------------------------------------------------------

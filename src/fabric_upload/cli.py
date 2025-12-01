@@ -22,7 +22,11 @@ from dotenv import load_dotenv
 
 from .config import load_fabric_settings
 from .uploader import FabricUploader
-from ..utils import configure_logging as configure_rich_logging, get_logger
+from ..utils import (
+    coerce_dir,
+    configure_logging as configure_rich_logging,
+    get_logger,
+)
 
 # --------------------------------------------------------------------------------------
 # Constants and Global Variables
@@ -140,12 +144,7 @@ def _resolve_output_dir(raw: str) -> Path:
     Returns:
         An absolute, resolved `Path` object.
     """
-    output_dir = Path(raw).expanduser().resolve()
-    if not output_dir.exists():
-        raise FileNotFoundError(
-            f"Output directory '{output_dir}' does not exist; run the ingest task first."
-        )
-    return output_dir
+    return coerce_dir(raw, must_exist=True)
 
 
 def run(argv: Optional[Iterable[str]] = None) -> int:

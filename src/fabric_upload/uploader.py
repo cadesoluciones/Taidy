@@ -24,7 +24,7 @@ from azure.core.exceptions import (
 
 from .client_factory import create_file_system_client
 from .config import FabricUploadSettings
-from ..utils import get_logger
+from ..utils import get_logger, sanitize_segment, table_filename
 
 # --------------------------------------------------------------------------------------
 # Constants and Global Variables
@@ -65,6 +65,7 @@ class FabricUploader:
         self._file_system = file_system_client or create_file_system_client(settings)
         self._now = now_fn or (lambda: datetime.now(timezone.utc))
         self._sleep = sleep_fn or time.sleep
+        self._remote_base = settings.remote_base
 
     def discover_csv_files(self) -> List[Path]:
         """
@@ -110,7 +111,7 @@ class FabricUploader:
             # Each local file path is mapped to a structured remote path.
             remote_path = self._build_remote_path(local_path)
             logger.info("Uploading '%s' to Fabric OneLake...", local_path.name)
-            logger.debug("Remote path will be: %s", remote_path)
+            logger.debug("Remote path will be: %s", remote_path.as_posix())
 
             if self._upload_with_retry(local_path, remote_path):
                 uploaded += 1
@@ -119,7 +120,7 @@ class FabricUploader:
 
         return uploaded, skipped
 
-    def _upload_with_retry(self, local_path: Path, remote_path: str) -> bool:
+    def _upload_with_retry(self, local_path: Path, remote_path: PurePosixPath) -> bool:
         """
         Manages the upload process for a single file with an exponential backoff retry
         mechanism for transient network errors.
@@ -158,14 +159,14 @@ class FabricUploader:
                 self._sleep(float(delay))
         return False  # Should be unreachable
 
-    def _upload_once(self, local_path: Path, remote_path: str) -> bool:
+    def _upload_once(self, local_path: Path, remote_path: PurePosixPath) -> bool:
         """
         Performs a single attempt to upload a file.
 
         Returns:
             `True` if uploaded, `False` if skipped because it already exists.
         """
-        file_client = self._file_system.get_file_client(remote_path)
+        file_client = self._file_system.get_file_client(remote_path.as_posix())
 
         # First, check if the file already exists in OneLake.
         exists = self._file_exists(file_client)
@@ -211,12 +212,12 @@ class FabricUploader:
             # Any other HTTP error is unexpected and should be raised.
             raise
 
-    def _ensure_remote_parent(self, remote_path: str) -> None:
+    def _ensure_remote_parent(self, remote_path: PurePosixPath) -> None:
         """
         Creates the parent directory for a remote path if it doesn't exist.
         This is a "best-effort" operation.
         """
-        parent = PurePosixPath(remote_path).parent
+        parent = remote_path.parent
         if str(parent) in {"", "."}:
             return
         try:
@@ -228,7 +229,7 @@ class FabricUploader:
                 exc_info=True,
             )
 
-    def _build_remote_path(self, local_path: Path) -> str:
+    def _build_remote_path(self, local_path: Path) -> PurePosixPath:
         """
         Constructs the structured remote path in OneLake based on the local file's
         location (e.g., 'full' vs. 'incremental').
@@ -245,36 +246,25 @@ class FabricUploader:
                 f"{self._settings.local_export_root}"
             ) from exc
 
-        table_segment = self._sanitize_table(local_path.stem)
+        table_segment = sanitize_segment(local_path.stem)
         run_root = self._settings.local_export_root
-
-        # Start with the base path from config (`raw/business_central`).
-        base = PurePosixPath(self._settings.path_prefix) / self._settings.source_name
 
         # Logic for full exports.
         if run_root.name == "full":
-            remote_path = base / "full" / f"{table_segment}.csv"
-            return remote_path.as_posix()
+            return self._remote_base / "full" / table_filename(local_path.stem)
 
-        # Logic for incremental exports, which are in timestamped sub-folders.
+        # Logic for incremental exports.
         if run_root.parent.name == "incremental":
             run_id = run_root.name
-            remote_path = (
-                base / "incremental" / table_segment / run_id / local_path.name
+            return (
+                self._remote_base
+                / "incremental"
+                / table_segment
+                / run_id
+                / local_path.name
             )
-            return remote_path.as_posix()
 
         raise ValueError(f"Unsupported export layout in path: {run_root}")
-
-    @staticmethod
-    def _sanitize_table(raw: str) -> str:
-        """Cleans a table name to make it suitable for use as a path segment."""
-        cleaned = raw.strip().lower().replace(" ", "_")
-        cleaned = "".join(ch for ch in cleaned if ch.isalnum() or ch in {"-", "_"})
-        cleaned = cleaned.strip("_-")
-        if not cleaned:
-            raise ValueError("CSV filename must include a valid table name")
-        return cleaned
 
     @staticmethod
     def _is_retryable(exc: Exception) -> bool:

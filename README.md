@@ -30,6 +30,7 @@ task extract:bc -- --verbose
 
 - **[🔧 Configuración Detallada](docs/configuracion.md)** - Azure AD, variables de entorno, configuración de tablas
 - **[🛠️ Guía de Desarrollo](docs/desarrollo.md)** - Arquitectura, pruebas, troubleshooting, extensión
+- **[🐳 Guía de Docker](docs/docker.md)** - Cómo construir y ejecutar la aplicación con Docker
 
 ## ⚡ Características
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import List
 from unittest.mock import Mock
 
@@ -94,13 +94,15 @@ def _settings(root: Path, **overrides: object) -> FabricUploadSettings:
         lakehouse_name="lakehouse",
         workspace_id=None,
         lakehouse_id=None,
-        path_prefix="raw",
-        source_name="business_central",
-        checkpoint_path="raw/checkpoints/business_central",
+        remote_base=PurePosixPath("raw") / "business_central",
+        checkpoint_root=PurePosixPath("raw/checkpoints/business_central"),
         overwrite=False,
         max_retries=3,
         local_export_root=root,
     )
+    checkpoint_override = overrides.pop("checkpoint_path", None)
+    if checkpoint_override is not None:
+        overrides["checkpoint_root"] = PurePosixPath(checkpoint_override)
     return replace(base, **overrides)
 
 

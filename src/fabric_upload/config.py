@@ -14,10 +14,11 @@ values, and normalization for all upload-related configuration.
 
 import os
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, Optional
 
 from src.config_loader import load_config_data
+from src.utils import sanitize_segment
 
 # --------------------------------------------------------------------------------------
 # Data Models
@@ -40,9 +41,8 @@ class FabricUploadSettings:
     lakehouse_id: Optional[str]
 
     # --- Path and Naming Configuration ---
-    path_prefix: str
-    source_name: str
-    checkpoint_path: str
+    remote_base: PurePosixPath
+    checkpoint_root: PurePosixPath
     local_export_root: Path
 
     # --- Behavior Configuration ---
@@ -110,13 +110,14 @@ def load_fabric_settings(
 
     # Normalize and sanitize path components to ensure they are safe for URLs.
     path_prefix = _normalize_prefix(config_section.get("path_prefix", "raw"))
-    source_name = _sanitize_segment(
-        config_section.get("source_name", "business_central")
-    )
     checkpoint_source = checkpoint_path_override or config_section.get(
         "checkpoint_path", "raw/checkpoints/business_central"
     )
     checkpoint_path = _normalize_prefix(checkpoint_source)
+    remote_base = PurePosixPath(path_prefix) / sanitize_segment(
+        config_section.get("source_name", "business_central")
+    )
+    checkpoint_root = PurePosixPath(checkpoint_path)
 
     # Parse behavioral flags.
     overwrite = bool(config_section.get("overwrite", True))
@@ -131,12 +132,11 @@ def load_fabric_settings(
         lakehouse_name=config_section["lakehouse_name"].strip(),
         workspace_id=(config_section.get("workspace_id") or "").strip() or None,
         lakehouse_id=(config_section.get("lakehouse_id") or "").strip() or None,
-        path_prefix=path_prefix,
-        source_name=source_name,
-        checkpoint_path=checkpoint_path,
+        remote_base=remote_base,
+        checkpoint_root=checkpoint_root,
         overwrite=overwrite,
         max_retries=max_retries,
-        local_export_root=output_dir.expanduser().resolve(),
+        local_export_root=Path(output_dir).expanduser().resolve(),
     )
 
 
@@ -194,18 +194,6 @@ def _normalize_prefix(value: str) -> str:
     cleaned = value.strip().strip("/")
     if not cleaned:
         raise ValueError("Path prefix values must not be empty.")
-    return cleaned
-
-
-def _sanitize_segment(raw: str) -> str:
-    """
-    Sanitizes a string to be used as a safe URL path segment.
-    """
-    cleaned = raw.strip().lower().replace(" ", "_")
-    cleaned = "".join(ch for ch in cleaned if ch.isalnum() or ch in {"-", "_"})
-    cleaned = cleaned.strip("_-")
-    if not cleaned:
-        raise ValueError("Path segments must contain alphanumeric characters.")
     return cleaned
 
 

@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import argparse
 import sys
-from pathlib import Path
 from typing import Iterable, Optional
 
 from dotenv import load_dotenv
 
 from src.fabric_upload import cli as fabric_cli
 from src.main import run_extract
-from src.utils import get_logger
+from src.utils import coerce_dir, get_logger
 
 logger = get_logger(__name__)
 
@@ -47,12 +46,8 @@ def run(argv: Optional[Iterable[str]] = None) -> int:
         return status
 
     upload_path = (
-        Path(known_args.upload_dir).expanduser().resolve()
-        if known_args.upload_dir
-        else output_dir
+        coerce_dir(known_args.upload_dir) if known_args.upload_dir else output_dir
     )
-    if not upload_path:
-        raise RuntimeError("Upload path could not be determined")
     fabric_args = ["--output-dir", str(upload_path)]
     result = fabric_cli.run(fabric_args)
     if result == 0:

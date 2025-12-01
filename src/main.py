@@ -31,7 +31,11 @@ from src.bc_client.config import (
 from src.ingest.checkpoints import build_checkpoint_store, reset_checkpoints
 from src.ingest.executor import log_dry_run, run_exports
 from src.ingest.jobs import prepare_export_jobs
-from src.utils import configure_logging as configure_rich_logging, get_logger
+from src.utils import (
+    coerce_dir,
+    configure_logging as configure_rich_logging,
+    get_logger,
+)
 
 
 # --------------------------------------------------------------------------------------
@@ -271,12 +275,7 @@ def _override_output_dir(configured: Path, override: Optional[str]) -> Path:
     if not override:
         return configured
 
-    # `expanduser` handles `~`, and `resolve` makes it an absolute path.
-    output_dir = Path(override).expanduser().resolve()
-    if not output_dir.is_absolute():
-        raise ValueError(f"Output directory must be an absolute path: {output_dir}")
-
-    return output_dir
+    return coerce_dir(override)
 
 
 def _override_page_size(configured: int, override: Optional[int]) -> int:

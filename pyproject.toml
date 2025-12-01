@@ -11,6 +11,7 @@ dependencies = [
     "azure-identity>=1.17.1",
     "azure-storage-file-datalake>=12.17.0",
     "rich>=13.7.0",
+    "python-dotenv==1.2.1",
 ]
 
 [dependency-groups]

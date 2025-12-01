@@ -33,6 +33,7 @@ credentials.json
 # -----------------------------------------------------------------------------
 node_modules/
 package-lock.json
+package.json
 yarn-error.log
 
 # Optional build artifacts (adjust for your CDK + JS tooling)
