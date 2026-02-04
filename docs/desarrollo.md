@@ -159,7 +159,7 @@ cat config.json
 
 **Error: `Failed to fetch data`**
 
-- Verificar URLs en `tables.yaml`
+- Verificar `base_api_url` y `api_path` en `tables.yaml`
 - Confirmar que el Company ID existe
 - Probar endpoint manualmente con curl
 

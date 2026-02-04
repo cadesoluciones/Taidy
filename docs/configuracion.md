@@ -95,25 +95,28 @@ FABRIC_UPLOAD_ENABLED=true  # opcional, override del campo 'enabled'
 El archivo `tables.yaml` contiene la configuración de las tablas a extraer. Personalízalo según tus necesidades:
 
 ```yaml
+base_api_url: https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/data/companies({company})
 tables:
   - name: Customers
-    url: https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/data/companies({company})/customers
+    api_path: customers
   - name: Vendors
-    url: https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/data/companies({company})/vendors
+    api_path: vendors
 ```
 
 ### Estructura de URLs
 
-**Patrón estándar de Business Central:**
+**Patrón estándar de Business Central (base + path):**
 
 ```text
-https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/data/companies({company})/{tabla}
+base_api_url: https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/data/companies({company})
+api_path: {tabla}
 ```
 
-**Patrón OData personalizado:**
+**Patrón OData personalizado (base + path):**
 
 ```text
-https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/ODataV4/Company('{company_name}')/{api_endpoint}
+base_api_url: https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/ODataV4/Company('{company_name}')
+api_path: {api_endpoint}
 ```
 
 > 📝 **Nota**: Las variables `{tenant}`, `{environment}`, `{company}` se reemplazan automáticamente con los valores de tu `config.json`.
@@ -129,24 +132,25 @@ Puedes explorar las APIs disponibles en:
 ### Ejemplos de Tablas Comunes
 
 ```yaml
+base_api_url: https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/data/companies({company})
 tables:
   # Maestros
   - name: Customers
-    url: https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/data/companies({company})/customers
+    api_path: customers
   - name: Vendors
-    url: https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/data/companies({company})/vendors
+    api_path: vendors
   - name: Items
-    url: https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/data/companies({company})/items
+    api_path: items
 
   # Transacciones
   - name: SalesOrders
-    url: https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/data/companies({company})/salesOrders
+    api_path: salesOrders
   - name: PurchaseOrders
-    url: https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/data/companies({company})/purchaseOrders
+    api_path: purchaseOrders
 
   # Contabilidad
   - name: GeneralLedgerEntries
-    url: https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/data/companies({company})/generalLedgerEntries
+    api_path: generalLedgerEntries
 ```
 
 ### Campos Opcionales para Ingesta Incremental
@@ -154,13 +158,14 @@ tables:
 Cada tabla puede activar la sincronización incremental declarando `incremental: true`. Esto asume que el endpoint expone la columna `SystemModifiedAt`. Si la columna no existe, simplemente omite la clave para que la tabla se procese como snapshot completo.
 
 ```yaml
+base_api_url: https://.../Company('nombre')
 tables:
   - name: bc_job_headers
-    url: https://.../jobs
+    api_path: jobs
     incremental: true   # Usa SystemModifiedAt automáticamente
 
   - name: bc_customer_list  # sin SystemModifiedAt
-    url: https://.../customers
+    api_path: customers
     # incremental ausente => snapshot completo
 ```
 

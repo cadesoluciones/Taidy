@@ -93,3 +93,11 @@ tasks:
       PYTHONPATH: .
     cmds:
       - time uv run python -m src.cli.sync {{.CLI_ARGS}}
+
+  # ------------------------------
+  # 🛠 Utilities
+  # ------------------------------
+  tools:csv-to-yaml:
+    desc: Transform a CSV file (e.g. from client) to tables.yaml format
+    cmds:
+      - uv run python scripts/transform_csv_to_yaml.py {{.CLI_ARGS}}

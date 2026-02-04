@@ -63,11 +63,12 @@ CONFIG_FILE=./config.json
 
 ```yaml
 # En tables.yaml
+base_api_url: https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/data/companies({company})
 tables:
   - name: Customers
-    url: https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/data/companies({company})/customers
+    api_path: customers
   - name: Vendors
-    url: https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/data/companies({company})/vendors
+    api_path: vendors
 ```
 
 > 📖 **Para configuración detallada**: Ver [Guía de Configuración](docs/configuracion.md)

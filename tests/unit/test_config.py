@@ -9,13 +9,13 @@ def _write_tables_file(
     directory: Path, entries: list[tuple[str, str]] | None = None
 ) -> Path:
     entries = entries or [
-        ("Table A", "https://example.com/a"),
-        ("Table B", "https://example.com/b"),
+        ("Table A", "a"),
+        ("Table B", "b"),
     ]
-    lines = ["tables:"]
-    for name, url in entries:
+    lines = ["base_api_url: https://example.com", "tables:"]
+    for name, api_path in entries:
         lines.append(f"  - name: {name}")
-        lines.append(f"    url: {url}")
+        lines.append(f"    api_path: {api_path}")
     path = directory / "tables.yaml"
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
@@ -195,12 +195,13 @@ def test_load_settings_marks_incremental_tables(tmp_path: Path) -> None:
     tables_file.write_text(
         "\n".join(
             [
+                "base_api_url: https://example.com",
                 "tables:",
                 "  - name: Incremental",
-                "    url: https://example.com/incremental",
+                "    api_path: incremental",
                 "    incremental: true",
                 "  - name: Snapshot",
-                "    url: https://example.com/snapshot",
+                "    api_path: snapshot",
             ]
         )
         + "\n",
