@@ -239,13 +239,15 @@ def _load_tables_from_file(path: Path) -> List[TableConfig]:
     if not isinstance(raw_tables, list) or not raw_tables:
         raise ValueError("Tables file must define a non-empty 'tables' list")
 
-    base_api_url = data.get("base_api_url")
-    if base_api_url is not None:
-        base_api_url = _clean_str(base_api_url, path, "base_api_url")
+    if "base_api_url" in data:
+        raise ValueError(
+            f"Invalid tables file {path}: top-level 'base_api_url' is not supported; "
+            "each table entry must define a full 'url'"
+        )
 
     tables: List[TableConfig] = []
     for entry in raw_tables:
-        tables.append(_parse_table_entry(entry, path, base_api_url))
+        tables.append(_parse_table_entry(entry, path))
 
     return tables
 
@@ -266,9 +268,7 @@ def _read_yaml(path: Path) -> dict:
         raise ValueError(f"Failed to parse tables file {path}: {exc}") from exc
 
 
-def _parse_table_entry(
-    entry: object, path: Path, base_api_url: Optional[str]
-) -> TableConfig:
+def _parse_table_entry(entry: object, path: Path) -> TableConfig:
     """
     Parses a single dictionary from the YAML file into a `TableConfig` object.
 
@@ -284,17 +284,11 @@ def _parse_table_entry(
 
     # Use `_clean_str` for consistent validation and error messages.
     name = _clean_str(entry.get("name"), path, "name")
-    api_path = entry.get("api_path")
-    url = entry.get("url")
-    if api_path is not None:
-        api_path = _clean_str(api_path, path, "api_path")
-        if not base_api_url:
-            raise ValueError(
-                f"Invalid table entry in {path}: 'base_api_url' is required when using 'api_path'"
-            )
-        url = _join_base_and_path(base_api_url, api_path)
-    else:
-        url = _clean_str(url, path, "url")
+    if "api_path" in entry:
+        raise ValueError(
+            f"Invalid table entry in {path}: 'api_path' is not supported; use full 'url'"
+        )
+    url = _clean_str(entry.get("url"), path, "url")
     incremental = bool(entry.get("incremental", False))
 
     return TableConfig(name=name, url=url, incremental=incremental)
@@ -351,10 +345,3 @@ def _clean_str(
             f"Invalid table entry in {path}: field '{field_name}' must be a non-empty string"
         )
     return value.strip()
-
-
-def _join_base_and_path(base_api_url: str, api_path: str) -> str:
-    """
-    Joins a base API URL with a table API path safely.
-    """
-    return f"{base_api_url.rstrip('/')}/{api_path.lstrip('/')}"

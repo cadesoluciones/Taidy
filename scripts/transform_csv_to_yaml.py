@@ -32,7 +32,6 @@ def clean_name(description: str) -> str:
 
 def transform_csv_to_yaml(input_path: str, output_path: str):
     tables = []
-    base_api_url = None
 
     try:
         with open(input_path, "r", encoding="utf-8-sig") as f:
@@ -60,25 +59,11 @@ def transform_csv_to_yaml(input_path: str, output_path: str):
                     continue
 
                 name = clean_name(description)
-                if "/" in url:
-                    candidate_base, api_path = url.rsplit("/", 1)
-                else:
-                    print(f"Skipping row {row_num}: URL does not contain '/'.")
-                    continue
-
-                if base_api_url is None:
-                    base_api_url = candidate_base
-                elif base_api_url != candidate_base:
-                    print(
-                        f"Skipping row {row_num}: URL base does not match "
-                        f"'{base_api_url}'."
-                    )
-                    continue
 
                 table_entry = {
                     "name": name,
                     "description": description,
-                    "api_path": api_path,
+                    "url": url,
                     "incremental": True,  # Defaulting to True based on existing tables.yaml
                 }
                 tables.append(table_entry)
@@ -90,11 +75,7 @@ def transform_csv_to_yaml(input_path: str, output_path: str):
         print(f"Error processing CSV: {e}")
         sys.exit(1)
 
-    if not base_api_url:
-        print("Error: Could not determine base_api_url from input CSV.")
-        sys.exit(1)
-
-    output_data = {"base_api_url": base_api_url, "tables": tables}
+    output_data = {"tables": tables}
 
     try:
         with open(output_path, "w", encoding="utf-8") as f:

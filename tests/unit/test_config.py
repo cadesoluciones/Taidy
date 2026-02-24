@@ -9,13 +9,13 @@ def _write_tables_file(
     directory: Path, entries: list[tuple[str, str]] | None = None
 ) -> Path:
     entries = entries or [
-        ("Table A", "a"),
-        ("Table B", "b"),
+        ("Table A", "https://example.com/a"),
+        ("Table B", "https://example.com/b"),
     ]
-    lines = ["base_api_url: https://example.com", "tables:"]
-    for name, api_path in entries:
+    lines = ["tables:"]
+    for name, url in entries:
         lines.append(f"  - name: {name}")
-        lines.append(f"    api_path: {api_path}")
+        lines.append(f"    url: {url}")
     path = directory / "tables.yaml"
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
@@ -195,13 +195,12 @@ def test_load_settings_marks_incremental_tables(tmp_path: Path) -> None:
     tables_file.write_text(
         "\n".join(
             [
-                "base_api_url: https://example.com",
                 "tables:",
                 "  - name: Incremental",
-                "    api_path: incremental",
+                "    url: https://example.com/incremental",
                 "    incremental: true",
                 "  - name: Snapshot",
-                "    api_path: snapshot",
+                "    url: https://example.com/snapshot",
             ]
         )
         + "\n",
@@ -216,3 +215,54 @@ def test_load_settings_marks_incremental_tables(tmp_path: Path) -> None:
 
     assert settings.tables[0].incremental is True
     assert settings.tables[1].incremental is False
+
+
+def test_load_settings_rejects_legacy_base_api_url(tmp_path: Path) -> None:
+    config, config_dir = _base_config(tmp_path)
+    tables_file = config_dir / config["business_central"]["tables_file"]
+    tables_file.write_text(
+        "\n".join(
+            [
+                "base_api_url: https://example.com",
+                "tables:",
+                "  - name: Table A",
+                "    url: https://example.com/a",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError) as exc:
+        load_settings(
+            [("BC_CLIENT_SECRET", "secret")],
+            config_data=config,
+            config_dir=config_dir,
+        )
+
+    assert "base_api_url" in str(exc.value)
+
+
+def test_load_settings_rejects_legacy_api_path(tmp_path: Path) -> None:
+    config, config_dir = _base_config(tmp_path)
+    tables_file = config_dir / config["business_central"]["tables_file"]
+    tables_file.write_text(
+        "\n".join(
+            [
+                "tables:",
+                "  - name: Table A",
+                "    api_path: a",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError) as exc:
+        load_settings(
+            [("BC_CLIENT_SECRET", "secret")],
+            config_data=config,
+            config_dir=config_dir,
+        )
+
+    assert "api_path" in str(exc.value)
