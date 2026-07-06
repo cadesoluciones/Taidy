@@ -1,0 +1,452 @@
+# -*- coding: utf-8 -*-
+"""
+Main entry point for the Business Central data extraction command-line tool.
+
+This script orchestrates the entire data extraction process, from parsing command-line
+arguments to configuring settings, preparing export jobs, and running the extraction
+in one of several modes (full, incremental, dry-run). It serves as the primary
+user interface for triggering data exports.
+"""
+
+# --------------------------------------------------------------------------------------
+# Imports
+# --------------------------------------------------------------------------------------
+
+import argparse
+import logging
+import sys
+from dataclasses import replace
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Iterable, List, Optional
+
+from dotenv import load_dotenv
+
+from src.bc_client.config import (
+    DEFAULT_PAGE_SIZE,
+    Settings,
+    TableConfig,
+    load_settings,
+)
+from src.ingest.checkpoints import build_checkpoint_store, reset_checkpoints
+from src.ingest.executor import log_dry_run, run_exports
+from src.ingest.jobs import prepare_export_jobs
+from src.utils import (
+    coerce_dir,
+    configure_logging as configure_rich_logging,
+    get_logger,
+)
+
+
+# --------------------------------------------------------------------------------------
+# Constants and Global Variables
+# --------------------------------------------------------------------------------------
+
+logger = get_logger(__name__)
+
+
+# --------------------------------------------------------------------------------------
+# CLI Argument Parsing
+# --------------------------------------------------------------------------------------
+
+
+def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
+    """
+    Defines and parses command-line arguments for the extraction script.
+
+    This function sets up all available CLI flags, their types, default values, and
+    help text. It provides a flexible interface for overriding configuration values
+    at runtime.
+
+    Args:
+        argv: An optional iterable of strings representing the command-line
+              arguments. If None, `sys.argv` is used.
+
+    Returns:
+        An `argparse.Namespace` object containing the parsed arguments.
+    """
+    parser = argparse.ArgumentParser(
+        description="Download Business Central tables to CSV"
+    )
+    # --- Basic overrides ---
+    parser.add_argument(
+        "--tables",
+        nargs="*",
+        help=(
+            "Override configured table list (pass table names as defined in "
+            "tables.yaml, e.g., --tables bc_job_headers bc_job_planning_lines)"
+        ),
+    )
+    parser.add_argument("--output-dir", help="Override CSV output directory")
+    parser.add_argument(
+        "--page-size",
+        type=int,
+        help=(
+            "Override Business Central page size "
+            f"(defaults to BC_PAGE_SIZE or {DEFAULT_PAGE_SIZE})"
+        ),
+    )
+    # --- Execution modes ---
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Log actions without calling the API (useful for debugging config)",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=("incremental", "full"),
+        default="incremental",
+        help=(
+            "Choose 'incremental' or 'full' snapshot mode. Incremental tables "
+            "use SystemModifiedAt checkpoints; non-incremental tables always do "
+            "full exports."
+        ),
+    )
+    # --- Concurrency and Logging ---
+    parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
+    parser.add_argument(
+        "--parallel",
+        type=int,
+        default=1,
+        help="Number of tables to export concurrently (default: 1)",
+    )
+    # --- Checkpoint management ---
+    parser.add_argument(
+        "--reset-watermarks",
+        action="store_true",
+        help=(
+            "Delete stored Fabric checkpoints before running (forces full reload "
+            "for tables marked as incremental)"
+        ),
+    )
+    parser.add_argument(
+        "--checkpoint-path",
+        help=(
+            "Override Fabric checkpoint path inside OneLake Files "
+            "(default: raw/checkpoints/business_central)"
+        ),
+    )
+    # The `list()` call ensures that generators/iterators are fully processed
+    # before being passed to `parse_args`.
+    return parser.parse_args(list(argv) if argv is not None else None)
+
+
+# --------------------------------------------------------------------------------------
+# Configuration and Logging
+# --------------------------------------------------------------------------------------
+
+
+def configure_logging(verbose: bool) -> None:
+    """
+    Sets up application-wide logging with appropriate verbosity.
+
+    In verbose mode, sets the level to DEBUG. Otherwise, defaults to INFO.
+    It also quiets noisy third-party loggers (like Azure SDK) in non-verbose mode
+    to keep the output clean.
+
+    Args:
+        verbose: If True, sets logging level to DEBUG; otherwise, INFO.
+    """
+    level = logging.DEBUG if verbose else logging.INFO
+    configure_rich_logging(level)
+    # Reduce noise from underlying libraries in normal mode.
+    if not verbose:
+        for name in ("azure", "azure.identity", "azure.core"):
+            logging.getLogger(name).setLevel(logging.WARNING)
+
+
+def _log_summary(*, header: str, tables: int, written: int, output: Path) -> None:
+    """
+    Logs a formatted summary of the extraction run.
+
+    Args:
+        header: The title for the summary block (e.g., "BC Extract").
+        tables: Total number of tables processed.
+        written: Number of new CSV files successfully written.
+        output: The directory where files were written.
+    """
+    skipped = tables - written
+    logger.info(
+        "\n========== %s =========="
+        "\nTables processed: %d"
+        "\nNew files       : %d"
+        "\nTables skipped   : %d"
+        "\nOutput folder   : %s"
+        "\n===============================",
+        header,
+        tables,
+        written,
+        skipped,
+        output,
+    )
+
+
+# --------------------------------------------------------------------------------------
+# Settings and Overrides
+# --------------------------------------------------------------------------------------
+
+
+def apply_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
+    """
+    Applies command-line arguments to the loaded settings.
+
+    This function takes the base settings and overwrites specific values
+    (like tables, output directory, and page size) if they were provided via
+    the CLI. This allows for dynamic adjustments without changing config files.
+
+    Args:
+        settings: The initial `Settings` object loaded from config.
+        args: The parsed command-line arguments.
+
+    Returns:
+        A new `Settings` object with the overrides applied.
+    """
+    tables = _override_tables(settings.tables, args.tables)
+    output_dir = _override_output_dir(settings.output_dir, args.output_dir)
+    page_size = _override_page_size(settings.page_size, args.page_size)
+
+    # `dataclasses.replace` creates a new, immutable instance.
+    return replace(
+        settings,
+        tables=tables,
+        output_dir=output_dir,
+        page_size=page_size,
+    )
+
+
+def _override_tables(
+    configured: List[TableConfig],
+    requested_names: Optional[List[str]],
+) -> List[TableConfig]:
+    """
+    Filters the table list based on the `--tables` CLI argument.
+
+    If no tables are requested via CLI, it returns the originally configured list.
+    Otherwise, it validates that the requested tables exist in the configuration
+    and returns a filtered list.
+
+    Args:
+        configured: The full list of tables from `tables.yaml`.
+        requested_names: A list of table names from the `--tables` argument.
+
+    Raises:
+        ValueError: If `--tables` is used with no names, or if any requested
+                    table name is not found in the configuration.
+
+    Returns:
+        The filtered list of `TableConfig` objects.
+    """
+    # If the CLI flag is not used, return all configured tables.
+    if not requested_names:
+        return list(configured)
+
+    # Ensure the list of names is not empty if the flag was used.
+    requested = [name for name in requested_names if name]
+    if not requested:
+        raise ValueError("At least one table name must be provided with --tables")
+
+    # Create a lookup map for efficient access and validation.
+    table_map = {t.name: t for t in configured}
+    missing = [name for name in requested if name not in table_map]
+    if missing:
+        raise ValueError(f"Unknown table(s) requested: {', '.join(missing)}")
+
+    return [table_map[name] for name in requested]
+
+
+def _override_output_dir(configured: Path, override: Optional[str]) -> Path:
+    """
+    Resolves the final output directory from the `--output-dir` CLI argument.
+
+    If no override is given, returns the configured path. Otherwise, it resolves
+    the provided path, expands user home directory shortcuts (~), and ensures it
+    is an absolute path.
+
+    Args:
+        configured: The default output directory from settings.
+        override: The path provided via the `--output-dir` argument.
+
+    Raises:
+        ValueError: If the resolved override path is not absolute.
+
+    Returns:
+        The resolved, absolute `Path` to the output directory.
+    """
+    if not override:
+        return configured
+
+    return coerce_dir(override)
+
+
+def _override_page_size(configured: int, override: Optional[int]) -> int:
+    """
+
+    Resolves the final page size from the `--page-size` CLI argument.
+
+    Args:
+        configured: The default page size from settings.
+        override: The value from the `--page-size` argument.
+
+    Raises:
+        ValueError: If the page size is not a positive integer.
+
+    Returns:
+        The final page size to use for API requests.
+    """
+    if override is None:
+        return configured
+    if override <= 0:
+        raise ValueError("--page-size must be be greater than zero")
+    return override
+
+
+# --------------------------------------------------------------------------------------
+# Core Extraction Logic
+# --------------------------------------------------------------------------------------
+
+
+def _resolve_run_output_dir(
+    base_dir: Path,
+    mode: str,
+    *,
+    now: Optional[datetime] = None,
+) -> Path:
+    """
+    Determines the final output directory for the current run based on the mode.
+
+    - In 'full' mode, returns `<base_dir>/full`.
+    - In 'incremental' mode, returns `<base_dir>/incremental/<timestamp>`.
+
+    This structure helps keep exports organized and prevents overwriting
+    incremental data from different runs.
+
+    Args:
+        base_dir: The root directory for all exports.
+        mode: The current run mode ('full' or 'incremental').
+        now: An optional `datetime` object for deterministic testing.
+
+    Returns:
+        The resolved `Path` for the current run's output.
+    """
+    current = now or datetime.now(timezone.utc)
+    if mode == "full":
+        return base_dir / "full"
+
+    # Use a standardized, sortable timestamp for incremental folders.
+    timestamp = current.strftime("%Y%m%dT%H%M%SZ")
+    return base_dir / "incremental" / timestamp
+
+
+def run_extract(
+    argv: Optional[Iterable[str]] = None,
+) -> tuple[int, Optional[Path]]:
+    """
+    Main orchestration function for the data extraction process.
+
+    This function handles the entire lifecycle of an extraction run:
+    1. Parses CLI arguments.
+    2. Sets up logging.
+    3. Loads environment variables and application settings.
+    4. Applies CLI overrides to settings.
+    5. Initializes the checkpoint store for incremental runs.
+    6. Determines the final output directory and creates it.
+    7. Prepares export jobs based on the run mode.
+    8. Executes the jobs (or performs a dry run).
+    9. Logs a summary and returns an exit code.
+
+    Args:
+        argv: Optional list of command-line arguments for testing.
+
+    Returns:
+        A tuple containing the exit code (0 for success, 1 for failure) and
+        the path to the output directory if successful.
+    """
+    # 1. Initialization and Configuration
+    args = parse_args(argv)
+    configure_logging(args.verbose)
+
+    try:
+        # Load secrets from .env file if it exists.
+        load_dotenv()
+
+        # Load settings from config files and environment.
+        settings = load_settings()
+        settings = apply_overrides(settings, args)
+
+        # 2. Checkpoint Management
+        tables = list(settings.tables)
+        base_output_dir = settings.output_dir
+        checkpoint_store = build_checkpoint_store(
+            tables,
+            # The checkpoint store needs the base path, not the run-specific one.
+            base_output_dir,
+            args.checkpoint_path,
+        )
+        if args.reset_watermarks and checkpoint_store:
+            logger.info("Resetting Fabric checkpoints for incremental tables")
+            reset_checkpoints(checkpoint_store, tables)
+
+        # 3. Prepare run-specific output directory
+        run_output_dir = _resolve_run_output_dir(base_output_dir, args.mode)
+        run_output_dir.mkdir(parents=True, exist_ok=True)
+        # Update settings to point to the timestamped or 'full' sub-folder.
+        settings = replace(settings, output_dir=run_output_dir)
+
+        # 4. Prepare and Log Jobs
+        jobs = prepare_export_jobs(tables, checkpoint_store, mode=args.mode)
+        logger.info("Writing CSVs to %s", settings.output_dir)
+        logger.info("Requesting up to %d rows per page", settings.page_size)
+
+        # 5. Execute or Dry Run
+        if args.dry_run:
+            log_dry_run(jobs, settings.output_dir)
+            _log_summary(
+                header="BC Extract (dry-run)",
+                tables=len(jobs),
+                written=0,
+                output=settings.output_dir,
+            )
+            return 0, settings.output_dir
+
+        parallel_workers = args.parallel
+        if parallel_workers <= 0:
+            raise ValueError("--parallel must be greater than zero")
+
+        # This is where the actual API calls and file writing happen.
+        processed, written = run_exports(
+            jobs, settings, checkpoint_store, parallel_workers
+        )
+
+        # 6. Log summary and exit
+        _log_summary(
+            header="BC Extract",
+            tables=processed,
+            written=written,
+            output=settings.output_dir,
+        )
+        return 0, settings.output_dir
+
+    except Exception as exc:  # pragma: no cover
+        # Catch-all for any unhandled exceptions during the run.
+        logger.exception("Failed to export tables: %s", exc)
+        return 1, None
+
+
+# --------------------------------------------------------------------------------------
+# Script Execution
+# --------------------------------------------------------------------------------------
+
+
+def main() -> None:
+    """
+    Main function to be executed when the script is run directly.
+
+    It calls `run_extract` and exits with the returned status code.
+    """
+    status, _ = run_extract()
+    sys.exit(status)
+
+
+if __name__ == "__main__":
+    # This block is executed when the script is run as `python src/main.py`
+    main()

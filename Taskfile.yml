@@ -1,0 +1,154 @@
+version: "3"
+
+# Define default variables, which can be overridden at runtime
+vars:
+  VENV: .venv
+
+env:
+  UV_CACHE_DIR: .uv-cache
+
+tasks:
+  # Default task that lists available tasks
+  default:
+    cmds:
+      - task --list
+    silent: true
+
+  # ------------------------------
+  # 🛠 Environment Setup
+  # ------------------------------
+  check-vars:
+    # Ensure required variables are provided
+    silent: true
+    cmds:
+      - |
+        if [ -z "{{.STAGE}}" ]; then
+          echo "❌ Missing required variable: STAGE"; exit 1;
+        fi
+        if [ -z "{{.DEPLOY_ID}}" ]; then
+          echo "❌ Missing required variable: DEPLOY_ID"; exit 1;
+        fi
+
+  deps:install:
+    desc: Create virtual environment and sync Python dependencies
+    cmds:
+      - uv venv --clear {{.VENV}}
+      - uv sync --all-groups
+      - uv run pre-commit install --hook-type pre-commit
+
+  # ------------------------------
+  # ✅ Code Quality & Tests
+  # ------------------------------
+  test:run:
+    desc: Run pytest with coverage report on the src folder
+    vars:
+      TEST_DIR: tests
+      COV_DIR: src
+      BADGE_DIR: docs
+      # Set PARALLEL=true to enable pytest-xdist auto parallelism
+      PAR_FLAG: '{{if .PARALLEL}}-n auto{{end}}'
+      # Pass BADGE=true to generate docs/coverage.svg
+      BADGE: '{{ .BADGE | default "false" }}'
+    cmds:
+      # Run all tests, measure coverage on your package
+      - uv run pytest -vsx --cov={{.COV_DIR}} --cov-report=term {{.PAR_FLAG}} {{.TEST_DIR}}
+      # Optionally generate/update the coverage badge in docs/
+      - |
+        if [ "{{.BADGE}}" = "true" ]; then
+          uv run coverage-badge -o {{.BADGE_DIR}}/coverage.svg -f
+        fi
+
+  lint:check:
+    desc: "Run linters and formatters in check mode"
+    cmds:
+      - uv run ruff check
+      - uv run ruff format --check
+
+  lint:format:
+    desc: "Format code using ruff"
+    cmds:
+      - uv run ruff format
+      - uv run ruff check --fix
+
+  # ------------------------------
+  # 📊 Data Ingestion
+  # ------------------------------
+  extract:factorial:
+    desc: Run Factorial HR data extraction
+    env:
+      PYTHONPATH: .
+    cmds:
+      - .venv/Scripts/python -m src.factorial_main {{.CLI_ARGS}}
+
+  push:fabric:factorial:
+    desc: Upload Factorial CSV exports to Fabric OneLake (raw/factorial/)
+    env:
+      PYTHONPATH: .
+    cmds:
+      - .venv/Scripts/python -m src.factorial_client.push {{.CLI_ARGS}}
+
+  sync:factorial:
+    desc: Extract Factorial data and upload to Fabric OneLake
+    env:
+      PYTHONPATH: .
+    cmds:
+      - .venv/Scripts/python -m src.factorial_main {{.CLI_ARGS}}
+      - .venv/Scripts/python -m src.factorial_client.push {{.CLI_ARGS}}
+
+  sync:all:
+    desc: "Extrae y sube BC + Factorial. Vars: MODE=incremental|full, START_ON, END_ON (def: hoy), PARALLEL=5, FIRST=bc|factorial (def: bc)"
+    vars:
+      MODE: '{{.MODE | default "incremental"}}'
+      START_ON: '{{.START_ON | default "2025-01-01"}}'
+      END_ON: '{{.END_ON | default ""}}'
+      PARALLEL: '{{.PARALLEL | default "5"}}'
+      FIRST: '{{.FIRST | default "bc"}}'
+    env:
+      PYTHONPATH: .
+    cmds:
+      - |
+        _end="{{.END_ON}}"
+        [ -z "$_end" ] && _end=$(.venv/Scripts/python -c "import datetime; print(datetime.date.today(), end='')")
+
+        run_bc() {
+          time uv run python -m src.cli.sync --mode {{.MODE}}
+        }
+        run_factorial() {
+          .venv/Scripts/python -m src.factorial_main --start-on {{.START_ON}} --end-on "$_end" --mode {{.MODE}} --parallel {{.PARALLEL}}
+          .venv/Scripts/python -m src.factorial_client.push
+        }
+
+        if [ "{{.FIRST}}" = "factorial" ]; then
+          run_factorial && run_bc
+        else
+          run_bc && run_factorial
+        fi
+
+  extract:bc:
+    desc: Run Business Central data ingestion
+    env:
+      PYTHONPATH: .
+    cmds:
+      - time uv run python src/main.py {{.CLI_ARGS}}
+
+  push:fabric:
+    desc: Upload existing CSV exports to Fabric OneLake
+    env:
+      PYTHONPATH: .
+    cmds:
+      - uv run python -m src.fabric_upload.cli {{.CLI_ARGS}}
+
+  sync:
+    desc: Run extract + Fabric upload pipeline
+    env:
+      PYTHONPATH: .
+    cmds:
+      - time uv run python -m src.cli.sync {{.CLI_ARGS}}
+
+  # ------------------------------
+  # 🛠 Utilities
+  # ------------------------------
+  tools:csv-to-yaml:
+    desc: Transform a CSV file (e.g. from client) to tables.yaml format
+    cmds:
+      - uv run python scripts/transform_csv_to_yaml.py {{.CLI_ARGS}}

@@ -1,0 +1,81 @@
+tables:
+- name: bc_job_planning_lines
+  description: JobPlanningLines API
+  url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/PRODUCTION/ODataV4/Company('CADE%20Soluciones')/APIasdadacds23rweff2
+  incremental: true
+- name: bc_job_header
+  description: JobHeader API
+  url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/PRODUCTION/ODataV4/Company('CADE%20Soluciones')/APIsdadfxvc0xewdf
+  incremental: true
+- name: bc_job_task
+  description: JobTask API
+  url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/PRODUCTION/ODataV4/Company('CADE%20Soluciones')/APIsdaopopmoi324er
+  incremental: true
+- name: bc_customer
+  description: Customer  API
+  url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/PRODUCTION/ODataV4/Company('CADE%20Soluciones')/APi122wfdfs
+  incremental: true
+- name: bc_jobs_mov
+  description: Jobs Mov API
+  url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/PRODUCTION/ODataV4/Company('CADE%20Soluciones')/APIadsmdoi00103
+  incremental: true
+- name: bc_gl_account_list
+  description: GLAccount List API
+  url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/PRODUCTION/ODataV4/Company('CADE%20Soluciones')/APIadsasc0909da
+  incremental: true
+- name: bc_facturas_venta_header
+  description: Facturas Venta Header API
+  url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/PRODUCTION/ODataV4/Company('CADE%20Soluciones')/APIkmomo1230k9
+  incremental: true
+- name: bc_hist_fact_vent_lin_abono
+  description: Hist.Fact.Vent.Lin.abono API
+  url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/PRODUCTION/ODataV4/Company('CADE%20Soluciones')/APIakmlmkod3kmo209
+  incremental: true
+- name: bc_mov_cliente
+  description: Mov Cliente API
+  url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/PRODUCTION/ODataV4/Company('CADE%20Soluciones')/APImkom1o21
+  incremental: true
+- name: bc_mov_cliente_detalle
+  description: Mov Cliente Detalle API
+  url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/PRODUCTION/ODataV4/Company('CADE%20Soluciones')/APIjnkidas090
+  incremental: true
+- name: bc_mov_proveedor
+  description: Mov Proveedor API
+  url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/PRODUCTION/ODataV4/Company('CADE%20Soluciones')/APIpi0pkm0podasdampo
+  incremental: true
+- name: bc_mov_proveedor_detalle
+  description: Mov Proveedor Detalle API
+  url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/PRODUCTION/ODataV4/Company('CADE%20Soluciones')/APIam12e1m09ads0noi23
+  incremental: true
+- name: bc_ord_compra_head
+  description: Ord Compra Head API
+  url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/PRODUCTION/ODataV4/Company('CADE%20Soluciones')/API1e1edsafdsdfmoir23
+  incremental: true
+- name: bc_ord_compra_line
+  description: Ord Compra Line
+  url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/PRODUCTION/ODataV4/Company('CADE%20Soluciones')/APIjijnoireaefa0032423
+  incremental: true
+- name: bc_lin_diario_gen_regis
+  description: Lin.Diario Gen.Regis API
+  url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/PRODUCTION/ODataV4/Company('CADE%20Soluciones')/APIadqdiomomiasd
+  incremental: true
+- name: bc_grupo_contable_proyecto
+  description: Grupo Contable Proyecto API
+  url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/PRODUCTION/ODataV4/Company('CADE%20Soluciones')/fasvsadvosai
+  incremental: false
+- name: bc_sales_invoice_line
+  description: Sales Invoice Line
+  url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/PRODUCTION/ODataV4/Company(%27CADE%20Soluciones%27)/dmasidsaodin8
+  incremental: false
+- name: bc_gl_budget
+  description: GL/Budget API
+  url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/PRODUCTION/ODataV4/Company('CADE%20Soluciones')/andsaioaio
+  incremental: false
+- name: bc_gl_entry
+  description: GL/Entry API
+  url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/PRODUCTION/ODataV4/Company('CADE%20Soluciones')/asdamskdasda
+  incremental: false
+- name: bc_recursos
+  description: Recursos API
+  url: https://api.businesscentral.dynamics.com/v2.0/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/PRODUCTION/api/cade/proyecto/v1.0/recursos?company=CADE%20Soluciones
+  incremental: false
