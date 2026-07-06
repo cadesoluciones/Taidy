@@ -1,0 +1,137 @@
+tables:
+  - name: factorial_estimated_times
+    description: Estimated working times per employee and day
+    path: resources/attendance/estimated_times
+    incremental: true
+    overlap_days: 2
+    chunk_days: 1
+    fields:
+      - date
+      - employee_id
+      - expected_minutes
+
+  - name: factorial_worked_times
+    description: Actual worked times per employee and day
+    path: resources/attendance/worked_times
+    incremental: true
+    overlap_days: 15
+    chunk_days: 1
+    employee_filter: false
+    extra_params:
+      - [include_time_range_category, "true"]
+      - [include_non_attendable_employees, "true"]
+    fields:
+      - employee_id
+      - minutes
+      - date
+
+
+  - name: factorial_contract_histories
+    description: Contract version histories per employee
+    path: resources/contracts/contract_version_histories
+    date_range: false
+    employee_filter: false
+    fields:
+      - id
+      - employee_id
+      - effective_on
+      - job_title
+      - starts_on
+      - ends_on
+      - salary_amount
+      - es_contract_type_id
+      - job_catalog_level_id
+      - es_education_level_id
+
+  - name: factorial_employees
+    description: Active employees in the company
+    path: resources/employees/employees
+    date_range: false
+    employee_filter: false
+    extra_params:
+      - [only_active, "false"]
+      - [only_managers, "false"]
+    fields:
+      - id
+      - email
+      - company_identifier
+      - active
+      - gender
+      - birthday_on
+      - location_id
+      - age_number
+      - gender
+
+  - name: factorial_team_memberships
+    description: Employee team memberships
+    path: resources/teams/memberships
+    date_range: false
+    employee_filter: false
+    fields:
+      - employee_id
+      - team_id
+      - lead
+
+  - name: factorial_teams
+    description: Teams in the company
+    path: resources/teams/teams
+    date_range: false
+    employee_filter: false
+    fields:
+      - id
+      - name
+      - description
+
+  - name: factorial_cost_centers
+    description: Finance cost centers
+    path: resources/finance/cost_centers
+    date_range: false
+    employee_filter: false
+    fields:
+      - id
+      - name
+      - code
+      - active_employees_count
+      - historical_employees_count
+      - status
+
+  - name: factorial_cost_center_memberships
+    description: Employee cost center memberships
+    path: resources/finance/cost_center_memberships
+    date_range: false
+    employee_filter: false
+    fields:
+      - id
+      - employee_id
+      - cost_center_id
+      - start_date
+      - end_date
+
+  - name: factorial_job_levels
+    description: Job catalog levels
+    path: resources/job_catalog/levels
+    date_range: false
+    employee_filter: false
+    fields:
+      - id
+      - role_id
+      - name
+      - role_name
+
+  - name: factorial_spanish_education_levels
+    description: Spanish education level catalog
+    path: resources/contracts/spanish_education_levels
+    date_range: false
+    employee_filter: false
+    fields:
+      - id
+      - name
+
+  - name: factorial_spanish_contract_types
+    description: Spanish contract type catalog
+    path: resources/contracts/spanish_contract_types
+    date_range: false
+    employee_filter: false
+    fields:
+      - id
+      - name

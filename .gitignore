@@ -81,3 +81,12 @@ local_data/
 
 exports/
 .amazonq/
+
+-----------
+# Configuración local
+config.json
+
+# Exportaciones
+exports_factorial/
+
+-----------

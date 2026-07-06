@@ -1,7 +1,7 @@
 {
   "business_central": {
     "tenant_id": "2d6ec162-8eb4-42d3-93e2-7ee771e85da5",
-    "environment": "SANDBOX_CADE",
+    "environment": "PRODUCCION",
     "client_id": "9e6fdf36-87c3-46fe-aa67-d294eb3ef774",
     "scope": "https://api.businesscentral.dynamics.com/.default",
     "token_url": "https://login.microsoftonline.com/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/oauth2/v2.0/token",
@@ -11,9 +11,27 @@
     "page_size": 1000,
     "output_dir": "./exports"
   },
+  "factorial": {
+    "base_url": "https://api.factorialhr.com/api",
+    "tables_file": "factorial_tables.yaml",
+    "output_dir": "./exports_factorial"
+  },
+  "factorial_upload": {
+    "tenant_id": "2d6ec162-8eb4-42d3-93e2-7ee771e85da5",
+    "client_id": "99d4b523-996d-415a-83c8-825cd32e012e",
+    "workspace_name": "Sandbox",
+    "lakehouse_name": "Lakehouse",
+    "workspace_id": "44b1286f-484d-41b1-9259-6904105d8d09",
+    "lakehouse_id": "1287f84f-d048-4967-a27f-b3f3019345d9",
+    "path_prefix": "raw",
+    "source_name": "factorial",
+    "overwrite": true,
+    "max_retries": 3,
+    "enabled": true
+  },
   "fabric_upload": {
     "tenant_id": "2d6ec162-8eb4-42d3-93e2-7ee771e85da5",
-    "client_id": "13457bce-b857-4544-8d36-73ab06ca8e92",
+    "client_id": "99d4b523-996d-415a-83c8-825cd32e012e",
     "workspace_name": "Sandbox",
     "lakehouse_name": "Lakehouse",
     "workspace_id": "44b1286f-484d-41b1-9259-6904105d8d09",

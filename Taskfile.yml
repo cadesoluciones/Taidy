@@ -73,6 +73,57 @@ tasks:
   # ------------------------------
   # 📊 Data Ingestion
   # ------------------------------
+  extract:factorial:
+    desc: Run Factorial HR data extraction
+    env:
+      PYTHONPATH: .
+    cmds:
+      - .venv/Scripts/python -m src.factorial_main {{.CLI_ARGS}}
+
+  push:fabric:factorial:
+    desc: Upload Factorial CSV exports to Fabric OneLake (raw/factorial/)
+    env:
+      PYTHONPATH: .
+    cmds:
+      - .venv/Scripts/python -m src.factorial_client.push {{.CLI_ARGS}}
+
+  sync:factorial:
+    desc: Extract Factorial data and upload to Fabric OneLake
+    env:
+      PYTHONPATH: .
+    cmds:
+      - .venv/Scripts/python -m src.factorial_main {{.CLI_ARGS}}
+      - .venv/Scripts/python -m src.factorial_client.push {{.CLI_ARGS}}
+
+  sync:all:
+    desc: "Extrae y sube BC + Factorial. Vars: MODE=incremental|full, START_ON, END_ON (def: hoy), PARALLEL=5, FIRST=bc|factorial (def: bc)"
+    vars:
+      MODE: '{{.MODE | default "incremental"}}'
+      START_ON: '{{.START_ON | default "2025-01-01"}}'
+      END_ON: '{{.END_ON | default ""}}'
+      PARALLEL: '{{.PARALLEL | default "5"}}'
+      FIRST: '{{.FIRST | default "bc"}}'
+    env:
+      PYTHONPATH: .
+    cmds:
+      - |
+        _end="{{.END_ON}}"
+        [ -z "$_end" ] && _end=$(.venv/Scripts/python -c "import datetime; print(datetime.date.today(), end='')")
+
+        run_bc() {
+          time uv run python -m src.cli.sync --mode {{.MODE}}
+        }
+        run_factorial() {
+          .venv/Scripts/python -m src.factorial_main --start-on {{.START_ON}} --end-on "$_end" --mode {{.MODE}} --parallel {{.PARALLEL}}
+          .venv/Scripts/python -m src.factorial_client.push
+        }
+
+        if [ "{{.FIRST}}" = "factorial" ]; then
+          run_factorial && run_bc
+        else
+          run_bc && run_factorial
+        fi
+
   extract:bc:
     desc: Run Business Central data ingestion
     env:
