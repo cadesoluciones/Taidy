@@ -42,6 +42,53 @@ task extract:factorial -- --start-on 2025-01-01 --end-on 2025-01-07 --dry-run
 task sync:factorial -- --start-on 2025-01-01 --end-on 2026-01-01 --mode incremental --parallel 5
 ```
 
+## 🖥️ Interfaz web (`webapp/`, Streamlit)
+
+Panel local que envuelve los comandos anteriores sin reimplementarlos:
+extracción/subida con seguimiento en vivo, autenticación local (usuario/
+contraseña, bcrypt + SQLite), disparo de pipelines de Fabric Data Factory,
+un diseñador de flujos (DAG) con programación, e historial/auditoría.
+
+```bash
+uv pip install -r requirements.txt   # incluye streamlit, ya en requirements.txt
+streamlit run webapp/app.py
+```
+
+Arranca en `http://127.0.0.1:8501` por defecto (solo loopback — para acceso
+en red, colócalo detrás de un reverse proxy que termine TLS). Pruebas:
+`pytest webapp/tests/`.
+
+## 🔄 Migración a React + FastAPI (en curso)
+
+La interfaz Streamlit de arriba se está migrando a React + TypeScript
+(`frontend/`) sobre una API FastAPI (`api/`), conservando toda la lógica de
+negocio de `src/` sin duplicarla. **`webapp/` sigue siendo la interfaz de
+referencia y el mecanismo de rollback** hasta que la migración complete la
+Fase 7 (limpieza) — no se ha retirado nada todavía.
+
+- **[📋 Plan de migración](MIGRATION_PLAN.md)** — fases, qué está hecho, qué falta
+- **[🏗️ Arquitectura objetivo](ARCHITECTURE.md)** — stack, diseño de sesión, decisiones de seguridad
+- **[✅ Matriz de equivalencia funcional](FUNCTIONAL_EQUIVALENCE.md)** — cada funcionalidad de `webapp/`, su endpoint/página equivalente y su estado
+
+Ejecución local de la nueva pila (con el backend Python activo):
+
+```bash
+# Backend (API) — desde la raíz del proyecto, con el virtualenv activo
+uv pip install -r requirements.txt   # incluye fastapi, uvicorn, pydantic
+uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
+pytest api/tests/
+
+# Frontend — en otra terminal
+cd frontend
+npm install
+cp .env.example .env.local
+npm run dev          # http://127.0.0.1:5173 -- debe ser 127.0.0.1, no localhost
+                      # (ver ARCHITECTURE.md, "Session cookie")
+npm run test         # Vitest
+npm run test:e2e     # Playwright (requiere backend + frontend arrancados
+                      # sobre estado aislado, nunca webapp/users.db real)
+```
+
 ## 📚 Documentación Adicional
 
 - **[🔧 Configuración Detallada](docs/configuracion.md)** - Azure AD, variables de entorno, configuración de tablas

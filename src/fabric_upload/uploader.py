@@ -86,16 +86,22 @@ class FabricUploader:
         logger.debug("Discovered %d CSV file(s) under '%s'", len(csv_files), root)
         return csv_files
 
-    def upload_files(self, files: Iterable[Path]) -> tuple[int, int]:
+    def upload_files(self, files: Iterable[Path]) -> tuple[int, int, int]:
         """
         Uploads a given list of local files to Fabric OneLake.
+
+        A single file exhausting its retries (or hitting a non-retryable
+        error) is recorded as failed and does NOT abort the remaining
+        files -- previously an uncaught exception from one file propagated
+        out of this whole method, silently turning a partially-successful
+        batch into a total reported failure and skipping every file after
+        the one that failed.
 
         Args:
             files: An iterable of `Path` objects for the local files to upload.
 
         Returns:
-            A tuple containing the number of files successfully uploaded and
-            the number of files skipped.
+            A tuple of (uploaded, skipped, failed) counts.
         """
         paths = sorted(files)
         if not paths:
@@ -103,22 +109,29 @@ class FabricUploader:
                 "No CSV files found for Fabric upload in '%s'",
                 self._settings.local_export_root,
             )
-            return 0, 0
+            return 0, 0, 0
 
         uploaded = 0
         skipped = 0
+        failed = 0
         for local_path in paths:
             # Each local file path is mapped to a structured remote path.
             remote_path = self._build_remote_path(local_path)
             logger.info("Uploading '%s' to Fabric OneLake...", local_path.name)
             logger.debug("Remote path will be: %s", remote_path.as_posix())
 
-            if self._upload_with_retry(local_path, remote_path):
-                uploaded += 1
-            else:
-                skipped += 1
+            try:
+                if self._upload_with_retry(local_path, remote_path):
+                    uploaded += 1
+                else:
+                    skipped += 1
+            except Exception:
+                # _upload_with_retry already logged the exception (including
+                # the "Upload failed for '<name>'" line adapter.py's log
+                # parser matches); here we only need to keep going.
+                failed += 1
 
-        return uploaded, skipped
+        return uploaded, skipped, failed
 
     def _upload_with_retry(self, local_path: Path, remote_path: PurePosixPath) -> bool:
         """

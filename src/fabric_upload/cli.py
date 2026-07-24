@@ -109,6 +109,7 @@ def _log_summary(
     files: int,
     uploaded: int,
     skipped: int,
+    failed: int = 0,
     source: Path,
 ) -> None:
     """
@@ -119,12 +120,14 @@ def _log_summary(
         "\nFiles discovered: %d"
         "\nUploaded        : %d"
         "\nSkipped         : %d"
+        "\nFailed          : %d"
         "\nLocal source    : %s"
         "\n===============================",
         header,
         files,
         uploaded,
         skipped,
+        failed,
         source,
     )
 
@@ -195,16 +198,20 @@ def run(argv: Optional[Iterable[str]] = None) -> int:
             )
             return 0
 
-        # Execute the actual upload.
-        uploaded, skipped = uploader.upload_files(files)
+        # Execute the actual upload. A per-file failure no longer aborts the
+        # batch (see FabricUploader.upload_files) -- the exit code still
+        # reflects it, so callers relying on the return code (schedulers,
+        # webapp/tasks.py's subprocess status) don't see a false "success".
+        uploaded, skipped, failed = uploader.upload_files(files)
         _log_summary(
             header="Fabric Upload",
             files=len(files),
             uploaded=uploaded,
             skipped=skipped,
+            failed=failed,
             source=settings.local_export_root,
         )
-        return 0
+        return 1 if failed else 0
     except Exception as exc:  # pragma: no cover
         logger.exception("Fabric upload failed: %s", exc)
         return 1

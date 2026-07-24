@@ -1,32 +1,63 @@
-# React + TypeScript + Vite
+# Taidy — Frontend (React + TypeScript + Vite)
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React replacement for the Streamlit UI in `../webapp/`, talking to the
+FastAPI backend in `../api/`. See `../MIGRATION_PLAN.md` for the overall
+migration status and `../ARCHITECTURE.md` for design decisions.
 
-Currently, two official plugins are available:
+## Prerequisites
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Node.js 20+ and npm
+- The backend running first (see `../api/README` section of the root
+  `README.md`, or just: `uvicorn api.main:app --reload --host 127.0.0.1 --port 8000`
+  from the project root, with the Python virtualenv active)
 
-## React Compiler
+## Setup
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+cp .env.example .env.local   # defaults already point at http://127.0.0.1:8000
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Development
+
+```bash
+npm run dev
+```
+
+Opens on `http://127.0.0.1:5173` (bound explicitly to `127.0.0.1`, not
+`localhost` — the session cookie is host-only and `SameSite=Lax`; mixing
+`localhost`/`127.0.0.1` between the frontend and API silently drops it, see
+`../ARCHITECTURE.md`).
+
+## Testing
+
+```bash
+npm run test        # Vitest + Testing Library (component tests)
+npm run test:e2e    # Playwright (requires both the API and this dev server
+                     #   already running against ISOLATED state -- never
+                     #   point an E2E run at the real webapp/users.db;
+                     #   see the isolation pattern in api/tests/conftest.py
+                     #   and mirror it with your own throwaway launcher)
+```
+
+## Production build
+
+```bash
+npm run build      # tsc -b (strict) && vite build -> dist/
+npm run preview    # serve the built dist/ locally to sanity-check it
+```
+
+## Project layout
+
+```
+src/
+  api/          typed fetch client + one module per backend domain
+  auth/         session context, route guards (mirrors webapp/auth.py's gate)
+  components/   shared UI: NavShell, StatusBadge, ConfirmDialog, Form styles
+  hooks/        usePolling (mirrors the Streamlit app's st.fragment refresh)
+  pages/        one file per route, grouped to match the nav sections
+  styles/       design tokens (reused from .streamlit/config.toml, WCAG-AA
+                verified already)
+  test/         Vitest setup (includes a jsdom <dialog> polyfill)
+e2e/            Playwright specs
+```

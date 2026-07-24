@@ -131,7 +131,7 @@ def run(argv: Optional[Iterable[str]] = None) -> int:
             logger.info("Nothing to upload — no full/ or incremental/ directories found.")
             return 0
 
-        total_files = total_uploaded = total_skipped = 0
+        total_files = total_uploaded = total_skipped = total_failed = 0
 
         for upload_dir in dirs:
             settings = _load_settings(upload_dir, overwrite=overwrite)
@@ -144,11 +144,17 @@ def run(argv: Optional[Iterable[str]] = None) -> int:
                 total_files += len(files)
                 continue
 
-            uploaded, skipped = uploader.upload_files(files)
-            logger.info("'%s': %d uploaded, %d skipped.", upload_dir.name, uploaded, skipped)
+            # A file exhausting its retries no longer aborts the batch (see
+            # FabricUploader.upload_files) -- it's tallied and the remaining
+            # directories are still attempted.
+            uploaded, skipped, failed = uploader.upload_files(files)
+            logger.info(
+                "'%s': %d uploaded, %d skipped, %d failed.", upload_dir.name, uploaded, skipped, failed
+            )
             total_files += len(files)
             total_uploaded += uploaded
             total_skipped += skipped
+            total_failed += failed
 
         logger.info(
             "\n========== Factorial Upload =========="
@@ -156,10 +162,11 @@ def run(argv: Optional[Iterable[str]] = None) -> int:
             "\nFiles discovered: %d"
             "\nUploaded        : %d"
             "\nSkipped         : %d"
+            "\nFailed          : %d"
             "\n======================================",
-            len(dirs), total_files, total_uploaded, total_skipped,
+            len(dirs), total_files, total_uploaded, total_skipped, total_failed,
         )
-        return 0
+        return 1 if total_failed else 0
     except KeyboardInterrupt:
         logger.warning("Upload interrupted by user.")
         return 130
