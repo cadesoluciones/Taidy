@@ -1,0 +1,20 @@
+# --- Backend (extracción BC / Factorial y subida a Fabric OneLake) ---
+requests>=2.32
+PyYAML>=6.0
+python-dotenv>=1.0
+rich>=13.7
+tenacity>=8.2
+azure-identity>=1.19
+azure-storage-file-datalake>=12.18
+azure-core>=1.30
+
+# --- Interfaz web (webapp/) ---
+streamlit>=1.38
+APScheduler>=3.10
+graphviz>=0.20
+
+# --- Autenticación local (usuario/contraseña propios) ---
+bcrypt>=4.0
+
+# --- Pruebas (webapp/tests/) ---
+pytest>=8.0

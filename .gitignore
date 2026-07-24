@@ -90,3 +90,10 @@ config.json
 exports_factorial/
 
 -----------
+
+# Webapp: estado en tiempo de ejecución (no es código fuente)
+webapp/schedules.json
+webapp/run_history.json
+webapp/audit.log
+webapp/users.db
+webapp/workflows.json

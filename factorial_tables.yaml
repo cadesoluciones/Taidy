@@ -191,3 +191,16 @@ tables:
       - employee_id
       - work_schedule_schedule_id
 
+  - name: factorial_leaves
+    description: Reads all Leaves
+    path: resources/timeoff/leaves
+    date_range: true
+    employee_filter: true
+    fields:
+      - id
+      - employee_id
+      - start_on
+      - finish_on
+      - description
+      - start_time
+      - leave_type_id

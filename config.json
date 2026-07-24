@@ -41,5 +41,14 @@
     "overwrite": true,
     "max_retries": 3,
     "enabled": true
+  },
+  "fabric_pipelines": {
+    "workspace_id": "44b1286f-484d-41b1-9259-6904105d8d09",
+    "pipelines": [
+      { "name": "Pipeline_CADE", "item_id": "95928168-0d58-499c-8ea1-6b1e73e2ce68" },
+      { "name": "Pipeline_CADE_Bronce", "item_id": "6f865d7a-c463-4dd7-b44f-c72df678792a" },
+      { "name": "Pipeline_CADE_Silver", "item_id": "a3abfe06-31a3-4395-b601-a16a3f505fbe" },
+      { "name": "Pipeline_CADE_Gold", "item_id": "00200a98-6f68-4d49-aae3-abea11c88ca3" }
+    ]
   }
 }

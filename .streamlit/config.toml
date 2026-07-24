@@ -1,0 +1,64 @@
+# Non-secret Streamlit configuration — safe to commit.
+# Authentication is local username/password (see webapp/auth.py, webapp/users_db.py) —
+# no external identity provider, no secrets.toml involved.
+
+[server]
+# Bind to loopback only. The app must never be reachable directly — access
+# goes exclusively through the local reverse proxy, which terminates HTTPS
+# and is itself only reachable from LAN/VPN.
+address = "127.0.0.1"
+port = 8501
+enableXsrfProtection = true
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[client]
+# Never show a raw Python traceback to the end user on an unhandled exception —
+# only the generic "This app has encountered an error" message. The real
+# exception is still written to the server's own logs.
+showErrorDetails = "none"
+
+# ----------------------------------------------------------------------------------
+# Design system tokens (native Streamlit theming — no custom CSS needed for these).
+# Deep teal accent + serif headings / sans body, restrained corner radius.
+# Both light and dark are defined explicitly so neither is left to guesswork.
+#
+# Every text/accent token here (primaryColor, greenColor, yellowColor, redColor,
+# blueColor) has been checked against both backgroundColor and
+# secondaryBackgroundColor with the WCAG 2.2 contrast formula and clears the 4.5:1
+# AA minimum for text (audit finding A-07). The light theme's original yellowColor
+# (#B7791F) only reached 3.6:1 / 3.4:1 and was darkened to #99651A (4.96:1 / 4.63:1)
+# to pass while staying recognizably amber/warning.
+# ----------------------------------------------------------------------------------
+
+[theme.light]
+primaryColor = "#1F6F78"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F6F7F9"
+textColor = "#1B2430"
+borderColor = "#E1E4E9"
+font = "sans-serif"
+headingFont = "serif"
+baseRadius = "small"
+buttonRadius = "small"
+greenColor = "#1F7A4D"
+yellowColor = "#99651A"
+redColor = "#B3261E"
+blueColor = "#2C6E9E"
+
+[theme.dark]
+primaryColor = "#4FB8C4"
+backgroundColor = "#10151B"
+secondaryBackgroundColor = "#171E26"
+textColor = "#E7EAEE"
+borderColor = "#2A323C"
+font = "sans-serif"
+headingFont = "serif"
+baseRadius = "small"
+buttonRadius = "small"
+greenColor = "#3FBE7A"
+yellowColor = "#E0A947"
+redColor = "#E5615A"
+blueColor = "#5FA8D6"
