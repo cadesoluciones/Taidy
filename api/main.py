@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import logging
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import AsyncIterator
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,7 +25,19 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from .routers import auth as auth_router  # noqa: E402
+from webapp import scheduler as sched_module  # noqa: E402
+
+from .routers import (  # noqa: E402
+    audit as audit_router,
+    auth as auth_router,
+    dashboard as dashboard_router,
+    history as history_router,
+    meta as meta_router,
+    schedules as schedules_router,
+    tasks as tasks_router,
+    users as users_router,
+    workflows as workflows_router,
+)
 
 logger = logging.getLogger("taidy.api")
 
@@ -36,8 +50,19 @@ logger = logging.getLogger("taidy.api")
 _ALLOWED_ORIGINS = ["http://127.0.0.1:5173"]
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # Same singleton pattern webapp/app.py uses via @st.cache_resource: built
+    # once per process, re-registers every persisted schedule.json entry.
+    app.state.scheduler = sched_module.build_scheduler()
+    try:
+        yield
+    finally:
+        app.state.scheduler.shutdown(wait=False)
+
+
 def create_app() -> FastAPI:
-    app = FastAPI(title="Taidy API")
+    app = FastAPI(title="Taidy API", lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,
@@ -59,6 +84,15 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(auth_router.router)
+    app.include_router(dashboard_router.router)
+    app.include_router(history_router.router)
+    app.include_router(audit_router.router)
+    app.include_router(users_router.router)
+    app.include_router(schedules_router.router)
+    app.include_router(workflows_router.router)
+    app.include_router(workflows_router.runs_router)
+    app.include_router(tasks_router.router)
+    app.include_router(meta_router.router)
 
     @app.get("/health")
     def health() -> dict:

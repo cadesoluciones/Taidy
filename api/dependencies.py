@@ -22,7 +22,8 @@ import secrets
 import threading
 from typing import Dict, List, Optional
 
-from fastapi import Cookie, Depends, HTTPException, status
+from apscheduler.schedulers.background import BackgroundScheduler
+from fastapi import Cookie, Depends, HTTPException, Request, status
 
 from webapp import users_db
 
@@ -125,3 +126,11 @@ def require_any_role(roles: List[str]):
         return user
 
     return _checker
+
+
+def get_scheduler(request: Request) -> BackgroundScheduler:
+    """The live APScheduler instance, created once in main.py's lifespan hook
+    (mirrors webapp/app.py's @st.cache_resource singleton) -- schedules.py's
+    add/remove/enable functions need the live object, not just the JSON file.
+    """
+    return request.app.state.scheduler

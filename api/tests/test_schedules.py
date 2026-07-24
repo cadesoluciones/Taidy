@@ -1,0 +1,73 @@
+# -*- coding: utf-8 -*-
+from __future__ import annotations
+
+from webapp import users_db
+from webapp.tests.conftest import make_user
+
+
+def _login(client, username, password):
+    assert client.post("/auth/login", json={"username": username, "password": password}).status_code == 200
+
+
+def test_reader_can_list_but_not_create(isolated_state, client):
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+
+    assert client.get("/schedules").status_code == 200
+    resp = client.post(
+        "/schedules",
+        json={
+            "name": "Nightly BC",
+            "action": "extract_bc",
+            "params": {},
+            "trigger": "interval",
+            "trigger_args": {"hours": 24},
+        },
+    )
+    assert resp.status_code == 403
+
+
+def test_admin_can_create_pause_and_delete_a_schedule(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    created = client.post(
+        "/schedules",
+        json={
+            "name": "Nightly BC",
+            "action": "extract_bc",
+            "params": {},
+            "trigger": "interval",
+            "trigger_args": {"hours": 24},
+        },
+    )
+    assert created.status_code == 200
+    schedule_id = created.json()["id"]
+    assert created.json()["enabled"] is True
+
+    paused = client.patch(f"/schedules/{schedule_id}", json={"enabled": False})
+    assert paused.status_code == 204
+
+    schedules = client.get("/schedules").json()["items"]
+    assert next(s for s in schedules if s["id"] == schedule_id)["enabled"] is False
+
+    deleted = client.delete(f"/schedules/{schedule_id}")
+    assert deleted.status_code == 204
+    assert client.get("/schedules").json()["items"] == []
+
+
+def test_invalid_cron_expression_is_rejected(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    resp = client.post(
+        "/schedules",
+        json={
+            "name": "Bad cron",
+            "action": "extract_bc",
+            "params": {},
+            "trigger": "cron",
+            "trigger_args": {"expr": "not a cron expression"},
+        },
+    )
+    assert resp.status_code == 400
