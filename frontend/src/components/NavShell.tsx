@@ -1,4 +1,5 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { ROLE_ADMIN } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
@@ -52,6 +53,14 @@ const ACCOUNT_SECTION: NavSection = { label: "Cuenta", items: [{ to: "/cuenta", 
 export function NavShell() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // Close the mobile drawer automatically on navigation -- otherwise it
+  // stays open over the newly-loaded page.
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname]);
 
   async function handleLogout() {
     await logout();
@@ -64,6 +73,15 @@ export function NavShell() {
     <div className={styles.shell}>
       <header className={styles.header}>
         <div className={styles.brand}>
+          <button
+            type="button"
+            className={styles.menuToggle}
+            aria-label={mobileNavOpen ? "Cerrar menú" : "Abrir menú"}
+            aria-expanded={mobileNavOpen}
+            onClick={() => setMobileNavOpen((v) => !v)}
+          >
+            ☰
+          </button>
           <span className={styles.brandName}>Taidy</span>
           <span className={styles.pageTitle}>Panel de datos</span>
         </div>
@@ -89,7 +107,15 @@ export function NavShell() {
           </button>
         </div>
       </header>
-      <nav className={styles.sidebar} aria-label="Navegación principal">
+      <div
+        className={`${styles.backdrop} ${mobileNavOpen ? styles.backdropVisible : ""}`}
+        onClick={() => setMobileNavOpen(false)}
+        aria-hidden="true"
+      />
+      <nav
+        className={`${styles.sidebar} ${mobileNavOpen ? styles.sidebarOpen : ""}`}
+        aria-label="Navegación principal"
+      >
         {sections.map((section) => (
           <div key={section.label || "inicio"}>
             {section.label && <div className={styles.sectionLabel}>{section.label}</div>}

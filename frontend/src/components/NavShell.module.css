@@ -9,6 +9,10 @@
     "sidebar content";
 }
 
+.menuToggle {
+  display: none;
+}
+
 @media (max-width: 860px) {
   .shell {
     grid-template-columns: 1fr;
@@ -16,8 +20,37 @@
       "header"
       "content";
   }
+
+  /* Below the breakpoint the sidebar becomes a toggleable overlay drawer
+   * instead of just vanishing -- disappearing outright would leave a
+   * narrow-viewport user with no way to reach any other page at all. */
+  .menuToggle {
+    display: inline-flex;
+  }
+
   .sidebar {
+    position: fixed;
+    inset: 0 25% 0 0;
+    z-index: 20;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: var(--shadow-card);
+  }
+
+  .sidebarOpen {
+    transform: translateX(0);
+  }
+
+  .backdrop {
     display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(16, 21, 27, 0.4);
+    z-index: 19;
+  }
+
+  .backdropVisible {
+    display: block;
   }
 }
 
@@ -106,6 +139,18 @@
   padding: 6px 12px;
   font-size: 13px;
   cursor: pointer;
+}
+
+.menuToggle {
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 16px;
 }
 
 .sidebar {

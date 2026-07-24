@@ -90,3 +90,34 @@ def test_stop_requires_ownership_or_admin(isolated_state, client, fake_subproces
 
     resp = client.post(f"/tasks/{task_id}/stop")
     assert resp.status_code == 403
+
+
+def test_extract_bc_page_size_zero_is_normalized_to_no_flag(isolated_state, client, monkeypatch):
+    """A direct API caller sending the literal page_size=0 the Pydantic
+    default allows must get the exact same behavior the Streamlit form
+    guarantees (no --page-size flag at all, letting the backend fall back
+    to config.json) -- not a discrepancy that only the React form happens
+    to paper over by converting 0 to null before sending.
+    """
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    captured_argv = {}
+
+    def _capturing_popen(module, argv):
+        captured_argv["argv"] = argv
+        import subprocess
+        import sys
+
+        return subprocess.Popen(
+            [sys.executable, "-c", "print('fake output')"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+
+    monkeypatch.setattr(tasks_module, "_popen", _capturing_popen)
+
+    resp = client.post("/tasks/extract-bc", json={"page_size": 0})
+    assert resp.status_code == 200
+    assert "--page-size" not in captured_argv["argv"]

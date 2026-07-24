@@ -9,21 +9,28 @@
   white-space: nowrap;
 }
 
+/*
+ * Solid backgrounds, not a translucent tint: a 16%-tinted background was
+ * tried first and measured below the 4.5:1 AA minimum for 3 of the 4
+ * light-theme colors (as low as 4.02:1) -- see tokens.css's --color-on-status
+ * for the verified white/black text pairing (>=4.96:1 in light, >=6.19:1 in
+ * dark, all 4 colors, both themes).
+ */
 .info {
-  background: color-mix(in srgb, var(--color-info) 16%, var(--color-bg));
-  color: var(--color-info);
+  background: var(--color-info);
+  color: var(--color-on-status);
 }
 .success {
-  background: color-mix(in srgb, var(--color-success) 16%, var(--color-bg));
-  color: var(--color-success);
+  background: var(--color-success);
+  color: var(--color-on-status);
 }
 .warning {
-  background: color-mix(in srgb, var(--color-warning) 16%, var(--color-bg));
-  color: var(--color-warning);
+  background: var(--color-warning);
+  color: var(--color-on-status);
 }
 .danger {
-  background: color-mix(in srgb, var(--color-danger) 16%, var(--color-bg));
-  color: var(--color-danger);
+  background: var(--color-danger);
+  color: var(--color-on-status);
 }
 .neutral {
   background: var(--color-bg-soft);

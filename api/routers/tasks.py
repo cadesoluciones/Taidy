@@ -74,7 +74,15 @@ def extract_bc(payload: ExtractBcRequest, current: CurrentUser = Depends(get_cur
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Resetear checkpoints es una operación crítica: requiere el rol App.Admin.",
         )
-    return _launch("extract_bc", payload.model_dump(), current)
+    params = payload.model_dump()
+    # Normalized here, not just in the React form: webapp/app.py's
+    # page_bc_extract never lets a literal 0 reach tasks.launch() ("0 = usa
+    # el de config.json" is a UI convention, not a real page size), so a
+    # caller hitting this endpoint directly must get the same behavior the
+    # Streamlit form guarantees, not one that depends on the frontend having
+    # already converted it.
+    params["page_size"] = params["page_size"] or None
+    return _launch("extract_bc", params, current)
 
 
 @router.post("/upload-bc", response_model=TaskOut)
