@@ -119,7 +119,55 @@ agnostic — it is instantiated once in FastAPI's `lifespan` startup hook
 instead of behind `st.cache_resource`, and ticks call the exact same
 `tasks.launch()` / `workflow_engine.start_workflow()` functions.
 
+### Session cookie — a local-dev gotcha found and fixed
+
+The session cookie is `HttpOnly`, `SameSite=Lax`, host-only (no explicit
+`Domain`). Found via a real, failing E2E test (not by inspection): serving
+the frontend on `localhost:5173` while the API ran on `127.0.0.1:8000`
+silently dropped the cookie on every request after login, because
+`localhost` and `127.0.0.1` are different *sites* for `SameSite` purposes
+even though both are loopback — login "worked" (its response body is used
+directly, no cookie round-trip needed to render the result), but logout
+called an endpoint that depends on the cookie and got a silent 401, which
+an unawaited exception then swallowed client-side. **Both the API and the
+Vite dev server must be addressed as `127.0.0.1`, never a mix with
+`localhost`**, for the session to work at all locally. Documented here so
+the next person (or session) doesn't lose an hour to the same symptom.
+
 ## Frontend design
+
+### Visual design language (approved by the project owner)
+
+The owner shared reference screenshots of a *different* CADE product
+("ANEMIOT" device-provisioning console) and asked for that visual language,
+not its functionality, applied here: a white/light UI with a top header bar
+(logo + product name + live-status dot + user identity + a bordered
+danger-toned logout button), colored-left-border accent cards for
+hero/status emphasis, metric tile rows, a two-column list/detail layout, a
+modal-based management pattern (list on the left, detail form on the
+right), timeline lists with dot markers, and a split-screen login page
+(dark photographic/brand panel left, form panel right). Adopted structurally;
+colors use Taidy's own already-WCAG-AA-verified palette from
+`.streamlit/config.toml` (see `frontend/src/styles/tokens.css`) rather than
+literally copying the other product's blue/orange branding — Taidy isn't
+ANEMIOT and reusing already-vetted, accessible tokens is strictly better
+than introducing an unverified new palette.
+
+- **State/data fetching**: a small typed API client (`fetch` wrapper) plus
+  React Query (or SWR) for polling/caching — avoids hand-rolled `useEffect`
+  polling loops sprinkled across pages.
+- **Confirmation dialogs**: one `<ConfirmDialog>` component reused for all 6
+  destructive actions (delete user, delete workflow, delete schedule, stop
+  task, stop workflow, change role) — mirrors `webapp/app.py`'s own "one
+  pattern, six call sites" design.
+- **Status badges**: one `<StatusBadge status="running|ok|error|...">`
+  component, driven by the same status vocabulary the backend already emits
+  (`running, stopping, ok, error, stopped, pending, cancelled, in_progress`)
+  — never inventing new client-side states.
+- **Icons**: the Streamlit side just adopted Material Symbols
+  (`:material/icon_name:`) for a modern look; the React side uses
+  `@mui/icons-material` or plain SVGs from the same Material Symbols set, so
+  the two UIs read as the same product during the parallel-run period.
 
 - **State/data fetching**: a small typed API client (`fetch` wrapper) plus
   React Query (or SWR) for polling/caching — avoids hand-rolled `useEffect`

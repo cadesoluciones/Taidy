@@ -86,16 +86,24 @@ Order (each a separately testable, committable slice):
 5. `api/tests/`: one pytest file per router, same isolation fixtures as
    `webapp/tests/conftest.py`.
 
-## Phase 4 — Frontend (starts once Phase 3's auth slice is live)
+## Phase 4 — Frontend (started; step 1 done)
 
-1. Vite + React + TS scaffold, typed API client, auth context, login page,
-   route guard. **Paired with Phase 3 step 2 as the first end-to-end vertical
-   slice** — proves the whole chain (browser → Vite → fetch → FastAPI →
-   `users_db` → SQLite) before investing in the other 13 pages.
+1. **Done.** Vite + React + TS (strict) scaffold in `frontend/`, design
+   tokens reusing Taidy's WCAG-AA-verified palette, typed API client
+   (`src/api/client.ts`), auth context + route guards (`src/auth/`), login
+   page + forced-change-password page + a minimal authenticated shell
+   (`src/components/AppShell.tsx`) matching the owner-approved visual
+   language (see `ARCHITECTURE.md`). This is the first end-to-end vertical
+   slice — proved the whole chain (browser → Vite → fetch → FastAPI →
+   `users_db` → SQLite) with a real Playwright run against live servers, not
+   just unit tests. Found and fixed a real bug in the process: the session
+   cookie silently failed to round-trip when the frontend was served on
+   `localhost` while the API ran on `127.0.0.1` (see `ARCHITECTURE.md`,
+   "Session cookie — a local-dev gotcha").
 2. Remaining pages, grouped by the same 6 nav sections the Streamlit sidebar
    already uses (Inicio; Ejecutar ×7; Flujos; Programación; Actividad ×2;
    Administración ×2, Admin-only; Cuenta) — same information architecture,
-   not reinvented.
+   not reinvented. Each pairs with its FastAPI router from Phase 3.
 3. Flujos gets the interactive-diagram upgrade (see `ARCHITECTURE.md`) once
    its baseline create/list/launch/delete parity is in place — upgrade,
    not a prerequisite for parity.

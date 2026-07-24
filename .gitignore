@@ -31,10 +31,16 @@ credentials.json
 # -----------------------------------------------------------------------------
 # 📁 NODE & JAVASCRIPT: dependencies, builds, logs
 # -----------------------------------------------------------------------------
+# package.json/package-lock.json are NOT ignored: frontend/ (the React
+# migration) is a real Node project and both files must be tracked for a
+# reproducible `npm install`. Only generated/local artifacts are ignored.
 node_modules/
-package-lock.json
-package.json
 yarn-error.log
+frontend/dist/
+frontend/dist-ssr/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
 
 # Optional build artifacts (adjust for your CDK + JS tooling)
 core/build/

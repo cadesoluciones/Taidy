@@ -27,9 +27,13 @@ from .routers import auth as auth_router  # noqa: E402
 
 logger = logging.getLogger("taidy.api")
 
-# Vite's default dev server origins. Add the real production origin here once
-# one exists -- never "*", per this project's security checklist.
-_ALLOWED_ORIGINS = ["http://127.0.0.1:5173", "http://localhost:5173"]
+# Vite's dev server origin. Deliberately 127.0.0.1, not localhost: the
+# session cookie has no explicit Domain (host-only, matching the exact
+# backend host) and is SameSite=Lax -- "localhost" and "127.0.0.1" are
+# different *sites* for SameSite purposes even though both are loopback, so
+# mixing them silently drops the cookie on every cross-site fetch. Add the
+# real production origin here once one exists -- never "*".
+_ALLOWED_ORIGINS = ["http://127.0.0.1:5173"]
 
 
 def create_app() -> FastAPI:
