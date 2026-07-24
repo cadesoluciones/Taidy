@@ -104,41 +104,62 @@ Order (each a separately testable, committable slice):
    already uses (Inicio; Ejecutar ×7; Flujos; Programación; Actividad ×2;
    Administración ×2, Admin-only; Cuenta) — same information architecture,
    not reinvented. Each pairs with its FastAPI router from Phase 3.
-3. Flujos gets the interactive-diagram upgrade (see `ARCHITECTURE.md`) once
-   its baseline create/list/launch/delete parity is in place — upgrade,
-   not a prerequisite for parity.
+3. **Not done** — Flujos gets the interactive-diagram upgrade (see
+   `ARCHITECTURE.md`) as a deliberate follow-up once its baseline
+   create/list/launch/delete parity is in place. Baseline parity (step 2)
+   is done and tested; the interactive diagram itself, the "edit an
+   existing saved workflow" capability (ND-11), and email notifications
+   (the owner's other new-feature ask) are **not started**. Tracked as
+   `NEW-01` in `FUNCTIONAL_EQUIVALENCE.md`.
 
-## Phase 5 — Security pass
+## Phase 5 — Security pass (done)
 
-Checklist lives in `ARCHITECTURE.md`; executed once the full surface exists,
-not per-endpoint ad hoc, so it can be verified exhaustively in one pass.
+Checklist verified against actual source (not just asserted) in
+`ARCHITECTURE.md`'s "Security checklist" section: no hardcoded secrets, every
+mutating endpoint's `dependencies=` audited directly against each router's
+source, parameterized SQL confirmed pre-existing, CORS locked to one origin,
+no stack traces to the client, cookie flags confirmed, `api/.env.example`
+added (was missing).
 
-## Phase 6 — Equivalence testing
+## Phase 6 — Equivalence testing (done for everything built so far)
 
-- Backend: pytest per router (written alongside each router in Phase 3, not
-  deferred).
-- Frontend: Vitest + Testing Library per page/component.
-- E2E: Playwright covering the journeys in `FUNCTIONAL_EQUIVALENCE.md`
-  (login, full nav sweep, filter+paginate history, launch a task, edit a
-  workflow, upload/download if applicable, permission checks, logout).
-- Explicit Streamlit-vs-React comparison: for each launched task/workflow,
-  compare the resulting `run_history.json` entry (action, status, message)
-  produced by each UI for the same inputs — both call the identical
-  `tasks.launch()`, so this is really a comparison that the API layer didn't
-  introduce a discrepancy, not that the two UIs "coincidentally look similar."
+- Backend: pytest per router, written alongside each router in Phase 3 —
+  41 tests (webapp/tests + api/tests) + 2 more from the Fase-8-adjacent bug
+  fix below = 43, all passing.
+- Frontend: Vitest + Testing Library — 12 tests (StatusBadge, ConfirmDialog,
+  LoginPage).
+- E2E: Playwright — 10 tests covering a full 15-route nav sweep (Admin sees
+  all pages, non-Admin is redirected out of Administración and doesn't see
+  it in the sidebar), a real task launch settling in Tareas en curso, and
+  admin user-management through the 2-step role-change confirm dialog. Run
+  against BOTH live servers with isolated state, never the real
+  `webapp/users.db`.
+- **Not done**: the explicit Streamlit-vs-React output comparison this phase
+  originally called for (same inputs, same `run_history.json` entry from
+  both UIs) — both UIs call the identical `tasks.launch()`, so this is a
+  low-risk gap, but it is a real, deliberate gap, not silently skipped.
+- **Not done**: accessibility/responsive verification of the new React
+  pages (the Streamlit side went through a dedicated WCAG AA pass; React
+  reused the same verified color tokens but hasn't had its own contrast/
+  keyboard-nav/responsive-breakpoint check).
 
-## Phase 7 — Controlled cleanup
+## Phase 7 — Controlled cleanup (explicitly NOT started)
 
-Only after Phase 6 is green: enumerate now-obsolete files, grep the whole
-repo for references, remove only what's proven unreferenced, re-run every
-test suite, confirm `git status` shows only migration-related changes. Until
-then `webapp/` stays exactly as it is — this phase is not started.
+Blocked on the two Phase 6 gaps above by the migration's own rule: "no
+elimines Streamlit hasta que React haya alcanzado equivalencia funcional Y
+todas las verificaciones hayan terminado correctamente." `webapp/` has not
+been touched-in-behavior and stays the rollback path. This phase requires
+explicit sign-off before it starts — removing Streamlit is exactly the kind
+of hard-to-reverse, broad-scope action this project treats as a stop-and-ask
+point, not a default continuation.
 
-## Phase 8 — Local execution docs
+## Phase 8 — Local execution docs (done)
 
-Folded into the final `README.md` update once Phase 4 produces a real
-`frontend/` to document (a "how to run it" section written before the thing
-it describes exists would just be speculative).
+`README.md` gained a `webapp/` section (previously undocumented despite
+existing) and a migration section with run instructions for both `api/` and
+`frontend/`. `frontend/README.md` replaced the generic Vite scaffold
+template with real project docs, `.env.example` added for both `api/` and
+`frontend/`.
 
 ## Status reporting format (used at the end of every phase from here on)
 
