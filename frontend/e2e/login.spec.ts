@@ -23,9 +23,7 @@ test.describe("Login journey", () => {
     await page.getByRole("button", { name: "Acceder al panel" }).click();
 
     await expect(page).toHaveURL("http://127.0.0.1:5173/");
-    await expect(page.getByRole("heading", { name: /Bienvenido, operator1/ })).toBeVisible();
-    // "App.Operator" legitimately appears twice (header identity + the page
-    // body's own copy) -- scope to the header to keep this a strict match.
+    await expect(page.getByRole("heading", { level: 1, name: "Taidy — Panel de datos" })).toBeVisible();
     await expect(page.getByRole("banner").getByText("App.Operator")).toBeVisible();
   });
 

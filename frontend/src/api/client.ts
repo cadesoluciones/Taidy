@@ -18,8 +18,6 @@ export class ApiError extends Error {
   }
 }
 
-type JsonBody = Record<string, unknown>;
-
 function extractDetailMessage(detail: unknown): { message: string; code: string | undefined } {
   if (typeof detail === "string") {
     return { message: detail, code: undefined };
@@ -65,14 +63,32 @@ export function apiGet<T>(path: string): Promise<T> {
   return request<T>(path, { method: "GET" });
 }
 
-export function apiPost<T>(path: string, body?: JsonBody): Promise<T> {
+export function apiPost<T>(path: string, body?: object): Promise<T> {
   return request<T>(path, { method: "POST", ...(body ? { body: JSON.stringify(body) } : {}) });
 }
 
-export function apiPatch<T>(path: string, body?: JsonBody): Promise<T> {
+export function apiPatch<T>(path: string, body?: object): Promise<T> {
   return request<T>(path, { method: "PATCH", ...(body ? { body: JSON.stringify(body) } : {}) });
 }
 
 export function apiDelete<T>(path: string): Promise<T> {
   return request<T>(path, { method: "DELETE" });
+}
+
+export type QueryValue = string | number | boolean | undefined | string[];
+
+/** Builds a query string, repeating the key for array values (`action=a&action=b`)
+ * to match FastAPI's `Query(default=[])` list-parameter convention. */
+export function buildQuery(params: object): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params) as [string, QueryValue][]) {
+    if (value === undefined || value === "") continue;
+    if (Array.isArray(value)) {
+      for (const item of value) search.append(key, item);
+    } else {
+      search.append(key, String(value));
+    }
+  }
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
 }
