@@ -121,31 +121,37 @@ source, parameterized SQL confirmed pre-existing, CORS locked to one origin,
 no stack traces to the client, cookie flags confirmed, `api/.env.example`
 added (was missing).
 
-## Phase 6 — Equivalence testing (done for everything built so far)
+## Phase 6 — Equivalence testing (done, including both prior gaps)
 
 - Backend: pytest per router, written alongside each router in Phase 3 —
-  41 tests (webapp/tests + api/tests) + 2 more from the Fase-8-adjacent bug
-  fix below = 43, all passing.
+  51 tests total (webapp/tests + api/tests + the root-level `tests/` added
+  for the uploader fix), all passing.
 - Frontend: Vitest + Testing Library — 12 tests (StatusBadge, ConfirmDialog,
   LoginPage).
-- E2E: Playwright — 10 tests covering a full 15-route nav sweep (Admin sees
-  all pages, non-Admin is redirected out of Administración and doesn't see
-  it in the sidebar), a real task launch settling in Tareas en curso, and
-  admin user-management through the 2-step role-change confirm dialog. Run
-  against BOTH live servers with isolated state, never the real
-  `webapp/users.db`.
-- **Not done**: the explicit Streamlit-vs-React output comparison this phase
-  originally called for (same inputs, same `run_history.json` entry from
-  both UIs) — both UIs call the identical `tasks.launch()`, so this is a
-  low-risk gap, but it is a real, deliberate gap, not silently skipped.
-- **Not done**: accessibility/responsive verification of the new React
-  pages (the Streamlit side went through a dedicated WCAG AA pass; React
-  reused the same verified color tokens but hasn't had its own contrast/
-  keyboard-nav/responsive-breakpoint check).
+- E2E: Playwright — 12 tests: a full 15-route nav sweep (Admin sees all
+  pages, non-Admin is redirected out of Administración and doesn't see it
+  in the sidebar), a real task launch settling in Tareas en curso, admin
+  user-management through the 2-step role-change confirm dialog, and the
+  mobile nav drawer at a real 390px viewport. Run against BOTH live servers
+  with isolated state, never the real `webapp/users.db`.
+- **Closed**: explicit Streamlit-vs-React equivalence
+  (`api/tests/test_streamlit_react_equivalence.py`) — for all 7 task-launch
+  actions, the params dict the Streamlit form builds is asserted equal to
+  the API's Pydantic model dump for the same input; both feed the identical
+  `webapp.tasks.launch()`. Writing it surfaced a real discrepancy (a direct
+  API call with `page_size=0` behaved differently than the Streamlit form
+  ever could) — fixed in the router itself, not left as a frontend-only
+  workaround.
+- **Closed**: React accessibility/responsive pass — found and fixed two real
+  issues: `StatusBadge`'s tinted backgrounds failed WCAG AA for 3 of 4
+  light-theme colors (switched to solid backgrounds, verified all 8
+  combinations now clear AA), and the sidebar disappeared below 860px with
+  no alternative navigation (added a hamburger-toggle drawer, verified with
+  real-viewport Playwright tests, not just CSS inspection).
 
 ## Phase 7 — Controlled cleanup (explicitly NOT started)
 
-Blocked on the two Phase 6 gaps above by the migration's own rule: "no
+Both Phase 6 gaps are now closed. Per the migration's own rule: "no
 elimines Streamlit hasta que React haya alcanzado equivalencia funcional Y
 todas las verificaciones hayan terminado correctamente." `webapp/` has not
 been touched-in-behavior and stays the rollback path. This phase requires
