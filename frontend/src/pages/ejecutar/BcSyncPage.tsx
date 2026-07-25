@@ -4,6 +4,7 @@ import { ApiError } from "../../api/client";
 import { fetchBcTables } from "../../api/meta";
 import { syncBc } from "../../api/tasks";
 import formStyles from "../../components/Form.module.css";
+import { NotifyCheckbox } from "../../components/NotifyCheckbox";
 
 export function BcSyncPage() {
   const [tables, setTables] = useState<string[]>([]);
@@ -14,6 +15,7 @@ export function BcSyncPage() {
   const [dryRun, setDryRun] = useState(false);
   const [skipExisting, setSkipExisting] = useState(false);
   const [verbose, setVerbose] = useState(false);
+  const [notify, setNotify] = useState(false);
 
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +41,7 @@ export function BcSyncPage() {
         dry_run: dryRun,
         skip_existing: skipExisting,
         verbose,
+        notify,
       });
       setSuccess(`Tarea iniciada (${task.id.slice(0, 8)}). Sigue el progreso en Tareas en curso.`);
     } catch (err) {
@@ -105,6 +108,7 @@ export function BcSyncPage() {
           <input type="checkbox" checked={verbose} onChange={(e) => setVerbose(e.target.checked)} />
           <span>Log detallado</span>
         </label>
+        <NotifyCheckbox checked={notify} onChange={setNotify} />
         <button type="submit" className={formStyles.submit} disabled={isSubmitting}>
           {isSubmitting ? "Ejecutando…" : "Ejecutar sync BC"}
         </button>

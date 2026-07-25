@@ -1,7 +1,9 @@
 import { Link } from "react-router-dom";
+import { Activity, CalendarClock, AlertTriangle, type LucideIcon } from "lucide-react";
 
 import { fetchDashboardSummary } from "../api/dashboard";
 import { useAuth } from "../auth/AuthContext";
+import { OutcomeIcon } from "../components/OutcomeIcon";
 import { usePolling } from "../hooks/usePolling";
 
 const QUICK_LINKS = [
@@ -23,9 +25,9 @@ export function HomePage() {
       <p>Extracción y carga al datalake de Business Central y Factorial HR, sin depender de la terminal.</p>
 
       <div style={{ display: "flex", gap: 24, margin: "16px 0" }}>
-        <Metric label="Tareas en curso" value={summary?.running_count} />
-        <Metric label="Tareas programadas activas" value={summary?.active_schedule_count} />
-        <Metric label="Errores recientes" value={summary?.recent_error_count} />
+        <Metric icon={Activity} label="Tareas en curso" value={summary?.running_count} />
+        <Metric icon={CalendarClock} label="Tareas programadas activas" value={summary?.active_schedule_count} />
+        <Metric icon={AlertTriangle} label="Errores recientes" value={summary?.recent_error_count} />
       </div>
 
       <h2>Accesos directos</h2>
@@ -46,9 +48,9 @@ export function HomePage() {
         <p>Todavía no se ha ejecutado ninguna tarea.</p>
       ) : (
         summary.recent_history.map((entry, i) => (
-          <div key={i}>
-            {entry.ok ? "✅" : entry.status === "stopped" ? "⏹️" : "❌"} <strong>{entry.action}</strong> —{" "}
-            {entry.source} — {entry.finished_at}
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <OutcomeIcon ok={entry.ok} status={entry.status} />
+            <strong>{entry.action}</strong> — {entry.source} — {entry.finished_at}
           </div>
         ))
       )}
@@ -60,11 +62,14 @@ export function HomePage() {
   );
 }
 
-function Metric({ label, value }: { label: string; value: number | undefined }) {
+function Metric({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: number | undefined }) {
   return (
-    <div>
-      <div style={{ fontSize: 28, fontWeight: 700 }}>{value ?? "—"}</div>
-      <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>{label}</div>
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <Icon size={22} color="var(--color-primary)" />
+      <div>
+        <div style={{ fontSize: 28, fontWeight: 700 }}>{value ?? "—"}</div>
+        <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>{label}</div>
+      </div>
     </div>
   );
 }

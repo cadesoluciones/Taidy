@@ -92,6 +92,25 @@ def test_stop_requires_ownership_or_admin(isolated_state, client, fake_subproces
     assert resp.status_code == 403
 
 
+def test_notify_flag_reaches_the_task_and_is_stripped_from_argv(isolated_state, client, fake_subprocess):
+    """The API's `notify` request field must reach webapp.tasks.Task.notify
+    (proving api/routers/tasks.py forwards it into launch()'s params) while
+    never leaking into the subprocess argv (proving launch() still pops it
+    before **params reaches adapter.build_upload_bc_argv)."""
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.post("/tasks/upload-bc", json={"notify": True})
+    assert resp.status_code == 200
+    task_id = resp.json()["id"]
+
+    task = tasks_module.get_task(task_id)
+    assert task.notify is True
+
+    _wait_until_finished(task_id)
+    assert tasks_module.get_task(task_id).status == "ok"
+
+
 def test_extract_bc_page_size_zero_is_normalized_to_no_flag(isolated_state, client, monkeypatch):
     """A direct API caller sending the literal page_size=0 the Pydantic
     default allows must get the exact same behavior the Streamlit form

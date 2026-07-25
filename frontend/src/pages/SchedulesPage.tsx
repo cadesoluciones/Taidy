@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { CirclePause, CirclePlay } from "lucide-react";
 
 import { ROLE_ADMIN } from "../api/auth";
 import { ApiError } from "../api/client";
@@ -6,6 +7,7 @@ import { createSchedule, deleteSchedule, fetchSchedules, setScheduleEnabled, typ
 import { useAuth } from "../auth/AuthContext";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import formStyles from "../components/Form.module.css";
+import { NotifyCheckbox } from "../components/NotifyCheckbox";
 import styles from "./SchedulesPage.module.css";
 
 const ACTION_LABELS: Record<string, string> = {
@@ -41,6 +43,7 @@ export function SchedulesPage() {
   const [hours, setHours] = useState(24);
   const [minutes, setMinutes] = useState(0);
   const [cronExpr, setCronExpr] = useState("0 6 * * *");
+  const [notify, setNotify] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [createSuccess, setCreateSuccess] = useState<string | null>(null);
 
@@ -68,12 +71,13 @@ export function SchedulesPage() {
       await createSchedule({
         name: name.trim(),
         action,
-        params: {},
+        params: { notify },
         trigger: triggerKind,
         trigger_args: triggerKind === "interval" ? { hours, minutes } : { expr: cronExpr.trim() },
       });
       setCreateSuccess(`Tarea '${name}' creada.`);
       setName("");
+      setNotify(false);
       await reload();
     } catch (err) {
       setCreateError(err instanceof ApiError ? err.message : "No se pudo crear la tarea.");
@@ -155,6 +159,7 @@ export function SchedulesPage() {
                 <input id="cron_expr" type="text" value={cronExpr} onChange={(e) => setCronExpr(e.target.value)} />
               </div>
             )}
+            <NotifyCheckbox checked={notify} onChange={setNotify} />
             <button type="submit" className={formStyles.submit}>
               Crear tarea programada
             </button>
@@ -170,7 +175,14 @@ export function SchedulesPage() {
           <div className={styles.row} key={s.id}>
             <strong className={styles.name}>{s.name}</strong>
             <span>{ACTION_LABELS[s.action] ?? s.action}</span>
-            <span>{s.enabled ? "🟢 Activa" : "⏸️ Pausada"}</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              {s.enabled ? (
+                <CirclePlay size={14} color="var(--color-success)" />
+              ) : (
+                <CirclePause size={14} color="var(--color-text-muted)" />
+              )}
+              {s.enabled ? "Activa" : "Pausada"}
+            </span>
             <span className={styles.freq}>{describeFrequency(s)}</span>
             {isAdmin && (
               <div className={styles.actions}>

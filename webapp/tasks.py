@@ -31,7 +31,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from webapp import adapter, history  # noqa: E402
+from webapp import adapter, history, notifications  # noqa: E402
 
 MODULE_FOR_ACTION = {
     "extract_bc": "src.main",
@@ -78,6 +78,7 @@ class Task:
     status: str = "running"  # running | stopping | ok | error | stopped
     return_code: Optional[int] = None
     current_step: int = 0
+    notify: bool = False
     _log_parts: List[str] = field(default_factory=list, repr=False, compare=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
     _process: Optional[subprocess.Popen] = field(default=None, repr=False, compare=False)
@@ -221,6 +222,13 @@ def _finalize(task: Task, return_code: int) -> None:
         log=task.log(),
         duration_seconds=task.duration_seconds(),
     )
+    if task.notify:
+        notifications.notify_task_finished(
+            action_label=ACTION_LABELS.get(task.action, task.action),
+            triggered_by=task.triggered_by,
+            status=task.status,
+            message=message,
+        )
 
 
 def start_task(
@@ -230,6 +238,7 @@ def start_task(
     triggered_by: str,
     expected_tables: Optional[List[str]] = None,
     resource_key: Optional[str] = None,
+    notify: bool = False,
 ) -> Task:
     """Launches a single-step action (extract_bc, upload_bc, extract_factorial, upload_factorial, run_pipeline)."""
     blocker = conflicting_task_running(action, resource_key)
@@ -247,6 +256,7 @@ def start_task(
         started_at=datetime.now(timezone.utc).isoformat(),
         resource_key=resource_key or action,
         expected_tables=list(expected_tables or []),
+        notify=notify,
     )
     _register(task)
 
@@ -267,6 +277,7 @@ def start_sync_task(
     steps: List[Tuple[str, List[str], str]],  # (module, argv, step_label)
     triggered_by: str,
     expected_tables: Optional[List[str]] = None,
+    notify: bool = False,
 ) -> Task:
     """Launches a two-step action (sync_bc, sync_factorial) as sequential subprocesses."""
     blocker = conflicting_task_running(action)
@@ -283,6 +294,7 @@ def start_sync_task(
         started_at=datetime.now(timezone.utc).isoformat(),
         step_labels=[label for _, _, label in steps],
         expected_tables=list(expected_tables or []),
+        notify=notify,
     )
     _register(task)
 
@@ -369,6 +381,7 @@ def stop_task(task_id: str) -> bool:
 
 def launch(action: str, params: dict, triggered_by: str) -> Task:
     params = dict(params or {})
+    notify = bool(params.pop("notify", False))
     tables = params.get("tables")
 
     if action in ("extract_factorial", "sync_factorial") and not (params.get("start_on") and params.get("end_on")):
@@ -377,11 +390,11 @@ def launch(action: str, params: dict, triggered_by: str) -> Task:
     if action == "extract_bc":
         argv = adapter.build_extract_bc_argv(**params)
         expected = list(tables) if tables else adapter.list_bc_tables()
-        return start_task(action=action, argv=argv, triggered_by=triggered_by, expected_tables=expected)
+        return start_task(action=action, argv=argv, triggered_by=triggered_by, expected_tables=expected, notify=notify)
 
     if action == "upload_bc":
         argv = adapter.build_upload_bc_argv(**params)
-        return start_task(action=action, argv=argv, triggered_by=triggered_by)
+        return start_task(action=action, argv=argv, triggered_by=triggered_by, notify=notify)
 
     if action == "run_pipeline":
         if not params.get("pipeline"):
@@ -392,16 +405,17 @@ def launch(action: str, params: dict, triggered_by: str) -> Task:
             argv=argv,
             triggered_by=triggered_by,
             resource_key=f"run_pipeline:{params['pipeline']}",
+            notify=notify,
         )
 
     if action == "extract_factorial":
         argv = adapter.build_extract_factorial_argv(**params)
         expected = list(tables) if tables else adapter.list_factorial_tables()
-        return start_task(action=action, argv=argv, triggered_by=triggered_by, expected_tables=expected)
+        return start_task(action=action, argv=argv, triggered_by=triggered_by, expected_tables=expected, notify=notify)
 
     if action == "upload_factorial":
         argv = adapter.build_upload_factorial_argv(**params)
-        return start_task(action=action, argv=argv, triggered_by=triggered_by)
+        return start_task(action=action, argv=argv, triggered_by=triggered_by, notify=notify)
 
     if action == "sync_bc":
         output_dir = params.get("output_dir") or "./exports"
@@ -428,6 +442,7 @@ def launch(action: str, params: dict, triggered_by: str) -> Task:
             ],
             triggered_by=triggered_by,
             expected_tables=expected,
+            notify=notify,
         )
 
     if action == "sync_factorial":
@@ -462,6 +477,7 @@ def launch(action: str, params: dict, triggered_by: str) -> Task:
             ],
             triggered_by=triggered_by,
             expected_tables=expected,
+            notify=notify,
         )
 
     raise ValueError(f"Acción desconocida: {action}")

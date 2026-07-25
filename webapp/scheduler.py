@@ -190,7 +190,7 @@ def _run_scheduled(schedule_id: str) -> None:
     triggered_by = f"programada: {schedule.get('name', schedule_id)}"
     try:
         if action == "run_workflow":
-            workflow_engine.start_workflow(params["workflow_id"], triggered_by)
+            workflow_engine.start_workflow(params["workflow_id"], triggered_by, notify=bool(params.get("notify", False)))
         else:
             tasks.launch(action, params, triggered_by)
     except Exception as exc:

@@ -1,0 +1,73 @@
+.canvas {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-soft);
+  margin-bottom: var(--space-3);
+}
+
+.canvas :global(.react-flow__attribution) {
+  display: none;
+}
+
+.node {
+  width: 190px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--color-border);
+  background: var(--color-bg);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+  font-size: 13px;
+}
+
+.node[data-selected] {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 30%, transparent);
+}
+
+.node[data-status="running"] {
+  border-color: var(--color-info);
+}
+.node[data-status="ok"] {
+  border-color: var(--color-success);
+}
+.node[data-status="error"] {
+  border-color: var(--color-danger);
+}
+.node[data-status="stopped"],
+.node[data-status="cancelled"] {
+  border-color: var(--color-text-muted);
+}
+
+.nodeLabel {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nodeAction {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.nodeStatus {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.nodeHint {
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.handle {
+  background: var(--color-text-muted);
+  width: 8px;
+  height: 8px;
+}

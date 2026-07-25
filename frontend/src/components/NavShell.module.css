@@ -132,6 +132,9 @@
 }
 
 .logoutButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: 1px solid var(--color-danger);
   color: var(--color-danger);
   background: none;
@@ -171,13 +174,20 @@
 }
 
 .navLink {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   color: var(--color-text);
   text-decoration: none;
   font-size: 14px;
   margin-bottom: 2px;
+}
+
+.navLink svg {
+  flex-shrink: 0;
+  opacity: 0.8;
 }
 
 .navLink:hover {

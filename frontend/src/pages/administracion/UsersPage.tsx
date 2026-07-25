@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { CheckCircle2, Clock, Lock } from "lucide-react";
 
 import { ROLE_ADMIN, ROLE_OPERATOR, ROLE_READER, type Role } from "../../api/auth";
 import { ApiError } from "../../api/client";
@@ -113,9 +114,9 @@ export function UsersPage() {
       {users.map((u) => {
         const pendingRole = pendingRoles[u.username];
         const showSave = pendingRole !== undefined && pendingRole !== u.role;
-        const statusBits: string[] = [];
-        if (u.must_change_password) statusBits.push("⏳ pendiente cambio de contraseña");
-        if (u.locked_until) statusBits.push("🔒 bloqueado temporalmente");
+        const statusBits: Array<{ icon: typeof Clock; text: string }> = [];
+        if (u.must_change_password) statusBits.push({ icon: Clock, text: "pendiente cambio de contraseña" });
+        if (u.locked_until) statusBits.push({ icon: Lock, text: "bloqueado temporalmente" });
 
         return (
           <div className={styles.row} key={u.username}>
@@ -144,7 +145,19 @@ export function UsersPage() {
                 Guardar rol
               </button>
             )}
-            <span className={styles.status}>{statusBits.join(" · ") || "✅ activo"}</span>
+            <span className={styles.status}>
+              {statusBits.length > 0 ? (
+                statusBits.map(({ icon: Icon, text }, i) => (
+                  <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, marginRight: 8 }}>
+                    <Icon size={13} /> {text}
+                  </span>
+                ))
+              ) : (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <CheckCircle2 size={13} color="var(--color-success)" /> activo
+                </span>
+              )}
+            </span>
             <div className={styles.actions}>
               <button type="button" className={styles.btn} onClick={() => void resetUserPassword(u.username)}>
                 Resetear contraseña

@@ -143,6 +143,8 @@
   position: absolute;
   right: 8px;
   top: 32px;
+  display: inline-flex;
+  align-items: center;
   border: none;
   background: none;
   color: var(--color-text-muted);

@@ -6,6 +6,7 @@ import { fetchFactorialTables } from "../../api/meta";
 import { extractFactorial } from "../../api/tasks";
 import { useAuth } from "../../auth/AuthContext";
 import formStyles from "../../components/Form.module.css";
+import { NotifyCheckbox } from "../../components/NotifyCheckbox";
 
 function parseEmployeeIds(raw: string): { ids: number[] | null; error: string | null } {
   const trimmed = raw.trim();
@@ -34,6 +35,7 @@ export function FactorialExtractPage() {
   const [resetAll, setResetAll] = useState(false);
   const [dryRun, setDryRun] = useState(false);
   const [verbose, setVerbose] = useState(false);
+  const [notify, setNotify] = useState(false);
 
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +80,7 @@ export function FactorialExtractPage() {
         reset_all_checkpoints: resetAll,
         dry_run: dryRun,
         verbose,
+        notify,
       });
       setSuccess(`Tarea iniciada (${task.id.slice(0, 8)}). Sigue el progreso en Tareas en curso.`);
     } catch (err) {
@@ -172,6 +175,7 @@ export function FactorialExtractPage() {
           <input type="checkbox" checked={verbose} onChange={(e) => setVerbose(e.target.checked)} />
           <span>Log detallado</span>
         </label>
+        <NotifyCheckbox checked={notify} onChange={setNotify} />
         <button type="submit" className={formStyles.submit} disabled={isSubmitting}>
           {isSubmitting ? "Ejecutando…" : "Ejecutar extracción Factorial"}
         </button>

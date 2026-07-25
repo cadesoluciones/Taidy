@@ -121,6 +121,26 @@ def create_workflow(name: str, steps: List[dict]) -> dict:
     return workflow
 
 
+def update_workflow(workflow_id: str, name: str, steps: List[dict]) -> dict:
+    """Overwrites an existing workflow's name/steps in place -- same
+    validation as create_workflow(), but keeps the original `id` and
+    `created_at` so scheduled entries and past run history that reference
+    this workflow_id stay valid after the edit."""
+    name = name.strip()
+    if not name:
+        raise ValueError("El flujo necesita un nombre.")
+    _validate_steps(steps)
+    with _LOCK:
+        data = _read()
+        existing = next((w for w in data if w["id"] == workflow_id), None)
+        if existing is None:
+            raise ValueError(f"Flujo desconocido: {workflow_id}")
+        existing["name"] = name
+        existing["steps"] = steps
+        _write(data)
+        return existing
+
+
 def delete_workflow(workflow_id: str) -> None:
     with _LOCK:
         data = _read()

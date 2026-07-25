@@ -9,6 +9,7 @@ import {
   fetchWorkflows,
   runWorkflow,
   stopWorkflowRun,
+  updateWorkflow,
   type StepDefinition,
   type Workflow,
   type WorkflowRun,
@@ -16,7 +17,9 @@ import {
 import { useAuth } from "../auth/AuthContext";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import formStyles from "../components/Form.module.css";
+import { NotifyCheckbox } from "../components/NotifyCheckbox";
 import { StatusBadge } from "../components/StatusBadge";
+import { WorkflowDiagram } from "../components/WorkflowDiagram";
 import { usePolling } from "../hooks/usePolling";
 import styles from "./WorkflowsPage.module.css";
 
@@ -43,21 +46,21 @@ export function WorkflowsPage() {
   const canOperate = user?.role === ROLE_ADMIN || user?.role === ROLE_OPERATOR;
 
   const [draftSteps, setDraftSteps] = useState<StepDefinition[]>([]);
-  const [stepLabel, setStepLabel] = useState("");
-  const [stepAction, setStepAction] = useState("extract_bc");
-  const [dependsOn, setDependsOn] = useState<string[]>([]);
-  const [triggerRule, setTriggerRule] = useState<"all_success" | "always">("all_success");
+  const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
   const [workflowName, setWorkflowName] = useState("");
   const [designerError, setDesignerError] = useState<string | null>(null);
+  const [editingWorkflowId, setEditingWorkflowId] = useState<string | null>(null);
 
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [pendingDeleteWorkflow, setPendingDeleteWorkflow] = useState<Workflow | null>(null);
   const [pendingStopRun, setPendingStopRun] = useState<WorkflowRun | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
+  const [notifyByWorkflow, setNotifyByWorkflow] = useState<Record<string, boolean>>({});
 
   const { data: runsData } = usePolling(() => fetchWorkflowRuns(), 3000);
   const runs = runsData?.items ?? [];
+  const selectedStep = draftSteps.find((s) => s.id === selectedStepId) ?? null;
 
   async function reloadWorkflows() {
     setWorkflows((await fetchWorkflows()).items);
@@ -69,44 +72,115 @@ export function WorkflowsPage() {
 
   function addStep() {
     setDesignerError(null);
-    const label = stepLabel.trim() || ACTION_LABELS[stepAction] || stepAction;
-    if (draftSteps.some((s) => s.label === label)) {
-      setDesignerError(`Ya hay un bloque con la etiqueta '${label}' en este borrador.`);
-      return;
-    }
     const id = `step_${Math.random().toString(36).slice(2, 10)}`;
-    const dependsOnIds = dependsOn.map((depLabel) => draftSteps.find((s) => s.label === depLabel)?.id).filter(
-      (v): v is string => Boolean(v),
-    );
+    const label = `Bloque ${draftSteps.length + 1}`;
     setDraftSteps((prev) => [
       ...prev,
-      { id, label, action: stepAction, params: {}, depends_on: dependsOnIds, trigger_rule: dependsOnIds.length ? triggerRule : "all_success" },
+      { id, label, action: "extract_bc", params: {}, depends_on: [], trigger_rule: "all_success" },
     ]);
-    setStepLabel("");
-    setDependsOn([]);
+    setSelectedStepId(id);
+  }
+
+  function updateStep(id: string, patch: Partial<StepDefinition>) {
+    setDraftSteps((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
   }
 
   function removeStep(id: string) {
-    setDraftSteps((prev) => prev.filter((s) => s.id !== id));
+    setDraftSteps((prev) =>
+      prev.filter((s) => s.id !== id).map((s) => ({ ...s, depends_on: s.depends_on.filter((d) => d !== id) })),
+    );
+    setSelectedStepId((cur) => (cur === id ? null : cur));
+  }
+
+  /** Client-side mirror of webapp/workflows.py:_validate_steps()'s cycle
+   * check (Kahn's algorithm) -- lets the diagram reject a connection
+   * immediately instead of waiting for a round trip to find out the save
+   * would be rejected. */
+  function wouldCreateCycle(steps: StepDefinition[]): boolean {
+    const indegree = new Map(steps.map((s) => [s.id, 0]));
+    const graph = new Map<string, string[]>(steps.map((s) => [s.id, []]));
+    for (const s of steps) {
+      for (const dep of s.depends_on) {
+        graph.get(dep)?.push(s.id);
+        indegree.set(s.id, (indegree.get(s.id) ?? 0) + 1);
+      }
+    }
+    const queue = [...indegree.entries()].filter(([, d]) => d === 0).map(([id]) => id);
+    let visited = 0;
+    while (queue.length > 0) {
+      const node = queue.pop() as string;
+      visited += 1;
+      for (const next of graph.get(node) ?? []) {
+        indegree.set(next, (indegree.get(next) ?? 0) - 1);
+        if (indegree.get(next) === 0) queue.push(next);
+      }
+    }
+    return visited !== steps.length;
+  }
+
+  function connectSteps(sourceId: string, targetId: string) {
+    setDesignerError(null);
+    setDraftSteps((prev) => {
+      const target = prev.find((s) => s.id === targetId);
+      if (!target || target.depends_on.includes(sourceId)) return prev;
+      const next = prev.map((s) => (s.id === targetId ? { ...s, depends_on: [...s.depends_on, sourceId] } : s));
+      if (wouldCreateCycle(next)) {
+        setDesignerError("Esa conexión crearía una dependencia circular entre bloques.");
+        return prev;
+      }
+      return next;
+    });
+  }
+
+  function removeDependency(sourceId: string, targetId: string) {
+    setDraftSteps((prev) =>
+      prev.map((s) => (s.id === targetId ? { ...s, depends_on: s.depends_on.filter((d) => d !== sourceId) } : s)),
+    );
   }
 
   async function saveWorkflow(e: React.FormEvent) {
     e.preventDefault();
     setDesignerError(null);
     try {
-      await createWorkflow(workflowName, draftSteps);
+      if (editingWorkflowId) {
+        await updateWorkflow(editingWorkflowId, workflowName, draftSteps);
+      } else {
+        await createWorkflow(workflowName, draftSteps);
+      }
       setDraftSteps([]);
       setWorkflowName("");
+      setEditingWorkflowId(null);
+      setSelectedStepId(null);
       await reloadWorkflows();
     } catch (err) {
       setDesignerError(err instanceof ApiError ? err.message : "No se pudo guardar el flujo.");
     }
   }
 
+  function editWorkflow(wf: Workflow) {
+    setDesignerError(null);
+    setEditingWorkflowId(wf.id);
+    setWorkflowName(wf.name);
+    setDraftSteps(wf.steps);
+    setSelectedStepId(null);
+  }
+
+  function cancelEdit() {
+    setEditingWorkflowId(null);
+    setWorkflowName("");
+    setDraftSteps([]);
+    setSelectedStepId(null);
+  }
+
+  function discardDraft() {
+    setDraftSteps([]);
+    setSelectedStepId(null);
+  }
+
   async function launchWorkflow(id: string) {
     setLaunchError(null);
     try {
-      await runWorkflow(id);
+      await runWorkflow(id, notifyByWorkflow[id] ?? false);
     } catch (err) {
       setLaunchError(err instanceof ApiError ? err.message : "No se pudo lanzar el flujo.");
     }
@@ -139,80 +213,79 @@ export function WorkflowsPage() {
     <section>
       <h1>Flujos</h1>
       <p>
-        Compón un flujo añadiendo bloques uno a uno. Un bloque sin "depende de" se lanza en paralelo con los demás
-        bloques sin dependencias; uno con dependencias espera a que todas terminen antes de decidir si se lanza.
+        Añade bloques y arrastra desde el borde derecho de un bloque hasta el izquierdo de otro para marcar una
+        dependencia. Haz clic en un bloque para editarlo, o en una conexión para quitarla. Un bloque sin dependencias
+        se lanza en paralelo con los demás; uno con dependencias espera a que todas terminen antes de decidir si se
+        lanza.
       </p>
 
       {isAdmin ? (
         <>
-          <h2>Diseñar un flujo nuevo</h2>
+          <h2>{editingWorkflowId ? "Editar flujo guardado" : "Diseñar un flujo nuevo"}</h2>
           {designerError && <div className={formStyles.errorBanner}>{designerError}</div>}
-          <div className={formStyles.card}>
-            <div className={formStyles.field}>
-              <label htmlFor="step_label">Etiqueta del bloque</label>
-              <input id="step_label" type="text" value={stepLabel} onChange={(e) => setStepLabel(e.target.value)} />
-            </div>
-            <div className={formStyles.field}>
-              <label htmlFor="step_action">Acción del bloque</label>
-              <select id="step_action" value={stepAction} onChange={(e) => setStepAction(e.target.value)}>
-                {Object.entries(ACTION_LABELS).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className={formStyles.field}>
-              <label htmlFor="depends_on">Depende de</label>
-              <select
-                id="depends_on"
-                multiple
-                className={formStyles.multiselect}
-                value={dependsOn}
-                onChange={(e) => setDependsOn(Array.from(e.target.selectedOptions, (o) => o.value))}
-              >
-                {draftSteps.map((s) => (
-                  <option key={s.id} value={s.label}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {dependsOn.length > 0 && (
-              <div className={formStyles.field}>
-                <label htmlFor="trigger_rule">¿Cuándo lanzar este bloque?</label>
-                <select
-                  id="trigger_rule"
-                  value={triggerRule}
-                  onChange={(e) => setTriggerRule(e.target.value as "all_success" | "always")}
-                >
-                  <option value="all_success">Solo si todas sus dependencias tuvieron éxito</option>
-                  <option value="always">Aunque alguna dependencia haya fallado</option>
-                </select>
-              </div>
-            )}
-            <button type="button" className={formStyles.submit} onClick={addStep}>
-              Añadir bloque al flujo
-            </button>
-          </div>
+
+          <button type="button" className={formStyles.submit} onClick={addStep} style={{ marginBottom: 12 }}>
+            Añadir bloque al flujo
+          </button>
 
           {draftSteps.length > 0 && (
             <>
-              <h3>Bloques del borrador actual</h3>
-              {draftSteps.map((s) => {
-                const depLabels = draftSteps.filter((d) => s.depends_on.includes(d.id)).map((d) => d.label);
-                return (
-                  <div className={styles.stepRow} key={s.id}>
-                    <strong>{s.label}</strong>
-                    <span className={styles.stepMeta}>
-                      ({ACTION_LABELS[s.action]}) — {depLabels.length ? `depende de: ${depLabels.join(", ")}` : "sin dependencias"}
-                    </span>
-                    <button type="button" className={styles.removeBtn} onClick={() => removeStep(s.id)}>
-                      Quitar
-                    </button>
+              <WorkflowDiagram
+                steps={draftSteps}
+                actionLabels={ACTION_LABELS}
+                selectedStepId={selectedStepId}
+                onSelectStep={setSelectedStepId}
+                onConnectSteps={connectSteps}
+                onRemoveDependency={removeDependency}
+                testId="designer-diagram"
+              />
+
+              {selectedStep && (
+                <div className={formStyles.card}>
+                  <div className={formStyles.field}>
+                    <label htmlFor="edit_step_label">Etiqueta del bloque seleccionado</label>
+                    <input
+                      id="edit_step_label"
+                      type="text"
+                      value={selectedStep.label}
+                      onChange={(e) => updateStep(selectedStep.id, { label: e.target.value })}
+                    />
                   </div>
-                );
-              })}
+                  <div className={formStyles.field}>
+                    <label htmlFor="edit_step_action">Acción del bloque seleccionado</label>
+                    <select
+                      id="edit_step_action"
+                      value={selectedStep.action}
+                      onChange={(e) => updateStep(selectedStep.id, { action: e.target.value })}
+                    >
+                      {Object.entries(ACTION_LABELS).map(([key, label]) => (
+                        <option key={key} value={key}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {selectedStep.depends_on.length > 0 && (
+                    <div className={formStyles.field}>
+                      <label htmlFor="edit_step_trigger_rule">¿Cuándo lanzar este bloque?</label>
+                      <select
+                        id="edit_step_trigger_rule"
+                        value={selectedStep.trigger_rule}
+                        onChange={(e) =>
+                          updateStep(selectedStep.id, { trigger_rule: e.target.value as "all_success" | "always" })
+                        }
+                      >
+                        <option value="all_success">Solo si todas sus dependencias tuvieron éxito</option>
+                        <option value="always">Aunque alguna dependencia haya fallado</option>
+                      </select>
+                    </div>
+                  )}
+                  <button type="button" className={styles.btnDanger} onClick={() => removeStep(selectedStep.id)}>
+                    Quitar bloque
+                  </button>
+                </div>
+              )}
+
               <form className={formStyles.card} onSubmit={saveWorkflow} style={{ marginTop: 12 }}>
                 <div className={formStyles.field}>
                   <label htmlFor="workflow_name">Nombre del flujo</label>
@@ -224,10 +297,15 @@ export function WorkflowsPage() {
                   />
                 </div>
                 <button type="submit" className={formStyles.submit}>
-                  Guardar flujo
+                  {editingWorkflowId ? "Guardar cambios" : "Guardar flujo"}
                 </button>
-                <button type="button" className={styles.btn} style={{ marginLeft: 8 }} onClick={() => setDraftSteps([])}>
-                  Descartar borrador
+                <button
+                  type="button"
+                  className={styles.btn}
+                  style={{ marginLeft: 8 }}
+                  onClick={() => (editingWorkflowId ? cancelEdit() : discardDraft())}
+                >
+                  {editingWorkflowId ? "Cancelar edición" : "Descartar borrador"}
                 </button>
               </form>
             </>
@@ -248,8 +326,19 @@ export function WorkflowsPage() {
               <strong>{wf.name}</strong>
               <span className={styles.stepMeta}>{wf.steps.length} bloque(s)</span>
               {canOperate && (
-                <button type="button" className={styles.btnPrimary} onClick={() => void launchWorkflow(wf.id)}>
-                  Lanzar flujo
+                <>
+                  <NotifyCheckbox
+                    checked={notifyByWorkflow[wf.id] ?? false}
+                    onChange={(checked) => setNotifyByWorkflow((prev) => ({ ...prev, [wf.id]: checked }))}
+                  />
+                  <button type="button" className={styles.btnPrimary} onClick={() => void launchWorkflow(wf.id)}>
+                    Lanzar flujo
+                  </button>
+                </>
+              )}
+              {isAdmin && (
+                <button type="button" className={styles.btn} onClick={() => editWorkflow(wf)}>
+                  Editar flujo
                 </button>
               )}
               {isAdmin && (
@@ -258,12 +347,7 @@ export function WorkflowsPage() {
                 </button>
               )}
             </div>
-            {wf.steps.map((s) => (
-              <div key={s.id} className={styles.stepMeta}>
-                {s.label} ({ACTION_LABELS[s.action] ?? s.action})
-                {s.depends_on.length > 0 && ` — depende de ${s.depends_on.length} bloque(s)`}
-              </div>
-            ))}
+            <WorkflowDiagram steps={wf.steps} actionLabels={ACTION_LABELS} readOnly height={200} />
           </div>
         ))
       )}
@@ -294,11 +378,13 @@ export function WorkflowsPage() {
                   </button>
                 )}
               </div>
-              {run.steps.map((s) => (
-                <div key={s.id} className={styles.stepMeta}>
-                  {s.label} — <StatusBadge status={s.status} />
-                </div>
-              ))}
+              <WorkflowDiagram
+                steps={run.steps}
+                actionLabels={ACTION_LABELS}
+                stepStatuses={Object.fromEntries(run.steps.map((s) => [s.id, s.status]))}
+                readOnly
+                height={200}
+              />
             </div>
           );
         })

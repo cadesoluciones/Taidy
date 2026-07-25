@@ -17,6 +17,7 @@ class ExtractBcRequest(BaseModel):
     reset_watermarks: bool = False
     checkpoint_path: str = ""
     verbose: bool = False
+    notify: bool = False
 
 
 class UploadBcRequest(BaseModel):
@@ -24,6 +25,7 @@ class UploadBcRequest(BaseModel):
     dry_run: bool = False
     skip_existing: bool = False
     verbose: bool = False
+    notify: bool = False
 
 
 class SyncBcRequest(BaseModel):
@@ -34,6 +36,7 @@ class SyncBcRequest(BaseModel):
     dry_run: bool = False
     skip_existing: bool = False
     verbose: bool = False
+    notify: bool = False
 
 
 class ExtractFactorialRequest(BaseModel):
@@ -48,6 +51,7 @@ class ExtractFactorialRequest(BaseModel):
     reset_all_checkpoints: bool = False
     dry_run: bool = False
     verbose: bool = False
+    notify: bool = False
 
 
 class UploadFactorialRequest(BaseModel):
@@ -56,6 +60,7 @@ class UploadFactorialRequest(BaseModel):
     dry_run: bool = False
     skip_existing: bool = False
     verbose: bool = False
+    notify: bool = False
 
 
 class SyncFactorialRequest(BaseModel):
@@ -69,6 +74,7 @@ class SyncFactorialRequest(BaseModel):
     dry_run: bool = False
     skip_existing: bool = False
     verbose: bool = False
+    notify: bool = False
 
 
 class RunPipelineRequest(BaseModel):
@@ -76,6 +82,7 @@ class RunPipelineRequest(BaseModel):
     wait: bool = True
     poll_seconds: int = 15
     verbose: bool = False
+    notify: bool = False
 
 
 class TableStatusOut(BaseModel):

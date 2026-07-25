@@ -13,6 +13,13 @@ build for the given form values (copied from its actual source, not
 approximated), vs. the API's Pydantic request model .model_dump() (plus
 the same date -> isoformat() step api/routers/tasks.py applies) for
 equivalent input.
+
+NEW-01 added an opt-in `notify` field to every request model that the
+Streamlit forms never gained (it's a React-only feature per the project
+owner's decision -- see webapp/notifications.py). Each comparison below
+pops it off after asserting it defaults to False; the notify-flag plumbing
+itself (webapp.tasks.launch() stripping it before argv building, and
+firing a notification on completion) is covered by webapp/tests/test_notifications.py.
 """
 
 from __future__ import annotations
@@ -61,12 +68,14 @@ def test_extract_bc_params_match_streamlit_form():
         verbose=False,
     ).model_dump()
     api_params["page_size"] = api_params["page_size"] or None
+    assert api_params.pop("notify") is False
     assert api_params == streamlit_params
 
 
 def test_upload_bc_params_match_streamlit_form():
     streamlit_params = dict(output_dir="./exports", dry_run=False, skip_existing=True, verbose=False)
     api_params = UploadBcRequest(output_dir="./exports", dry_run=False, skip_existing=True, verbose=False).model_dump()
+    assert api_params.pop("notify") is False
     assert api_params == streamlit_params
 
 
@@ -77,6 +86,7 @@ def test_sync_bc_params_match_streamlit_form():
     api_params = SyncBcRequest(
         tables=None, output_dir="./exports", mode="full", parallel=1, dry_run=True, skip_existing=False, verbose=False
     ).model_dump()
+    assert api_params.pop("notify") is False
     assert api_params == streamlit_params
 
 
@@ -110,6 +120,7 @@ def test_extract_factorial_params_match_streamlit_form():
     ).model_dump()
     api_params["start_on"] = api_params["start_on"].isoformat()
     api_params["end_on"] = api_params["end_on"].isoformat()
+    assert api_params.pop("notify") is False
     assert api_params == streamlit_params
 
 
@@ -120,6 +131,7 @@ def test_upload_factorial_params_match_streamlit_form():
     api_params = UploadFactorialRequest(
         output_dir="./exports_factorial", tables=["factorial_employees"], dry_run=False, skip_existing=True, verbose=False
     ).model_dump()
+    assert api_params.pop("notify") is False
     assert api_params == streamlit_params
 
 
@@ -151,10 +163,12 @@ def test_sync_factorial_params_match_streamlit_form():
     ).model_dump()
     api_params["start_on"] = api_params["start_on"].isoformat()
     api_params["end_on"] = api_params["end_on"].isoformat()
+    assert api_params.pop("notify") is False
     assert api_params == streamlit_params
 
 
 def test_run_pipeline_params_match_streamlit_form():
     streamlit_params = dict(pipeline="Pipeline_CADE", wait=True, poll_seconds=15, verbose=False)
     api_params = RunPipelineRequest(pipeline="Pipeline_CADE", wait=True, poll_seconds=15, verbose=False).model_dump()
+    assert api_params.pop("notify") is False
     assert api_params == streamlit_params

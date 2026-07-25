@@ -141,6 +141,10 @@ FACTORIAL_OVERLAP_DAYS=2      # opcional, días de solapamiento incremental glob
 # Fabric OneLake (compartido por BC y Factorial)
 FABRIC_CLIENT_SECRET=tu-fabric-secret-aqui
 CONFIG_FILE=./config.json
+
+# Notificaciones por email (opcional, ver sección "Notificaciones" más abajo)
+SMTP_USERNAME=tu-usuario-smtp
+SMTP_PASSWORD=tu-password-smtp
 ```
 
 ### Configuración en `config.json`
@@ -167,6 +171,27 @@ CONFIG_FILE=./config.json
   "max_retries": 3
 }
 ```
+
+### Notificaciones por email
+
+Al lanzar una tarea o un flujo (manual o programado) se puede marcar "Avisar por email al terminar". El aviso se
+envía a una lista fija de administradores, nunca a direcciones por usuario. Desactivado por defecto: no se envía
+nada hasta que `notifications.enabled` sea `true` y `smtp_host`/`from_address`/`admin_recipients` estén rellenos.
+Un fallo de envío nunca interrumpe la tarea ni el flujo — solo queda registrado en el log del servidor.
+
+```json
+"notifications": {
+  "enabled": true,
+  "smtp_host": "smtp.tu-proveedor.com",
+  "smtp_port": 587,
+  "use_tls": true,
+  "from_address": "taidy@tuempresa.com",
+  "admin_recipients": ["admin1@tuempresa.com", "admin2@tuempresa.com"]
+}
+```
+
+Las credenciales del servidor SMTP (si lo requiere) van en `.env` como `SMTP_USERNAME`/`SMTP_PASSWORD`, nunca en
+`config.json`.
 
 ### Configuración de Tablas BC
 

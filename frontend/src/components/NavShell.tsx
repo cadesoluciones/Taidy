@@ -1,5 +1,23 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import {
+  Activity,
+  CalendarClock,
+  Download,
+  GitFork,
+  Home,
+  History as HistoryIcon,
+  LogOut,
+  Menu,
+  ShieldCheck,
+  Upload,
+  UserCircle,
+  Users,
+  Workflow,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import { RefreshCw as Sync } from "lucide-react";
 
 import { ROLE_ADMIN } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
@@ -8,6 +26,7 @@ import styles from "./NavShell.module.css";
 interface NavItem {
   to: string;
   label: string;
+  icon: LucideIcon;
 }
 
 interface NavSection {
@@ -16,26 +35,29 @@ interface NavSection {
 }
 
 const BASE_SECTIONS: NavSection[] = [
-  { label: "", items: [{ to: "/", label: "Inicio" }] },
+  { label: "", items: [{ to: "/", label: "Inicio", icon: Home }] },
   {
     label: "Ejecutar",
     items: [
-      { to: "/ejecutar/bc-extraer", label: "BC · Extraer" },
-      { to: "/ejecutar/bc-subir", label: "BC · Subir" },
-      { to: "/ejecutar/bc-sync", label: "BC · Sync" },
-      { to: "/ejecutar/factorial-extraer", label: "Factorial · Extraer" },
-      { to: "/ejecutar/factorial-subir", label: "Factorial · Subir" },
-      { to: "/ejecutar/factorial-sync", label: "Factorial · Sync" },
-      { to: "/ejecutar/pipelines", label: "Fabric · Pipelines" },
+      { to: "/ejecutar/bc-extraer", label: "BC · Extraer", icon: Download },
+      { to: "/ejecutar/bc-subir", label: "BC · Subir", icon: Upload },
+      { to: "/ejecutar/bc-sync", label: "BC · Sync", icon: Sync },
+      { to: "/ejecutar/factorial-extraer", label: "Factorial · Extraer", icon: Download },
+      { to: "/ejecutar/factorial-subir", label: "Factorial · Subir", icon: Upload },
+      { to: "/ejecutar/factorial-sync", label: "Factorial · Sync", icon: Sync },
+      { to: "/ejecutar/pipelines", label: "Fabric · Pipelines", icon: Workflow },
     ],
   },
-  { label: "Flujos", items: [{ to: "/flujos", label: "Flujos" }] },
-  { label: "Programación", items: [{ to: "/programacion", label: "Tareas programadas" }] },
+  { label: "Flujos", items: [{ to: "/flujos", label: "Flujos", icon: GitFork }] },
+  {
+    label: "Programación",
+    items: [{ to: "/programacion", label: "Tareas programadas", icon: CalendarClock }],
+  },
   {
     label: "Actividad",
     items: [
-      { to: "/actividad/tareas-en-curso", label: "Tareas en curso" },
-      { to: "/actividad/historial", label: "Historial" },
+      { to: "/actividad/tareas-en-curso", label: "Tareas en curso", icon: Activity },
+      { to: "/actividad/historial", label: "Historial", icon: HistoryIcon },
     ],
   },
 ];
@@ -43,12 +65,15 @@ const BASE_SECTIONS: NavSection[] = [
 const ADMIN_SECTION: NavSection = {
   label: "Administración",
   items: [
-    { to: "/administracion/usuarios", label: "Usuarios" },
-    { to: "/administracion/auditoria", label: "Auditoría" },
+    { to: "/administracion/usuarios", label: "Usuarios", icon: Users },
+    { to: "/administracion/auditoria", label: "Auditoría", icon: ShieldCheck },
   ],
 };
 
-const ACCOUNT_SECTION: NavSection = { label: "Cuenta", items: [{ to: "/cuenta", label: "Mi cuenta" }] };
+const ACCOUNT_SECTION: NavSection = {
+  label: "Cuenta",
+  items: [{ to: "/cuenta", label: "Mi cuenta", icon: UserCircle }],
+};
 
 export function NavShell() {
   const { user, logout } = useAuth();
@@ -80,7 +105,7 @@ export function NavShell() {
             aria-expanded={mobileNavOpen}
             onClick={() => setMobileNavOpen((v) => !v)}
           >
-            ☰
+            {mobileNavOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
           <span className={styles.brandName}>Taidy</span>
           <span className={styles.pageTitle}>Panel de datos</span>
@@ -103,6 +128,7 @@ export function NavShell() {
             </div>
           )}
           <button type="button" className={styles.logoutButton} onClick={handleLogout}>
+            <LogOut size={14} />
             Cerrar sesión
           </button>
         </div>
@@ -126,6 +152,7 @@ export function NavShell() {
                 end={item.to === "/"}
                 className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ""}`}
               >
+                <item.icon size={16} aria-hidden="true" />
                 {item.label}
               </NavLink>
             ))}

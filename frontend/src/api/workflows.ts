@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPost } from "./client";
+import { apiDelete, apiGet, apiPatch, apiPost } from "./client";
 import type { StepStatus } from "./types";
 
 export interface StepDefinition {
@@ -47,12 +47,16 @@ export function createWorkflow(name: string, steps: StepDefinition[]): Promise<W
   return apiPost<Workflow>("/workflows", { name, steps });
 }
 
+export function updateWorkflow(id: string, name: string, steps: StepDefinition[]): Promise<Workflow> {
+  return apiPatch<Workflow>(`/workflows/${id}`, { name, steps });
+}
+
 export function deleteWorkflow(id: string): Promise<void> {
   return apiDelete<void>(`/workflows/${id}`);
 }
 
-export function runWorkflow(id: string): Promise<WorkflowRun> {
-  return apiPost<WorkflowRun>(`/workflows/${id}/run`);
+export function runWorkflow(id: string, notify = false): Promise<WorkflowRun> {
+  return apiPost<WorkflowRun>(`/workflows/${id}/run`, { notify });
 }
 
 export function fetchWorkflowRuns(): Promise<{ items: WorkflowRun[] }> {

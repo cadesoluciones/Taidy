@@ -17,6 +17,7 @@ from webapp.users_db import ROLE_ADMIN, ROLE_OPERATOR
 from ..dependencies import CurrentUser, get_current_user, require_any_role, require_role
 from ..schemas.workflows import (
     CreateWorkflowRequest,
+    RunWorkflowRequest,
     StepRunOut,
     WorkflowListOut,
     WorkflowOut,
@@ -44,15 +45,30 @@ def create_workflow(payload: CreateWorkflowRequest) -> WorkflowOut:
     return WorkflowOut(**workflow)
 
 
+@router.patch("/{workflow_id}", response_model=WorkflowOut, dependencies=[Depends(require_role(ROLE_ADMIN))])
+def update_workflow(workflow_id: str, payload: CreateWorkflowRequest) -> WorkflowOut:
+    try:
+        workflow = workflows_module.update_workflow(workflow_id, payload.name, [s.model_dump() for s in payload.steps])
+    except ValueError as exc:
+        detail = str(exc)
+        code = status.HTTP_404_NOT_FOUND if detail.startswith("Flujo desconocido") else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=code, detail=detail)
+    return WorkflowOut(**workflow)
+
+
 @router.delete("/{workflow_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_role(ROLE_ADMIN))])
 def delete_workflow(workflow_id: str) -> None:
     workflows_module.delete_workflow(workflow_id)
 
 
 @router.post("/{workflow_id}/run", response_model=WorkflowRunOut, dependencies=[Depends(require_any_role(_ROLES_OPERATE))])
-def run_workflow(workflow_id: str, current: CurrentUser = Depends(get_current_user)) -> WorkflowRunOut:
+def run_workflow(
+    workflow_id: str,
+    payload: RunWorkflowRequest = RunWorkflowRequest(),
+    current: CurrentUser = Depends(get_current_user),
+) -> WorkflowRunOut:
     try:
-        run = workflow_engine.start_workflow(workflow_id, current.username)
+        run = workflow_engine.start_workflow(workflow_id, current.username, notify=payload.notify)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except RuntimeError as exc:

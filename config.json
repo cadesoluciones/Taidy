@@ -50,5 +50,13 @@
       { "name": "Pipeline_CADE_Silver", "item_id": "a3abfe06-31a3-4395-b601-a16a3f505fbe" },
       { "name": "Pipeline_CADE_Gold", "item_id": "00200a98-6f68-4d49-aae3-abea11c88ca3" }
     ]
+  },
+  "notifications": {
+    "enabled": false,
+    "smtp_host": "",
+    "smtp_port": 587,
+    "use_tls": true,
+    "from_address": "",
+    "admin_recipients": []
   }
 }

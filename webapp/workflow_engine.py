@@ -23,7 +23,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from webapp import history, tasks, workflows  # noqa: E402
+from webapp import history, notifications, tasks, workflows  # noqa: E402
 
 _POLL_SECONDS = 2
 _TERMINAL_TASK_STATUSES = {"ok", "error", "stopped"}
@@ -53,6 +53,7 @@ class WorkflowRun:
     finished_at: Optional[str] = None
     status: str = "running"  # running | ok | error | stopped
     stop_requested: bool = False
+    notify: bool = False
 
     def step_status_map(self) -> Dict[str, str]:
         return {sid: s.status for sid, s in self.steps.items()}
@@ -98,7 +99,7 @@ def workflow_already_running(workflow_id: str) -> Optional[WorkflowRun]:
     return None
 
 
-def start_workflow(workflow_id: str, triggered_by: str) -> WorkflowRun:
+def start_workflow(workflow_id: str, triggered_by: str, notify: bool = False) -> WorkflowRun:
     workflow = workflows.get_workflow(workflow_id)
     if workflow is None:
         raise ValueError(f"Flujo desconocido: {workflow_id}")
@@ -125,6 +126,7 @@ def start_workflow(workflow_id: str, triggered_by: str) -> WorkflowRun:
         triggered_by=triggered_by,
         started_at=datetime.now(timezone.utc).isoformat(),
         steps=steps,
+        notify=notify,
     )
     _register(run)
 
@@ -207,15 +209,23 @@ def _finalize(run: WorkflowRun) -> None:
         run.status = "ok"
 
     ok_count = sum(1 for s in run.steps.values() if s.status == "ok")
+    message = f"Flujo '{run.workflow_name}': {ok_count}/{len(run.steps)} bloque(s) completados correctamente."
     history.record_run(
         action="run_workflow",
         source=run.triggered_by,
         status=run.status,
         ok=run.status == "ok",
-        message=f"Flujo '{run.workflow_name}': {ok_count}/{len(run.steps)} bloque(s) completados correctamente.",
+        message=message,
         log="",
         duration_seconds=run.duration_seconds(),
     )
+    if run.notify:
+        notifications.notify_workflow_finished(
+            workflow_name=run.workflow_name,
+            triggered_by=run.triggered_by,
+            status=run.status,
+            message=message,
+        )
 
 
 def stop_workflow(run_id: str) -> bool:

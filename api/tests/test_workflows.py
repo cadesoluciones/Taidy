@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import time
 
-from webapp import users_db
+from webapp import users_db, workflow_engine
 from webapp.tests.conftest import make_user
 
 
@@ -37,6 +37,65 @@ def test_admin_can_create_list_and_delete_workflow(isolated_state, client):
 
     assert client.delete(f"/workflows/{workflow_id}").status_code == 204
     assert client.get("/workflows").json()["items"] == []
+
+
+def test_admin_can_update_an_existing_workflow(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    created = client.post("/workflows", json={"name": "Flujo 1", "steps": _SIMPLE_STEPS}).json()
+    workflow_id, created_at = created["id"], created["created_at"]
+
+    new_steps = [
+        {"id": "a", "label": "Paso A", "action": "extract_bc", "params": {}, "depends_on": [], "trigger_rule": "all_success"},
+        {"id": "b", "label": "Paso B", "action": "upload_bc", "params": {}, "depends_on": ["a"], "trigger_rule": "all_success"},
+    ]
+    updated = client.patch(f"/workflows/{workflow_id}", json={"name": "Flujo 1 renombrado", "steps": new_steps})
+    assert updated.status_code == 200
+    body = updated.json()
+    assert body["id"] == workflow_id
+    assert body["name"] == "Flujo 1 renombrado"
+    assert len(body["steps"]) == 2
+    # id and created_at are preserved -- schedules/history referencing this
+    # workflow_id (and the original creation timestamp) must stay valid.
+    assert body["created_at"] == created_at
+
+    listed = client.get("/workflows").json()["items"]
+    assert len(listed) == 1
+    assert listed[0]["name"] == "Flujo 1 renombrado"
+
+
+def test_update_unknown_workflow_is_404(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    resp = client.patch("/workflows/does-not-exist", json={"name": "X", "steps": _SIMPLE_STEPS})
+    assert resp.status_code == 404
+
+
+def test_update_with_cyclic_steps_is_rejected(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    workflow_id = client.post("/workflows", json={"name": "Flujo 1", "steps": _SIMPLE_STEPS}).json()["id"]
+
+    cyclic_steps = [
+        {"id": "a", "label": "A", "action": "extract_bc", "params": {}, "depends_on": ["b"], "trigger_rule": "all_success"},
+        {"id": "b", "label": "B", "action": "extract_bc", "params": {}, "depends_on": ["a"], "trigger_rule": "all_success"},
+    ]
+    resp = client.patch(f"/workflows/{workflow_id}", json={"name": "Cíclico", "steps": cyclic_steps})
+    assert resp.status_code == 400
+
+
+def test_operator_cannot_update_workflow(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    workflow_id = client.post("/workflows", json={"name": "Flujo 1", "steps": _SIMPLE_STEPS}).json()["id"]
+
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.patch(f"/workflows/{workflow_id}", json={"name": "Intento", "steps": _SIMPLE_STEPS})
+    assert resp.status_code == 403
 
 
 def test_cycle_is_rejected(isolated_state, client):
@@ -74,6 +133,21 @@ def test_operator_can_launch_and_stop_a_workflow(isolated_state, client, fake_su
         if next(r for r in current if r["id"] == run_id)["status"] != "running":
             break
         time.sleep(0.2)
+
+
+def test_run_workflow_notify_flag_reaches_the_run(isolated_state, client, fake_subprocess):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    workflow_id = client.post("/workflows", json={"name": "Flujo 1", "steps": _SIMPLE_STEPS}).json()["id"]
+
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    run = client.post(f"/workflows/{workflow_id}/run", json={"notify": True})
+    assert run.status_code == 200
+    run_id = run.json()["id"]
+
+    assert workflow_engine.get_run(run_id).notify is True
 
 
 def test_reader_cannot_stop_someone_elses_workflow(isolated_state, client, fake_subprocess):

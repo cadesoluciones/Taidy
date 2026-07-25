@@ -104,13 +104,19 @@ Order (each a separately testable, committable slice):
    already uses (Inicio; Ejecutar ×7; Flujos; Programación; Actividad ×2;
    Administración ×2, Admin-only; Cuenta) — same information architecture,
    not reinvented. Each pairs with its FastAPI router from Phase 3.
-3. **Not done** — Flujos gets the interactive-diagram upgrade (see
-   `ARCHITECTURE.md`) as a deliberate follow-up once its baseline
-   create/list/launch/delete parity is in place. Baseline parity (step 2)
-   is done and tested; the interactive diagram itself, the "edit an
-   existing saved workflow" capability (ND-11), and email notifications
-   (the owner's other new-feature ask) are **not started**. Tracked as
-   `NEW-01` in `FUNCTIONAL_EQUIVALENCE.md`.
+3. **Done** — Flujos' interactive-diagram upgrade (see `ARCHITECTURE.md`),
+   built as a follow-up once baseline create/list/launch/delete parity was
+   in place: a `@xyflow/react` diagram (click a block to edit it, drag
+   between blocks to set a dependency, click a connection to remove it)
+   used for designing, editing (`PATCH /workflows/{id}`, ND-11), and
+   viewing saved/running workflows; modern icons (`lucide-react`) app-wide;
+   and opt-in email notifications on task/workflow completion
+   (`webapp/notifications.py`, a `notify` flag threaded through
+   `tasks.launch()`/`workflow_engine.start_workflow()`, a fixed admin
+   distribution list per the owner's decision). Tracked as `NEW-01` in
+   `FUNCTIONAL_EQUIVALENCE.md`; verified via unit tests, API tests, and
+   real-browser Playwright runs (`workflow-diagram.spec.ts`,
+   `workflows-and-notify.spec.ts`).
 
 ## Phase 5 — Security pass (done)
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
-import { fetchHistory, type HistoryEntry, type HistoryPage as HistoryPageData } from "../../api/history";
+import { fetchHistory, type HistoryPage as HistoryPageData } from "../../api/history";
+import { OutcomeIcon } from "../../components/OutcomeIcon";
 import styles from "./HistoryPage.module.css";
 
 export function HistoryPage() {
@@ -15,12 +16,6 @@ export function HistoryPage() {
       .then(setResult)
       .finally(() => setIsLoading(false));
   }, [resultFilter, page]);
-
-  function icon(entry: HistoryEntry): string {
-    if (entry.ok) return "✅";
-    if (entry.status === "stopped") return "⏹️";
-    return "❌";
-  }
 
   return (
     <section>
@@ -55,7 +50,7 @@ export function HistoryPage() {
       {result?.items.map((entry, i) => (
         <div className={styles.entry} key={`${entry.finished_at}-${i}`}>
           <div className={styles.entryHead}>
-            <span>{icon(entry)}</span>
+            <OutcomeIcon ok={entry.ok} status={entry.status} />
             <strong>{entry.action}</strong>
             <span>— {entry.source} —</span>
             <span>{entry.finished_at}</span>

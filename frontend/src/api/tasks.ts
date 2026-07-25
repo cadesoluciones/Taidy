@@ -45,6 +45,7 @@ export interface ExtractBcInput {
   reset_watermarks?: boolean;
   checkpoint_path?: string;
   verbose?: boolean;
+  notify?: boolean;
 }
 export function extractBc(input: ExtractBcInput): Promise<Task> {
   return apiPost<Task>("/tasks/extract-bc", input);
@@ -55,6 +56,7 @@ export interface UploadBcInput {
   dry_run?: boolean;
   skip_existing?: boolean;
   verbose?: boolean;
+  notify?: boolean;
 }
 export function uploadBc(input: UploadBcInput): Promise<Task> {
   return apiPost<Task>("/tasks/upload-bc", input);
@@ -68,6 +70,7 @@ export interface SyncBcInput {
   dry_run?: boolean;
   skip_existing?: boolean;
   verbose?: boolean;
+  notify?: boolean;
 }
 export function syncBc(input: SyncBcInput): Promise<Task> {
   return apiPost<Task>("/tasks/sync-bc", input);
@@ -85,6 +88,7 @@ export interface ExtractFactorialInput {
   reset_all_checkpoints?: boolean;
   dry_run?: boolean;
   verbose?: boolean;
+  notify?: boolean;
 }
 export function extractFactorial(input: ExtractFactorialInput): Promise<Task> {
   return apiPost<Task>("/tasks/extract-factorial", input);
@@ -96,6 +100,7 @@ export interface UploadFactorialInput {
   dry_run?: boolean;
   skip_existing?: boolean;
   verbose?: boolean;
+  notify?: boolean;
 }
 export function uploadFactorial(input: UploadFactorialInput): Promise<Task> {
   return apiPost<Task>("/tasks/upload-factorial", input);
@@ -112,6 +117,7 @@ export interface SyncFactorialInput {
   dry_run?: boolean;
   skip_existing?: boolean;
   verbose?: boolean;
+  notify?: boolean;
 }
 export function syncFactorial(input: SyncFactorialInput): Promise<Task> {
   return apiPost<Task>("/tasks/sync-factorial", input);
@@ -122,6 +128,7 @@ export interface RunPipelineInput {
   wait?: boolean;
   poll_seconds?: number;
   verbose?: boolean;
+  notify?: boolean;
 }
 export function runPipeline(input: RunPipelineInput): Promise<Task> {
   return apiPost<Task>("/tasks/run-pipeline", input);

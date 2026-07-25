@@ -4,6 +4,7 @@ import { ApiError } from "../../api/client";
 import { fetchPipelines } from "../../api/meta";
 import { runPipeline } from "../../api/tasks";
 import formStyles from "../../components/Form.module.css";
+import { NotifyCheckbox } from "../../components/NotifyCheckbox";
 
 export function PipelinesPage() {
   const [pipelines, setPipelines] = useState<string[]>([]);
@@ -11,6 +12,7 @@ export function PipelinesPage() {
   const [wait, setWait] = useState(true);
   const [pollSeconds, setPollSeconds] = useState(15);
   const [verbose, setVerbose] = useState(false);
+  const [notify, setNotify] = useState(false);
 
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +33,7 @@ export function PipelinesPage() {
     setError(null);
     setIsSubmitting(true);
     try {
-      const task = await runPipeline({ pipeline, wait, poll_seconds: pollSeconds, verbose });
+      const task = await runPipeline({ pipeline, wait, poll_seconds: pollSeconds, verbose, notify });
       setSuccess(`Tarea iniciada (${task.id.slice(0, 8)}). Sigue el progreso en Tareas en curso.`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo lanzar el pipeline.");
@@ -80,6 +82,7 @@ export function PipelinesPage() {
             <input type="checkbox" checked={verbose} onChange={(e) => setVerbose(e.target.checked)} />
             <span>Log detallado</span>
           </label>
+          <NotifyCheckbox checked={notify} onChange={setNotify} />
           <button type="submit" className={formStyles.submit} disabled={isSubmitting}>
             {isSubmitting ? "Lanzando…" : "Lanzar pipeline"}
           </button>

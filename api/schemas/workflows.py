@@ -31,6 +31,10 @@ class CreateWorkflowRequest(BaseModel):
     steps: List[StepIn]
 
 
+class RunWorkflowRequest(BaseModel):
+    notify: bool = False
+
+
 class StepRunOut(BaseModel):
     id: str
     label: str
