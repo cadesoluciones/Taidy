@@ -76,7 +76,9 @@ export function RunningTasksPage() {
                   </button>
                 </div>
                 {expanded.has(task.id) && task.table_statuses.length > 0 && (
-                  <StepStatusGrid items={task.table_statuses} />
+                  <div className={styles.expanded}>
+                    <StepStatusGrid items={task.table_statuses} />
+                  </div>
                 )}
               </div>
             );

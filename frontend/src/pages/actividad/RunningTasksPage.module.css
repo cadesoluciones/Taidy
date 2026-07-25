@@ -57,6 +57,11 @@
   cursor: pointer;
 }
 
+.expanded {
+  flex: 1 1 100%;
+  width: 100%;
+}
+
 .emptyState {
   color: var(--color-text-muted);
   font-size: 14px;
