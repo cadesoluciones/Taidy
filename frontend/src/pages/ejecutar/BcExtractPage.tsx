@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { Settings } from "lucide-react";
 
 import { ApiError } from "../../api/client";
 import { fetchBcTables } from "../../api/meta";
@@ -8,6 +10,7 @@ import { useAuth } from "../../auth/AuthContext";
 import formStyles from "../../components/Form.module.css";
 import { NotifyCheckbox } from "../../components/NotifyCheckbox";
 import { ReadOnlyNotice } from "../../components/ReadOnlyNotice";
+import { TagMultiSelect } from "../../components/TagMultiSelect";
 
 export function BcExtractPage() {
   const { user } = useAuth();
@@ -71,20 +74,15 @@ export function BcExtractPage() {
       <form className={formStyles.card} onSubmit={handleSubmit}>
         <div className={formStyles.grid}>
           <div className={formStyles.field}>
-            <label htmlFor="tables">Tablas (vacío = todas)</label>
-            <select
-              id="tables"
-              multiple
-              className={formStyles.multiselect}
-              value={selectedTables}
-              onChange={(e) => setSelectedTables(Array.from(e.target.selectedOptions, (o) => o.value))}
-            >
-              {tables.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
+            <div className={formStyles.labelRow}>
+              <label htmlFor="tables">Tablas (vacío = todas)</label>
+              {isAdmin && (
+                <Link to="/administracion/conexiones-api" className={formStyles.manageLink}>
+                  <Settings size={12} /> Gestionar tablas
+                </Link>
+              )}
+            </div>
+            <TagMultiSelect id="tables" options={tables} selected={selectedTables} onChange={setSelectedTables} />
           </div>
           <div className={formStyles.field}>
             <label htmlFor="mode">Modo</label>

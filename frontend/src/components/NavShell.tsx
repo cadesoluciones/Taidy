@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   Activity,
   CalendarClock,
+  Database,
   Download,
   GitFork,
   Home,
@@ -39,28 +40,36 @@ interface NavSection {
 const BASE_SECTIONS: NavSection[] = [
   { label: "", items: [{ to: "/", label: "Inicio", icon: Home }] },
   {
-    label: "Ejecutar",
-    items: [
-      { to: "/ejecutar/bc-extraer", label: "BC · Extraer", icon: Download },
-      { to: "/ejecutar/bc-subir", label: "BC · Subir", icon: Upload },
-      { to: "/ejecutar/bc-sync", label: "BC · Sync", icon: Sync },
-      { to: "/ejecutar/factorial-extraer", label: "Factorial · Extraer", icon: Download },
-      { to: "/ejecutar/factorial-subir", label: "Factorial · Subir", icon: Upload },
-      { to: "/ejecutar/factorial-sync", label: "Factorial · Sync", icon: Sync },
-      { to: "/ejecutar/pipelines", label: "Fabric · Pipelines", icon: Workflow },
-    ],
-  },
-  { label: "Flujos", items: [{ to: "/flujos", label: "Flujos", icon: GitFork }] },
-  {
-    label: "Programación",
-    items: [{ to: "/programacion", label: "Tareas programadas", icon: CalendarClock }],
-  },
-  {
     label: "Actividad",
     items: [
       { to: "/actividad/tareas-en-curso", label: "Tareas en curso", icon: Activity },
       { to: "/actividad/historial", label: "Historial", icon: HistoryIcon },
     ],
+  },
+  {
+    label: "Programación",
+    items: [{ to: "/programacion", label: "Tareas programadas", icon: CalendarClock }],
+  },
+  { label: "Flujos", items: [{ to: "/flujos", label: "Flujos", icon: GitFork }] },
+  {
+    label: "Business Central",
+    items: [
+      { to: "/ejecutar/bc-extraer", label: "Extraer", icon: Download },
+      { to: "/ejecutar/bc-subir", label: "Subir", icon: Upload },
+      { to: "/ejecutar/bc-sync", label: "Sync", icon: Sync },
+    ],
+  },
+  {
+    label: "Factorial",
+    items: [
+      { to: "/ejecutar/factorial-extraer", label: "Extraer", icon: Download },
+      { to: "/ejecutar/factorial-subir", label: "Subir", icon: Upload },
+      { to: "/ejecutar/factorial-sync", label: "Sync", icon: Sync },
+    ],
+  },
+  {
+    label: "Fabric",
+    items: [{ to: "/ejecutar/pipelines", label: "Pipelines", icon: Workflow }],
   },
 ];
 
@@ -68,6 +77,7 @@ const ADMIN_SECTION: NavSection = {
   label: "Administración",
   items: [
     { to: "/administracion/usuarios", label: "Usuarios", icon: Users },
+    { to: "/administracion/conexiones-api", label: "Conexiones API", icon: Database },
     { to: "/administracion/auditoria", label: "Auditoría", icon: ShieldCheck },
   ],
 };

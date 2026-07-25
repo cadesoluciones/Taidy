@@ -32,6 +32,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from src.config_loader import load_config_data  # noqa: E402
+from webapp import table_configs  # noqa: E402
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -298,11 +299,14 @@ def parse_upload_files(log: str) -> List[TableStatus]:
 
 
 def list_bc_tables() -> List[str]:
-    return _list_table_names(_PROJECT_ROOT / "tables.yaml")
+    # Reads table_configs's own (monkeypatchable-in-tests) path variable
+    # rather than recomputing it here, so this and table_configs.py's
+    # add/delete functions can never point at two different files.
+    return _list_table_names(table_configs._BC_TABLES_PATH)
 
 
 def list_factorial_tables() -> List[str]:
-    return _list_table_names(_PROJECT_ROOT / "factorial_tables.yaml")
+    return _list_table_names(table_configs._FACTORIAL_TABLES_PATH)
 
 
 def _list_table_names(path: Path) -> List[str]:

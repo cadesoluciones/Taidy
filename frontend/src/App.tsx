@@ -11,6 +11,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { SchedulesPage } from "./pages/SchedulesPage";
 import { WorkflowsPage } from "./pages/WorkflowsPage";
 import { AuditPage } from "./pages/administracion/AuditPage";
+import { ConexionesApiPage } from "./pages/administracion/ConexionesApiPage";
 import { UsersPage } from "./pages/administracion/UsersPage";
 import { HistoryPage } from "./pages/actividad/HistoryPage";
 import { RunningTasksPage } from "./pages/actividad/RunningTasksPage";
@@ -53,6 +54,7 @@ export function App() {
               <Route element={<RequireAdmin />}>
                 <Route path="/administracion/usuarios" element={<UsersPage />} />
                 <Route path="/administracion/auditoria" element={<AuditPage />} />
+                <Route path="/administracion/conexiones-api" element={<ConexionesApiPage />} />
               </Route>
               <Route path="/cuenta" element={<AccountPage />} />
             </Route>

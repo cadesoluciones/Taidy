@@ -1,0 +1,117 @@
+.layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) 1fr;
+  gap: var(--space-4);
+  align-items: start;
+  margin-bottom: var(--space-5);
+}
+
+@media (max-width: 860px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.formPanel {
+  position: sticky;
+  top: var(--space-4);
+}
+
+.listPanel {
+  min-width: 0;
+}
+
+.editingBanner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-bg));
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-size: 13px;
+  margin-bottom: var(--space-3);
+}
+
+.cancelEditBtn {
+  margin-left: auto;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+}
+
+.cancelEditBtn:hover {
+  background: color-mix(in srgb, var(--color-primary) 20%, transparent);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.listItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  font-size: 13px;
+}
+
+.desc {
+  color: var(--color-text-muted);
+}
+
+.badge {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.itemActions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.editBtn,
+.deleteBtn {
+  flex-shrink: 0;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  background: none;
+  border-radius: var(--radius-sm);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.editBtn:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.deleteBtn {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}

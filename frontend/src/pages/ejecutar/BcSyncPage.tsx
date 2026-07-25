@@ -8,6 +8,7 @@ import { useAuth } from "../../auth/AuthContext";
 import formStyles from "../../components/Form.module.css";
 import { NotifyCheckbox } from "../../components/NotifyCheckbox";
 import { ReadOnlyNotice } from "../../components/ReadOnlyNotice";
+import { TagMultiSelect } from "../../components/TagMultiSelect";
 
 export function BcSyncPage() {
   const { user } = useAuth();
@@ -65,19 +66,7 @@ export function BcSyncPage() {
       <form className={formStyles.card} onSubmit={handleSubmit}>
         <div className={formStyles.field}>
           <label htmlFor="tables">Tablas (vacío = todas)</label>
-          <select
-            id="tables"
-            multiple
-            className={formStyles.multiselect}
-            value={selectedTables}
-            onChange={(e) => setSelectedTables(Array.from(e.target.selectedOptions, (o) => o.value))}
-          >
-            {tables.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
+          <TagMultiSelect id="tables" options={tables} selected={selectedTables} onChange={setSelectedTables} />
         </div>
         <div className={formStyles.grid}>
           <div className={formStyles.field}>

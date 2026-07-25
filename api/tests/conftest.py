@@ -24,6 +24,7 @@ from webapp import (  # noqa: E402
     auth,
     history,
     scheduler as sched_module,
+    table_configs,
     tasks,
     users_db,
     workflow_engine,
@@ -41,6 +42,8 @@ def isolated_state(tmp_path, monkeypatch):
     monkeypatch.setattr(sched_module, "_SCHEDULES_PATH", tmp_path / "schedules.json")
     monkeypatch.setattr(workflows, "_WORKFLOWS_PATH", tmp_path / "workflows.json")
     monkeypatch.setattr(history, "_HISTORY_PATH", tmp_path / "run_history.json")
+    monkeypatch.setattr(table_configs, "_BC_TABLES_PATH", tmp_path / "tables.yaml")
+    monkeypatch.setattr(table_configs, "_FACTORIAL_TABLES_PATH", tmp_path / "factorial_tables.yaml")
     users_db.init_db()
 
     with deps._SESSIONS_LOCK:
