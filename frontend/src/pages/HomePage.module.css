@@ -1,0 +1,193 @@
+.heroRow {
+  display: grid;
+  grid-template-columns: 1fr 260px;
+  grid-template-rows: auto auto;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+@media (max-width: 760px) {
+  .heroRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hero {
+  grid-column: 1;
+  grid-row: 1;
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--color-dark-panel);
+  color: var(--color-dark-panel-text);
+  padding: var(--space-6) var(--space-5);
+  min-height: 140px;
+  display: flex;
+  align-items: center;
+}
+
+@media (max-width: 760px) {
+  .hero {
+    grid-column: 1;
+    grid-row: 1;
+  }
+}
+
+.heroArt {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: var(--color-primary);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.heroContent {
+  position: relative;
+  z-index: 1;
+}
+
+.heroEyebrow {
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  opacity: 0.75;
+}
+
+.heroTitle {
+  margin: 4px 0 6px;
+  font-size: 24px;
+}
+
+.heroSubtitle {
+  margin: 0;
+  opacity: 0.8;
+  font-size: 14px;
+  max-width: 46ch;
+}
+
+.tiles {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.tile {
+  flex: 1;
+  min-width: 160px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  box-shadow: var(--shadow-card);
+}
+
+.tileIcon {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.tileValue {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.tileLabel {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.accentCard {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-primary);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 760px) {
+  .accentCard {
+    grid-column: 1;
+    grid-row: 3;
+  }
+}
+
+.accentEyebrow {
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+.accentTitle {
+  margin: 4px 0 var(--space-2);
+  font-size: 14px;
+}
+
+.accentValue {
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: var(--space-2);
+}
+
+.accentLink {
+  margin-top: auto;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.statusBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--color-dark-panel);
+  color: var(--color-dark-panel-text);
+  padding: var(--space-3) var(--space-4);
+  font-size: 13px;
+  margin-bottom: var(--space-5);
+  border-left: 4px solid var(--color-text-muted);
+}
+
+.statusBar.success {
+  border-left-color: var(--color-success);
+}
+.statusBar.warning {
+  border-left-color: var(--color-warning);
+}
+.statusBar.info {
+  border-left-color: var(--color-info);
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.entrySource {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+.sessionNote {
+  margin-top: var(--space-6);
+  color: var(--color-text-muted);
+  font-size: 13px;
+}

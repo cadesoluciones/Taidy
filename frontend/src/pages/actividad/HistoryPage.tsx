@@ -2,7 +2,14 @@ import { useEffect, useState } from "react";
 
 import { fetchHistory, type HistoryPage as HistoryPageData } from "../../api/history";
 import { OutcomeIcon } from "../../components/OutcomeIcon";
+import { Timeline, type TimelineItem } from "../../components/Timeline";
 import styles from "./HistoryPage.module.css";
+
+function toneFor(status: string): "success" | "danger" | "neutral" {
+  if (status === "ok") return "success";
+  if (status === "error") return "danger";
+  return "neutral";
+}
 
 export function HistoryPage() {
   const [result, setResult] = useState<HistoryPageData | null>(null);
@@ -47,24 +54,34 @@ export function HistoryPage() {
 
       {!isLoading && result?.items.length === 0 && <p>Ningún resultado con los filtros actuales.</p>}
 
-      {result?.items.map((entry, i) => (
-        <div className={styles.entry} key={`${entry.finished_at}-${i}`}>
-          <div className={styles.entryHead}>
-            <OutcomeIcon ok={entry.ok} status={entry.status} />
-            <strong>{entry.action}</strong>
-            <span>— {entry.source} —</span>
-            <span>{entry.finished_at}</span>
-            {entry.duration_seconds !== null && <span>· {entry.duration_seconds}s</span>}
-          </div>
-          <div className={styles.entryMessage}>{entry.message}</div>
-          {entry.log && (
-            <details className={styles.logDetails}>
-              <summary>Ver log</summary>
-              <pre className={styles.log}>{entry.log}</pre>
-            </details>
-          )}
-        </div>
-      ))}
+      {result && (
+        <Timeline
+          emptyLabel="Ningún resultado con los filtros actuales."
+          items={result.items.map((entry, i): TimelineItem => ({
+            key: `${entry.finished_at}-${i}`,
+            icon: <OutcomeIcon ok={entry.ok} status={entry.status} />,
+            tone: toneFor(entry.status),
+            title: (
+              <>
+                {entry.action} <span className={styles.entrySource}>— {entry.source}</span>
+              </>
+            ),
+            timestamp:
+              entry.finished_at + (entry.duration_seconds !== null ? ` · ${entry.duration_seconds}s` : ""),
+            description: (
+              <>
+                {entry.message}
+                {entry.log && (
+                  <details className={styles.logDetails}>
+                    <summary>Ver log</summary>
+                    <pre className={styles.log}>{entry.log}</pre>
+                  </details>
+                )}
+              </>
+            ),
+          }))}
+        />
+      )}
 
       {result && result.total_pages > 1 && (
         <div className={styles.pagination}>

@@ -153,26 +153,18 @@ literally copying the other product's blue/orange branding — Taidy isn't
 ANEMIOT and reusing already-vetted, accessible tokens is strictly better
 than introducing an unverified new palette.
 
-- **State/data fetching**: a small typed API client (`fetch` wrapper) plus
-  React Query (or SWR) for polling/caching — avoids hand-rolled `useEffect`
-  polling loops sprinkled across pages.
-- **Confirmation dialogs**: one `<ConfirmDialog>` component reused for all 6
-  destructive actions (delete user, delete workflow, delete schedule, stop
-  task, stop workflow, change role) — mirrors `webapp/app.py`'s own "one
-  pattern, six call sites" design.
-- **Status badges**: one `<StatusBadge status="running|ok|error|...">`
-  component, driven by the same status vocabulary the backend already emits
-  (`running, stopping, ok, error, stopped, pending, cancelled, in_progress`)
-  — never inventing new client-side states.
-- **Icons**: the Streamlit side just adopted Material Symbols
-  (`:material/icon_name:`) for a modern look; the React side uses
-  `@mui/icons-material` or plain SVGs from the same Material Symbols set, so
-  the two UIs read as the same product during the parallel-run period.
+A second, more detailed round of ANEMIOT screenshots (directory/detail user
+management modal, a checklist-style step grid, connected-line timelines, a
+dark hero + metric tiles + accent card + system-status bar, and an explicit
+"read-only" indicator for a restricted role) drove a follow-up pass that
+actually built those specific patterns, each mapped onto real Taidy data —
+never a fabricated field or a control that doesn't call anything real (see
+each component's own doc comment for the specific tradeoff):
 
 - **State/data fetching**: a small typed API client (`fetch` wrapper) plus
-  React Query (or SWR) for polling/caching — avoids hand-rolled `useEffect`
-  polling loops sprinkled across pages.
-- **Confirmation dialogs**: one `<ConfirmDialog>` component reused for all 6
+  a `usePolling` hook for live-updating pages — avoids hand-rolled
+  `useEffect` polling loops sprinkled across pages.
+- **Confirmation dialogs**: one `<ConfirmDialog>` component reused for all
   destructive actions (delete user, delete workflow, delete schedule, stop
   task, stop workflow, change role) — mirrors `webapp/app.py`'s own "one
   pattern, six call sites" design.
@@ -180,10 +172,32 @@ than introducing an unverified new palette.
   component, driven by the same status vocabulary the backend already emits
   (`running, stopping, ok, error, stopped, pending, cancelled, in_progress`)
   — never inventing new client-side states.
-- **Icons**: the Streamlit side just adopted Material Symbols
-  (`:material/icon_name:`) for a modern look; the React side uses
-  `@mui/icons-material` or plain SVGs from the same Material Symbols set, so
-  the two UIs read as the same product during the parallel-run period.
+- **Icons**: `lucide-react` app-wide (nav, badges, buttons) — replaced every
+  emoji/unicode icon that predated the migration.
+- **`<UserDirectory>`**: the directory/detail user-management pattern —
+  used both as `/administracion/usuarios`'s page content and inside a
+  `<Modal>` opened from a header icon (lazily mounted only while the modal
+  is actually open, so the two entry points never double-fetch). ANEMIOT's
+  mockup has fields Taidy has no backend for (an admin-typed new password, an
+  "active/inactive" toggle) — rather than fake them, the "Seguridad" section
+  only exposes what `webapp/users_db.py` actually supports: forcing a
+  password change on next login, not setting one directly.
+- **`<Timeline>`**: a generic dot-and-connecting-line list (icon, tone,
+  title, description, timestamp) — used by Historial and the dashboard's
+  recent-activity feed.
+- **`<StepStatusGrid>`**: a checklist-card grid (icon + name + phase +
+  detail) replacing the plain table Tareas en curso used for a task's
+  per-table/file status.
+- **`<ReadOnlyNotice>`**: a small "Modo consulta" banner shown on the 7
+  Ejecutar forms when the current user's role is Reader, with the submit
+  button disabled to match — previously Reader could click submit and only
+  find out via a 403 after the fact.
+- **HomePage hero**: a dark panel with an abstract, inline-SVG data/network
+  motif (`<DataNetworkArt>`) rather than a stock photo — nothing here claims
+  to depict real Taidy infrastructure. The accent card and status bar below
+  it are both driven by the same `/dashboard/summary` fields already in use
+  (active schedule count; a derived tone from recent-error/running counts),
+  not decorative placeholders.
 
 ## Flujos (workflow designer) — the one deliberately-new piece of UX
 

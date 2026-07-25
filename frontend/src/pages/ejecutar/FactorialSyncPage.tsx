@@ -1,12 +1,17 @@
 import { useEffect, useState } from "react";
 
+import { ROLE_READER } from "../../api/auth";
 import { ApiError } from "../../api/client";
 import { fetchFactorialTables } from "../../api/meta";
 import { syncFactorial } from "../../api/tasks";
+import { useAuth } from "../../auth/AuthContext";
 import formStyles from "../../components/Form.module.css";
 import { NotifyCheckbox } from "../../components/NotifyCheckbox";
+import { ReadOnlyNotice } from "../../components/ReadOnlyNotice";
 
 export function FactorialSyncPage() {
+  const { user } = useAuth();
+  const isReader = user?.role === ROLE_READER;
   const [startOn, setStartOn] = useState("2025-01-01");
   const [endOn, setEndOn] = useState(new Date().toISOString().slice(0, 10));
   const [employeeStatus, setEmployeeStatus] = useState<"active" | "inactive" | "all">("active");
@@ -66,6 +71,7 @@ export function FactorialSyncPage() {
       <h1>Extraer + subir Factorial en un paso</h1>
       {success && <div className={formStyles.successBanner}>{success}</div>}
       {error && <div className={formStyles.errorBanner}>{error}</div>}
+      {isReader && <ReadOnlyNotice action="lanzar sincronizaciones" />}
       <form className={formStyles.card} onSubmit={handleSubmit}>
         <div className={formStyles.grid}>
           <div className={formStyles.field}>
@@ -143,7 +149,7 @@ export function FactorialSyncPage() {
           <span>Log detallado</span>
         </label>
         <NotifyCheckbox checked={notify} onChange={setNotify} />
-        <button type="submit" className={formStyles.submit} disabled={isSubmitting}>
+        <button type="submit" className={formStyles.submit} disabled={isSubmitting || isReader}>
           {isSubmitting ? "Ejecutando…" : "Ejecutar sync Factorial"}
         </button>
       </form>

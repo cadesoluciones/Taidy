@@ -1,0 +1,84 @@
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.item {
+  position: relative;
+  display: flex;
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
+}
+
+.item:last-child {
+  padding-bottom: 0;
+}
+
+/* The connecting line: a pseudo-element positioned behind the dot column,
+   spanning from this item's dot down to the next one's. */
+.item:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 11px;
+  top: 24px;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-border);
+}
+
+.dot {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--color-bg-soft);
+  border: 2px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
+.dot.success {
+  border-color: var(--color-success);
+}
+.dot.danger {
+  border-color: var(--color-danger);
+}
+.dot.info {
+  border-color: var(--color-info);
+}
+.dot.neutral {
+  border-color: var(--color-text-muted);
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.timestamp {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.description {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  margin-top: 2px;
+}

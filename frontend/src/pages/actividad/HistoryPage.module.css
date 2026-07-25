@@ -26,25 +26,9 @@
   font-size: 13px;
 }
 
-.entry {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
-  margin-bottom: var(--space-2);
-}
-
-.entryHead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: 14px;
-}
-
-.entryMessage {
+.entrySource {
   color: var(--color-text-muted);
-  font-size: 13px;
-  margin-top: 4px;
+  font-weight: 400;
 }
 
 .pagination {

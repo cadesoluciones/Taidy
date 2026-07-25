@@ -1,12 +1,17 @@
 import { useEffect, useState } from "react";
 
+import { ROLE_READER } from "../../api/auth";
 import { ApiError } from "../../api/client";
 import { fetchFactorialTables } from "../../api/meta";
 import { uploadFactorial } from "../../api/tasks";
+import { useAuth } from "../../auth/AuthContext";
 import formStyles from "../../components/Form.module.css";
 import { NotifyCheckbox } from "../../components/NotifyCheckbox";
+import { ReadOnlyNotice } from "../../components/ReadOnlyNotice";
 
 export function FactorialUploadPage() {
+  const { user } = useAuth();
+  const isReader = user?.role === ROLE_READER;
   const [outputDir, setOutputDir] = useState("./exports_factorial");
   const [tables, setTables] = useState<string[]>([]);
   const [selectedTables, setSelectedTables] = useState<string[]>([]);
@@ -56,6 +61,7 @@ export function FactorialUploadPage() {
       <h1>Subir CSVs de Factorial a Fabric OneLake</h1>
       {success && <div className={formStyles.successBanner}>{success}</div>}
       {error && <div className={formStyles.errorBanner}>{error}</div>}
+      {isReader && <ReadOnlyNotice action="lanzar subidas" />}
       <form className={formStyles.card} onSubmit={handleSubmit}>
         <div className={formStyles.field}>
           <label htmlFor="output_dir">Directorio con los CSV</label>
@@ -90,7 +96,7 @@ export function FactorialUploadPage() {
           <span>Log detallado</span>
         </label>
         <NotifyCheckbox checked={notify} onChange={setNotify} />
-        <button type="submit" className={formStyles.submit} disabled={isSubmitting}>
+        <button type="submit" className={formStyles.submit} disabled={isSubmitting || isReader}>
           {isSubmitting ? "Ejecutando…" : "Ejecutar subida Factorial"}
         </button>
       </form>

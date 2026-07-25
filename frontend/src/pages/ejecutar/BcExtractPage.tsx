@@ -3,14 +3,16 @@ import { useEffect, useState } from "react";
 import { ApiError } from "../../api/client";
 import { fetchBcTables } from "../../api/meta";
 import { extractBc } from "../../api/tasks";
-import { ROLE_ADMIN } from "../../api/auth";
+import { ROLE_ADMIN, ROLE_READER } from "../../api/auth";
 import { useAuth } from "../../auth/AuthContext";
 import formStyles from "../../components/Form.module.css";
 import { NotifyCheckbox } from "../../components/NotifyCheckbox";
+import { ReadOnlyNotice } from "../../components/ReadOnlyNotice";
 
 export function BcExtractPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === ROLE_ADMIN;
+  const isReader = user?.role === ROLE_READER;
 
   const [tables, setTables] = useState<string[]>([]);
   const [selectedTables, setSelectedTables] = useState<string[]>([]);
@@ -65,6 +67,7 @@ export function BcExtractPage() {
       <h1>Extraer tablas de Business Central</h1>
       {success && <div className={formStyles.successBanner}>{success}</div>}
       {error && <div className={formStyles.errorBanner}>{error}</div>}
+      {isReader && <ReadOnlyNotice action="lanzar extracciones" />}
       <form className={formStyles.card} onSubmit={handleSubmit}>
         <div className={formStyles.grid}>
           <div className={formStyles.field}>
@@ -148,7 +151,7 @@ export function BcExtractPage() {
         </label>
         <NotifyCheckbox checked={notify} onChange={setNotify} />
 
-        <button type="submit" className={formStyles.submit} disabled={isSubmitting}>
+        <button type="submit" className={formStyles.submit} disabled={isSubmitting || isReader}>
           {isSubmitting ? "Ejecutando…" : "Ejecutar extracción BC"}
         </button>
       </form>

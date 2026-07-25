@@ -1,0 +1,48 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+
+.icon.success {
+  color: var(--color-success);
+}
+.icon.danger {
+  color: var(--color-danger);
+}
+.icon.info {
+  color: var(--color-info);
+}
+.icon.neutral {
+  color: var(--color-text-muted);
+}
+
+.name {
+  font-weight: 600;
+  font-size: 13px;
+  margin-top: var(--space-2);
+  overflow-wrap: break-word;
+}
+
+.phase {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-top: 2px;
+}
+
+.detail {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  margin-top: 4px;
+  overflow-wrap: break-word;
+}

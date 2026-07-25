@@ -5,6 +5,7 @@ import { fetchTasks, stopTask, type Task } from "../../api/tasks";
 import { useAuth } from "../../auth/AuthContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { StatusBadge } from "../../components/StatusBadge";
+import { StepStatusGrid } from "../../components/StepStatusGrid";
 import { usePolling } from "../../hooks/usePolling";
 import styles from "./RunningTasksPage.module.css";
 
@@ -75,30 +76,7 @@ export function RunningTasksPage() {
                   </button>
                 </div>
                 {expanded.has(task.id) && task.table_statuses.length > 0 && (
-                  <div className={styles.tableWrap}>
-                    <table className={styles.table}>
-                      <thead>
-                        <tr>
-                          {task.table_statuses.some((t) => t.phase) && <th>Fase</th>}
-                          <th>Tabla / fichero</th>
-                          <th>Estado</th>
-                          <th>Detalle</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {task.table_statuses.map((t) => (
-                          <tr key={`${t.phase}-${t.name}`}>
-                            {task.table_statuses.some((x) => x.phase) && <td>{t.phase || "-"}</td>}
-                            <td>{t.name}</td>
-                            <td>
-                              <StatusBadge status={t.status} />
-                            </td>
-                            <td>{t.detail}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <StepStatusGrid items={task.table_statuses} />
                 )}
               </div>
             );

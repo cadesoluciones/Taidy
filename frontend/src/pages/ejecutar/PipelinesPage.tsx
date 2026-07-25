@@ -1,12 +1,17 @@
 import { useEffect, useState } from "react";
 
+import { ROLE_READER } from "../../api/auth";
 import { ApiError } from "../../api/client";
 import { fetchPipelines } from "../../api/meta";
 import { runPipeline } from "../../api/tasks";
+import { useAuth } from "../../auth/AuthContext";
 import formStyles from "../../components/Form.module.css";
 import { NotifyCheckbox } from "../../components/NotifyCheckbox";
+import { ReadOnlyNotice } from "../../components/ReadOnlyNotice";
 
 export function PipelinesPage() {
+  const { user } = useAuth();
+  const isReader = user?.role === ROLE_READER;
   const [pipelines, setPipelines] = useState<string[]>([]);
   const [pipeline, setPipeline] = useState("");
   const [wait, setWait] = useState(true);
@@ -47,6 +52,7 @@ export function PipelinesPage() {
       <h1>Ejecutar un pipeline de Fabric Data Factory</h1>
       {success && <div className={formStyles.successBanner}>{success}</div>}
       {error && <div className={formStyles.errorBanner}>{error}</div>}
+      {isReader && <ReadOnlyNotice action="lanzar pipelines" />}
       {pipelines.length === 0 ? (
         <p>
           No hay pipelines configurados todavía. Añade entradas en la sección <code>fabric_pipelines.pipelines</code>{" "}
@@ -83,7 +89,7 @@ export function PipelinesPage() {
             <span>Log detallado</span>
           </label>
           <NotifyCheckbox checked={notify} onChange={setNotify} />
-          <button type="submit" className={formStyles.submit} disabled={isSubmitting}>
+          <button type="submit" className={formStyles.submit} disabled={isSubmitting || isReader}>
             {isSubmitting ? "Lanzando…" : "Lanzar pipeline"}
           </button>
           <p className={formStyles.hint}>

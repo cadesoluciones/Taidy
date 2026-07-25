@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 
-import { ROLE_ADMIN } from "../../api/auth";
+import { ROLE_ADMIN, ROLE_READER } from "../../api/auth";
 import { ApiError } from "../../api/client";
 import { fetchFactorialTables } from "../../api/meta";
 import { extractFactorial } from "../../api/tasks";
 import { useAuth } from "../../auth/AuthContext";
 import formStyles from "../../components/Form.module.css";
 import { NotifyCheckbox } from "../../components/NotifyCheckbox";
+import { ReadOnlyNotice } from "../../components/ReadOnlyNotice";
 
 function parseEmployeeIds(raw: string): { ids: number[] | null; error: string | null } {
   const trimmed = raw.trim();
@@ -22,6 +23,7 @@ function parseEmployeeIds(raw: string): { ids: number[] | null; error: string | 
 export function FactorialExtractPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === ROLE_ADMIN;
+  const isReader = user?.role === ROLE_READER;
 
   const [startOn, setStartOn] = useState("2025-01-01");
   const [endOn, setEndOn] = useState(new Date().toISOString().slice(0, 10));
@@ -95,6 +97,7 @@ export function FactorialExtractPage() {
       <h1>Extraer tablas de Factorial HR</h1>
       {success && <div className={formStyles.successBanner}>{success}</div>}
       {error && <div className={formStyles.errorBanner}>{error}</div>}
+      {isReader && <ReadOnlyNotice action="lanzar extracciones" />}
       <form className={formStyles.card} onSubmit={handleSubmit}>
         <div className={formStyles.grid}>
           <div className={formStyles.field}>
@@ -176,7 +179,7 @@ export function FactorialExtractPage() {
           <span>Log detallado</span>
         </label>
         <NotifyCheckbox checked={notify} onChange={setNotify} />
-        <button type="submit" className={formStyles.submit} disabled={isSubmitting}>
+        <button type="submit" className={formStyles.submit} disabled={isSubmitting || isReader}>
           {isSubmitting ? "Ejecutando…" : "Ejecutar extracción Factorial"}
         </button>
       </form>
