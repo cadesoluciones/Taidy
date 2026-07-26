@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 
-import { ROLE_ADMIN, ROLE_OPERATOR } from "../api/auth";
+import { ROLE_ADMIN, ROLE_OPERATOR, ROLE_READER } from "../api/auth";
 import { ApiError } from "../api/client";
+import { fetchUsers } from "../api/users";
 import {
   createWorkflow,
   deleteWorkflow,
   fetchWorkflowRuns,
   fetchWorkflows,
   runWorkflow,
+  setWorkflowReaderAccess,
   stopWorkflowRun,
   updateWorkflow,
   type StepDefinition,
@@ -19,6 +21,7 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import formStyles from "../components/Form.module.css";
 import { NotifyCheckbox } from "../components/NotifyCheckbox";
 import { StatusBadge } from "../components/StatusBadge";
+import { TagMultiSelect } from "../components/TagMultiSelect";
 import { WorkflowDiagram } from "../components/WorkflowDiagram";
 import { usePolling } from "../hooks/usePolling";
 import styles from "./WorkflowsPage.module.css";
@@ -57,6 +60,7 @@ export function WorkflowsPage() {
   const [isBusy, setIsBusy] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [notifyByWorkflow, setNotifyByWorkflow] = useState<Record<string, boolean>>({});
+  const [readerUsernames, setReaderUsernames] = useState<string[]>([]);
 
   const { data: runsData } = usePolling(() => fetchWorkflowRuns(), 3000);
   const runs = runsData?.items ?? [];
@@ -69,6 +73,18 @@ export function WorkflowsPage() {
   useEffect(() => {
     void reloadWorkflows();
   }, []);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetchUsers()
+      .then((res) => setReaderUsernames(res.items.filter((u) => u.role === ROLE_READER).map((u) => u.username)))
+      .catch(() => setReaderUsernames([]));
+  }, [isAdmin]);
+
+  async function handleSetReaderAccess(workflowId: string, usernames: string[]) {
+    const updated = await setWorkflowReaderAccess(workflowId, usernames);
+    setWorkflows((prev) => prev.map((w) => (w.id === workflowId ? updated : w)));
+  }
 
   function addStep() {
     setDesignerError(null);
@@ -321,7 +337,7 @@ export function WorkflowsPage() {
         <p>Todavía no hay flujos guardados.</p>
       ) : (
         workflows.map((wf) => (
-          <div className={styles.workflowCard} key={wf.id}>
+          <div className={styles.workflowCard} key={wf.id} data-testid="workflow-card">
             <div className={styles.workflowHead}>
               <strong>{wf.name}</strong>
               <span className={styles.stepMeta}>{wf.steps.length} bloque(s)</span>
@@ -348,6 +364,22 @@ export function WorkflowsPage() {
               )}
             </div>
             <WorkflowDiagram steps={wf.steps} actionLabels={ACTION_LABELS} readOnly height={200} />
+            {isAdmin && (
+              <div className={styles.readerAccess}>
+                <label htmlFor={`reader-access-${wf.id}`}>
+                  Acceso de lectores (App.Reader) — solo estos usuarios pueden lanzar y seguir este flujo desde su
+                  Inicio
+                </label>
+                <TagMultiSelect
+                  id={`reader-access-${wf.id}`}
+                  options={readerUsernames}
+                  selected={wf.reader_allowed_users}
+                  onChange={(usernames) => void handleSetReaderAccess(wf.id, usernames)}
+                  placeholder="+ Dar acceso a un lector…"
+                  emptyHint="Ningún lector tiene acceso"
+                />
+              </div>
+            )}
           </div>
         ))
       )}

@@ -20,6 +20,7 @@ class WorkflowOut(BaseModel):
     name: str
     steps: List[StepIn]
     created_at: str
+    reader_allowed_users: List[str] = []
 
 
 class WorkflowListOut(BaseModel):
@@ -29,6 +30,10 @@ class WorkflowListOut(BaseModel):
 class CreateWorkflowRequest(BaseModel):
     name: str
     steps: List[StepIn]
+
+
+class SetReaderAccessRequest(BaseModel):
+    reader_usernames: List[str]
 
 
 class RunWorkflowRequest(BaseModel):

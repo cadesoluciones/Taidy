@@ -164,3 +164,90 @@ def test_reader_cannot_stop_someone_elses_workflow(isolated_state, client, fake_
 
     resp = client.post(f"/workflow-runs/{run_id}/stop")
     assert resp.status_code == 403
+
+
+# --------------------------------------------------------------------------------------
+# Reader access: a Reader can only see/launch a workflow an admin explicitly
+# assigned them to (e.g. one RRHH user, one Compras user, each with their own
+# flow) -- Operator/Admin are never affected by this list.
+# --------------------------------------------------------------------------------------
+
+
+def test_new_workflow_has_no_reader_access_by_default(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    created = client.post("/workflows", json={"name": "Flujo 1", "steps": _SIMPLE_STEPS}).json()
+    assert created["reader_allowed_users"] == []
+
+
+def test_operator_cannot_set_reader_access(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    workflow_id = client.post("/workflows", json={"name": "Flujo 1", "steps": _SIMPLE_STEPS}).json()["id"]
+
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+    resp = client.patch(f"/workflows/{workflow_id}/reader-access", json={"reader_usernames": ["reader1"]})
+    assert resp.status_code == 403
+
+
+def test_set_reader_access_on_unknown_workflow_is_404(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    resp = client.patch("/workflows/does-not-exist/reader-access", json={"reader_usernames": ["reader1"]})
+    assert resp.status_code == 404
+
+
+def test_admin_can_assign_and_clear_reader_access(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    workflow_id = client.post("/workflows", json={"name": "Flujo RRHH", "steps": _SIMPLE_STEPS}).json()["id"]
+
+    granted = client.patch(f"/workflows/{workflow_id}/reader-access", json={"reader_usernames": ["rrhh1", "rrhh1", " "]})
+    assert granted.status_code == 200
+    assert granted.json()["reader_allowed_users"] == ["rrhh1"]  # de-duplicated, blanks dropped
+
+    cleared = client.patch(f"/workflows/{workflow_id}/reader-access", json={"reader_usernames": []})
+    assert cleared.json()["reader_allowed_users"] == []
+
+
+def test_reader_only_sees_workflows_they_are_assigned_to(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    rrhh_flow = client.post("/workflows", json={"name": "Flujo RRHH", "steps": _SIMPLE_STEPS}).json()["id"]
+    compras_flow = client.post("/workflows", json={"name": "Flujo Compras", "steps": _SIMPLE_STEPS}).json()["id"]
+    client.patch(f"/workflows/{rrhh_flow}/reader-access", json={"reader_usernames": ["rrhh1"]})
+    client.patch(f"/workflows/{compras_flow}/reader-access", json={"reader_usernames": ["compras1"]})
+
+    # Operator/Admin are unaffected -- they still see every workflow.
+    all_names = {w["name"] for w in client.get("/workflows").json()["items"]}
+    assert all_names == {"Flujo RRHH", "Flujo Compras"}
+
+    make_user("rrhh1", "RrhhPass2026!", users_db.ROLE_READER)
+    _login(client, "rrhh1", "RrhhPass2026!")
+    rrhh_visible = {w["name"] for w in client.get("/workflows").json()["items"]}
+    assert rrhh_visible == {"Flujo RRHH"}
+
+
+def test_reader_cannot_run_workflow_without_access(isolated_state, client, fake_subprocess):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    workflow_id = client.post("/workflows", json={"name": "Flujo 1", "steps": _SIMPLE_STEPS}).json()["id"]
+
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+    resp = client.post(f"/workflows/{workflow_id}/run")
+    assert resp.status_code == 403
+
+
+def test_reader_can_run_workflow_they_are_assigned_to(isolated_state, client, fake_subprocess):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    workflow_id = client.post("/workflows", json={"name": "Flujo 1", "steps": _SIMPLE_STEPS}).json()["id"]
+    client.patch(f"/workflows/{workflow_id}/reader-access", json={"reader_usernames": ["reader1"]})
+
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+    resp = client.post(f"/workflows/{workflow_id}/run")
+    assert resp.status_code == 200
+    assert resp.json()["triggered_by"] == "reader1"

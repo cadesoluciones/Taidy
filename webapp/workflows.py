@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from webapp.state_dir import state_path
+from webapp.users_db import ROLE_ADMIN, ROLE_OPERATOR
 
 TRIGGER_ALL_SUCCESS = "all_success"  # only run once every dependency succeeded
 TRIGGER_ALWAYS = "always"  # run regardless of how dependencies ended
@@ -102,6 +103,12 @@ def create_workflow(name: str, steps: List[dict]) -> dict:
         "name": name,
         "steps": steps,
         "created_at": datetime.now(timezone.utc).isoformat(),
+        # Reader-role users can only see/launch a workflow they're listed
+        # here for, from their simplified Inicio -- Operator/Admin access is
+        # role-based and never affected by this list. Empty by default: a
+        # newly-created workflow isn't exposed to any Reader until an admin
+        # explicitly assigns it.
+        "reader_allowed_users": [],
     }
     with _LOCK:
         data = _read()
@@ -112,9 +119,10 @@ def create_workflow(name: str, steps: List[dict]) -> dict:
 
 def update_workflow(workflow_id: str, name: str, steps: List[dict]) -> dict:
     """Overwrites an existing workflow's name/steps in place -- same
-    validation as create_workflow(), but keeps the original `id` and
-    `created_at` so scheduled entries and past run history that reference
-    this workflow_id stay valid after the edit."""
+    validation as create_workflow(), but keeps the original `id`,
+    `created_at` and `reader_allowed_users` so scheduled entries, past run
+    history, and reader access that reference this workflow_id stay valid
+    after the edit."""
     name = name.strip()
     if not name:
         raise ValueError("El flujo necesita un nombre.")
@@ -130,8 +138,38 @@ def update_workflow(workflow_id: str, name: str, steps: List[dict]) -> dict:
         return existing
 
 
+def set_reader_access(workflow_id: str, reader_usernames: List[str]) -> dict:
+    """Sets the exact list of Reader-role users allowed to see/launch this
+    workflow from their simplified Inicio. Never affects Operator/Admin,
+    who can already see/launch every workflow regardless of this list."""
+    clean = sorted({u.strip() for u in reader_usernames if u.strip()})
+    with _LOCK:
+        data = _read()
+        existing = next((w for w in data if w["id"] == workflow_id), None)
+        if existing is None:
+            raise ValueError(f"Flujo desconocido: {workflow_id}")
+        existing["reader_allowed_users"] = clean
+        _write(data)
+        return existing
+
+
 def delete_workflow(workflow_id: str) -> None:
     with _LOCK:
         data = _read()
         data = [w for w in data if w["id"] != workflow_id]
         _write(data)
+
+
+def list_workflows_for_user(username: str, role: str) -> List[dict]:
+    """Operator/Admin see every workflow (unchanged, role-based access);
+    Reader only sees the ones an admin explicitly listed them for."""
+    workflows = list_workflows()
+    if role in (ROLE_OPERATOR, ROLE_ADMIN):
+        return workflows
+    return [w for w in workflows if username in w.get("reader_allowed_users", [])]
+
+
+def can_user_run_workflow(workflow: dict, username: str, role: str) -> bool:
+    if role in (ROLE_OPERATOR, ROLE_ADMIN):
+        return True
+    return username in workflow.get("reader_allowed_users", [])

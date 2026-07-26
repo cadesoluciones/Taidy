@@ -15,6 +15,7 @@ export interface Workflow {
   name: string;
   steps: StepDefinition[];
   created_at: string;
+  reader_allowed_users: string[];
 }
 
 export interface StepRun {
@@ -53,6 +54,10 @@ export function updateWorkflow(id: string, name: string, steps: StepDefinition[]
 
 export function deleteWorkflow(id: string): Promise<void> {
   return apiDelete<void>(`/workflows/${id}`);
+}
+
+export function setWorkflowReaderAccess(id: string, readerUsernames: string[]): Promise<Workflow> {
+  return apiPatch<Workflow>(`/workflows/${id}/reader-access`, { reader_usernames: readerUsernames });
 }
 
 export function runWorkflow(id: string, notify = false): Promise<WorkflowRun> {

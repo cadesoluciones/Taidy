@@ -14,10 +14,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from webapp import workflow_engine, workflows as workflows_module
 from webapp.users_db import ROLE_ADMIN, ROLE_OPERATOR
 
-from ..dependencies import CurrentUser, get_current_user, require_any_role, require_role
+from ..dependencies import CurrentUser, get_current_user, require_role
 from ..schemas.workflows import (
     CreateWorkflowRequest,
     RunWorkflowRequest,
+    SetReaderAccessRequest,
     StepRunOut,
     WorkflowListOut,
     WorkflowOut,
@@ -32,8 +33,11 @@ _ROLES_OPERATE = [ROLE_OPERATOR, ROLE_ADMIN]
 
 
 @router.get("", response_model=WorkflowListOut)
-def list_workflows() -> WorkflowListOut:
-    return WorkflowListOut(items=[WorkflowOut(**w) for w in workflows_module.list_workflows()])
+def list_workflows(current: CurrentUser = Depends(get_current_user)) -> WorkflowListOut:
+    # Operator/Admin see every workflow (unchanged); Reader only sees the
+    # ones an admin explicitly assigned them via reader_allowed_users.
+    items = workflows_module.list_workflows_for_user(current.username, current.role)
+    return WorkflowListOut(items=[WorkflowOut(**w) for w in items])
 
 
 @router.post("", response_model=WorkflowOut, dependencies=[Depends(require_role(ROLE_ADMIN))])
@@ -61,12 +65,34 @@ def delete_workflow(workflow_id: str) -> None:
     workflows_module.delete_workflow(workflow_id)
 
 
-@router.post("/{workflow_id}/run", response_model=WorkflowRunOut, dependencies=[Depends(require_any_role(_ROLES_OPERATE))])
+@router.patch(
+    "/{workflow_id}/reader-access", response_model=WorkflowOut, dependencies=[Depends(require_role(ROLE_ADMIN))]
+)
+def set_reader_access(workflow_id: str, payload: SetReaderAccessRequest) -> WorkflowOut:
+    try:
+        workflow = workflows_module.set_reader_access(workflow_id, payload.reader_usernames)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    return WorkflowOut(**workflow)
+
+
+@router.post("/{workflow_id}/run", response_model=WorkflowRunOut)
 def run_workflow(
     workflow_id: str,
     payload: RunWorkflowRequest = RunWorkflowRequest(),
     current: CurrentUser = Depends(get_current_user),
 ) -> WorkflowRunOut:
+    # Not role-gated at the decorator level like every other mutating
+    # endpoint here, because "who can run this" depends on the specific
+    # workflow: Operator/Admin always can; Reader only if reader_allowed_users
+    # names them for THIS workflow_id (see webapp/workflows.can_user_run_workflow).
+    workflow = workflows_module.get_workflow(workflow_id)
+    if workflow is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Flujo desconocido: {workflow_id}")
+    if not workflows_module.can_user_run_workflow(workflow, current.username, current.role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="No tienes acceso a este flujo."
+        )
     try:
         run = workflow_engine.start_workflow(workflow_id, current.username, notify=payload.notify)
     except ValueError as exc:
