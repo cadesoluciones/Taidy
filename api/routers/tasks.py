@@ -14,10 +14,10 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from webapp import adapter, tasks as tasks_module
+from webapp import tasks as tasks_module
 from webapp.users_db import ROLE_ADMIN, ROLE_OPERATOR
 
-from ..dependencies import CurrentUser, get_current_user, require_any_role
+from ..dependencies import CurrentUser, get_current_user
 from ..schemas.tasks import (
     ExtractBcRequest,
     ExtractFactorialRequest,

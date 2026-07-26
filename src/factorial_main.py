@@ -11,7 +11,6 @@ import logging
 import os
 import signal
 import sys
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import replace
 from datetime import date, datetime

@@ -9,7 +9,7 @@ of each re-deriving the filter semantics.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional, Sequence, Tuple
+from typing import List, Sequence, Tuple
 
 RESULT_ALL = "all"
 RESULT_OK = "ok"

@@ -2,6 +2,7 @@
 
 Herramienta para extraer datos de **Microsoft Dynamics 365 Business Central** y **Factorial HR** a archivos CSV y subirlos a Microsoft Fabric OneLake. Incluye autenticación OAuth / API Key, paginación automática, procesamiento paralelo, exportación atómica e ingesta incremental con checkpoints.
 
+[![CI](https://github.com/cadesoluciones/Taidy/actions/workflows/ci.yml/badge.svg)](https://github.com/cadesoluciones/Taidy/actions/workflows/ci.yml)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![Pytest](https://img.shields.io/badge/Pytest-✔e06?style=flat-square&logo=pytest&logoColor=white)](https://pytest.org)
 [![Taskfile](https://img.shields.io/badge/Taskfile-4d2a85?style=flat-square)](https://taskfile.dev)
