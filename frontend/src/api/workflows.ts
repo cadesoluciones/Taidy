@@ -71,3 +71,9 @@ export function fetchWorkflowRuns(): Promise<{ items: WorkflowRun[] }> {
 export function stopWorkflowRun(runId: string): Promise<void> {
   return apiPost<void>(`/workflow-runs/${runId}/stop`);
 }
+
+/** Re-runs only the step(s) that failed (plus anything cascade-cancelled
+ * because of them) -- only valid while the run's status is "error". */
+export function retryWorkflowRun(runId: string): Promise<WorkflowRun> {
+  return apiPost<WorkflowRun>(`/workflow-runs/${runId}/retry`);
+}

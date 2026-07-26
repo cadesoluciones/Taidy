@@ -8,6 +8,7 @@ import {
   deleteWorkflow,
   fetchWorkflowRuns,
   fetchWorkflows,
+  retryWorkflowRun,
   runWorkflow,
   setWorkflowReaderAccess,
   stopWorkflowRun,
@@ -53,7 +54,7 @@ export function WorkflowsPage() {
   const [notifyByWorkflow, setNotifyByWorkflow] = useState<Record<string, boolean>>({});
   const [readerUsernames, setReaderUsernames] = useState<string[]>([]);
 
-  const { data: runsData } = usePolling(() => fetchWorkflowRuns(), 3000);
+  const { data: runsData, refetch: refetchRuns } = usePolling(() => fetchWorkflowRuns(), 3000);
   const runs = runsData?.items ?? [];
   const selectedStep = draftSteps.find((s) => s.id === selectedStepId) ?? null;
 
@@ -190,6 +191,16 @@ export function WorkflowsPage() {
       await runWorkflow(id, notifyByWorkflow[id] ?? false);
     } catch (err) {
       setLaunchError(err instanceof ApiError ? err.message : "No se pudo lanzar el flujo.");
+    }
+  }
+
+  async function handleRetry(run: WorkflowRun) {
+    setLaunchError(null);
+    try {
+      await retryWorkflowRun(run.id);
+      await refetchRuns();
+    } catch (err) {
+      setLaunchError(err instanceof ApiError ? err.message : "No se pudo reintentar el flujo.");
     }
   }
 
@@ -380,8 +391,9 @@ export function WorkflowsPage() {
         <p>No hay ejecuciones de flujos en esta sesión del servidor.</p>
       ) : (
         runs.map((run) => {
-          const canStop =
-            run.status === "running" && (user?.role === ROLE_ADMIN || run.triggered_by === user?.username);
+          const owns = user?.role === ROLE_ADMIN || run.triggered_by === user?.username;
+          const canStop = run.status === "running" && owns;
+          const canRetry = run.status === "error" && owns && canOperate;
           return (
             <div className={styles.workflowCard} key={run.id}>
               <div className={styles.workflowHead}>
@@ -398,6 +410,11 @@ export function WorkflowsPage() {
                     onClick={() => setPendingStopRun(run)}
                   >
                     Detener flujo
+                  </button>
+                )}
+                {run.status === "error" && canRetry && (
+                  <button type="button" className={styles.btn} onClick={() => void handleRetry(run)}>
+                    Reintentar pasos fallidos
                   </button>
                 )}
               </div>

@@ -145,3 +145,25 @@ def stop_workflow_run(run_id: str, current: CurrentUser = Depends(get_current_us
             status_code=status.HTTP_403_FORBIDDEN, detail="Detener un flujo requiere rol App.Operator o App.Admin."
         )
     workflow_engine.stop_workflow(run_id)
+
+
+@runs_router.post("/{run_id}/retry", response_model=WorkflowRunOut)
+def retry_workflow_run(run_id: str, current: CurrentUser = Depends(get_current_user)) -> WorkflowRunOut:
+    run = workflow_engine.get_run(run_id)
+    owns = run is not None and (current.role == ROLE_ADMIN or run.triggered_by == current.username)
+    if not owns:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo puedes reintentar tus propios flujos (o tener el rol Admin).",
+        )
+    if current.role not in _ROLES_OPERATE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Reintentar un flujo requiere rol App.Operator o App.Admin."
+        )
+    try:
+        retried_run = workflow_engine.retry_failed_steps(run_id, current.username)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    return run_to_out(retried_run)

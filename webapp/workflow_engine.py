@@ -54,6 +54,7 @@ class WorkflowRun:
     status: str = "running"  # running | ok | error | stopped
     stop_requested: bool = False
     notify: bool = False
+    retried: bool = False
 
     def step_status_map(self) -> Dict[str, str]:
         return {sid: s.status for sid, s in self.steps.items()}
@@ -209,7 +210,8 @@ def _finalize(run: WorkflowRun) -> None:
         run.status = "ok"
 
     ok_count = sum(1 for s in run.steps.values() if s.status == "ok")
-    message = f"Flujo '{run.workflow_name}': {ok_count}/{len(run.steps)} bloque(s) completados correctamente."
+    retried_suffix = " (reintento de los pasos fallidos)" if run.retried else ""
+    message = f"Flujo '{run.workflow_name}': {ok_count}/{len(run.steps)} bloque(s) completados correctamente{retried_suffix}."
     history.record_run(
         action="run_workflow",
         source=run.triggered_by,
@@ -234,3 +236,46 @@ def stop_workflow(run_id: str) -> bool:
         return False
     run.stop_requested = True
     return True
+
+
+def retry_failed_steps(run_id: str, triggered_by: str) -> WorkflowRun:
+    """Re-runs only the steps that failed (status "error") plus whatever got
+    cascade-cancelled because of them, keeping every already-"ok" step's
+    result as-is. Only valid for a run that finished with status "error" --
+    a deliberately stopped run isn't a retry candidate.
+    """
+    run = get_run(run_id)
+    if run is None:
+        raise ValueError("Ejecución desconocida (puede haberse descartado ya de la memoria por ser antigua).")
+    if run.status != "error":
+        raise RuntimeError("Solo se puede reintentar una ejecución que haya terminado con error.")
+
+    blocker = workflow_already_running(run.workflow_id)
+    if blocker is not None:
+        raise RuntimeError(f"El flujo '{run.workflow_name}' ya se está ejecutando. Espera a que termine.")
+
+    workflow = workflows.get_workflow(run.workflow_id)
+    if workflow is None:
+        raise ValueError(f"El flujo original ya no existe: {run.workflow_id}")
+    step_defs = {s["id"]: s for s in workflow["steps"]}
+    if any(sid not in step_defs for sid in run.steps):
+        raise RuntimeError("El flujo se ha modificado desde esta ejecución; no se puede reintentar de forma segura.")
+
+    # "cancelled" steps only ever got that status because a dependency of
+    # theirs wasn't "ok" (see the trigger_rule check in _run_worker) -- reset
+    # them to pending too so they're re-evaluated once the retried step
+    # they depended on resolves again, rather than staying stuck terminal.
+    for step in run.steps.values():
+        if step.status in ("error", "cancelled"):
+            step.status = "pending"
+            step.task_id = None
+
+    run.status = "running"
+    run.stop_requested = False
+    run.finished_at = None
+    run.retried = True
+    run.triggered_by = triggered_by
+    _register(run)
+
+    threading.Thread(target=_run_worker, args=(run, step_defs), daemon=True, name=f"workflow-{run.id}-retry").start()
+    return run

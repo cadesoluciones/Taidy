@@ -1,10 +1,27 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import subprocess
+import sys
 import time
+from pathlib import Path
 
-from webapp import users_db, workflow_engine
+from webapp import tasks, users_db, workflow_engine
 from webapp.tests.conftest import make_user
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+_RETRY_STEPS = [
+    {"id": "a", "label": "Paso A", "action": "extract_bc", "params": {}, "depends_on": [], "trigger_rule": "all_success"},
+    {
+        "id": "b",
+        "label": "Paso B",
+        "action": "upload_factorial",
+        "params": {},
+        "depends_on": ["a"],
+        "trigger_rule": "all_success",
+    },
+]
 
 
 def _login(client, username, password):
@@ -251,3 +268,94 @@ def test_reader_can_run_workflow_they_are_assigned_to(isolated_state, client, fa
     resp = client.post(f"/workflows/{workflow_id}/run")
     assert resp.status_code == 200
     assert resp.json()["triggered_by"] == "reader1"
+
+
+# --------------------------------------------------------------------------------------
+# Retry: re-runs only the step(s) that failed (plus anything cascade-cancelled
+# because of them), keeping already-"ok" steps' results.
+# --------------------------------------------------------------------------------------
+
+
+def _wait_until_settled(client, run_id, timeout=20.0):
+    deadline = time.time() + timeout
+    current = None
+    while time.time() < deadline:
+        items = client.get("/workflow-runs").json()["items"]
+        current = next(r for r in items if r["id"] == run_id)
+        if current["status"] != "running":
+            return current
+        time.sleep(0.2)
+    raise AssertionError(f"timed out waiting for run to settle; last seen: {current}")
+
+
+def test_operator_can_retry_the_failed_step_of_a_workflow_run(isolated_state, client, monkeypatch):
+    should_fail = {"b": True}
+
+    def _fake_popen(module, argv):
+        exit_code = 1 if module == "src.factorial_client.push" and should_fail["b"] else 0
+        return subprocess.Popen(
+            [sys.executable, "-c", f"import sys; sys.exit({exit_code})"],
+            cwd=str(_PROJECT_ROOT),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
+        )
+
+    monkeypatch.setattr(tasks, "_popen", _fake_popen)
+
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    workflow_id = client.post("/workflows", json={"name": "Flujo Retry", "steps": _RETRY_STEPS}).json()["id"]
+
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+    run_id = client.post(f"/workflows/{workflow_id}/run").json()["id"]
+
+    first_result = _wait_until_settled(client, run_id)
+    assert first_result["status"] == "error"
+    steps_by_id = {s["id"]: s for s in first_result["steps"]}
+    assert steps_by_id["a"]["status"] == "ok"
+    assert steps_by_id["b"]["status"] == "error"
+
+    # Fix the underlying problem, then retry -- only step "b" should re-run.
+    should_fail["b"] = False
+    retry_resp = client.post(f"/workflow-runs/{run_id}/retry")
+    assert retry_resp.status_code == 200
+    assert retry_resp.json()["status"] == "running"
+
+    final_result = _wait_until_settled(client, run_id)
+    assert final_result["status"] == "ok"
+    final_steps = {s["id"]: s for s in final_result["steps"]}
+    assert final_steps["a"]["status"] == "ok"
+    assert final_steps["b"]["status"] == "ok"
+
+
+def test_retry_requires_operator_or_admin_role(isolated_state, client, fake_subprocess):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    workflow_id = client.post("/workflows", json={"name": "Flujo 1", "steps": _SIMPLE_STEPS}).json()["id"]
+    client.patch(f"/workflows/{workflow_id}/reader-access", json={"reader_usernames": ["reader1"]})
+
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+    run_id = client.post(f"/workflows/{workflow_id}/run").json()["id"]
+
+    resp = client.post(f"/workflow-runs/{run_id}/retry")
+    assert resp.status_code == 403
+
+
+def test_retry_is_rejected_for_a_run_that_finished_ok(isolated_state, client, fake_subprocess):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    workflow_id = client.post("/workflows", json={"name": "Flujo 1", "steps": _SIMPLE_STEPS}).json()["id"]
+
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+    run_id = client.post(f"/workflows/{workflow_id}/run").json()["id"]
+    _wait_until_settled(client, run_id)
+
+    resp = client.post(f"/workflow-runs/{run_id}/retry")
+    assert resp.status_code == 409
