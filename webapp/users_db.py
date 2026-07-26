@@ -19,7 +19,9 @@ from typing import List, Optional
 
 import bcrypt
 
-_DB_PATH = Path(__file__).resolve().parent / "users.db"
+from webapp.state_dir import state_path
+
+_DB_PATH = state_path("users.db", Path(__file__).resolve().parent)
 _LOCK = threading.Lock()
 
 MAX_FAILED_ATTEMPTS = 5

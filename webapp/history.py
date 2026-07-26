@@ -14,7 +14,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
-_HISTORY_PATH = Path(__file__).resolve().parent / "run_history.json"
+from webapp.state_dir import state_path
+
+_HISTORY_PATH = state_path("run_history.json", Path(__file__).resolve().parent)
 _LOCK = threading.Lock()
 _MAX_HISTORY = 200
 _MAX_LOG_CHARS = 20_000

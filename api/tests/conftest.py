@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 Same isolation discipline as webapp/tests/conftest.py: every test gets
-throwaway users.db/audit.log/schedules.json/run_history.json/workflows.json
-under pytest's tmp_path, and every in-memory registry (sessions, tasks,
+throwaway users.db/audit.log/schedules.json/run_history.json/workflows.json/
+sessions.json under pytest's tmp_path, and every in-memory registry (tasks,
 workflow runs) is cleared before and after every test. The real
 webapp/users.db, audit.log, and friends are never touched.
 """
@@ -31,7 +31,7 @@ from webapp import (  # noqa: E402
     workflows,
 )
 
-from api import dependencies as deps  # noqa: E402
+from api import session_store  # noqa: E402
 from api.main import app  # noqa: E402
 
 
@@ -44,10 +44,9 @@ def isolated_state(tmp_path, monkeypatch):
     monkeypatch.setattr(history, "_HISTORY_PATH", tmp_path / "run_history.json")
     monkeypatch.setattr(table_configs, "_BC_TABLES_PATH", tmp_path / "tables.yaml")
     monkeypatch.setattr(table_configs, "_FACTORIAL_TABLES_PATH", tmp_path / "factorial_tables.yaml")
+    monkeypatch.setattr(session_store, "_SESSIONS_PATH", tmp_path / "sessions.json")
     users_db.init_db()
 
-    with deps._SESSIONS_LOCK:
-        deps._SESSIONS.clear()
     with tasks._REGISTRY_LOCK:
         tasks._REGISTRY.clear()
     with workflow_engine._REGISTRY_LOCK:
@@ -55,8 +54,6 @@ def isolated_state(tmp_path, monkeypatch):
 
     yield
 
-    with deps._SESSIONS_LOCK:
-        deps._SESSIONS.clear()
     with tasks._REGISTRY_LOCK:
         tasks._REGISTRY.clear()
     with workflow_engine._REGISTRY_LOCK:

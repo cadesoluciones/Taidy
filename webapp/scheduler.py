@@ -40,8 +40,9 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from webapp import history, tasks, workflow_engine  # noqa: E402
+from webapp.state_dir import state_path  # noqa: E402
 
-_SCHEDULES_PATH = Path(__file__).resolve().parent / "schedules.json"
+_SCHEDULES_PATH = state_path("schedules.json", Path(__file__).resolve().parent)
 _STORE_LOCK = threading.Lock()
 
 # Actions whose stored `end_on` would go stale for a recurring job; recomputed

@@ -6,47 +6,23 @@ Never trust a cached client claim about role -- every request re-reads the
 current role/must_change_password from users_db fresh; the session only
 remembers WHO is asking, not what they're allowed to do.
 
-The session store is an in-memory dict, the same pattern already used by
-webapp/tasks.py's task registry and webapp/workflow_engine.py's run
-registry.
+Session persistence itself lives in api/session_store.py (a JSON file, not
+an in-memory dict) so a server restart doesn't log out everyone -- see that
+module's docstring.
 """
 
 from __future__ import annotations
 
-import secrets
-import threading
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import Cookie, Depends, HTTPException, Request, status
 
 from webapp import users_db
 
+from .session_store import create_session, destroy_session, get_session_username  # noqa: F401
+
 SESSION_COOKIE_NAME = "taidy_session"
-
-_SESSIONS: Dict[str, str] = {}  # session_id -> username
-_SESSIONS_LOCK = threading.Lock()
-
-
-def create_session(username: str) -> str:
-    session_id = secrets.token_urlsafe(32)
-    with _SESSIONS_LOCK:
-        _SESSIONS[session_id] = username
-    return session_id
-
-
-def get_session_username(session_id: Optional[str]) -> Optional[str]:
-    if not session_id:
-        return None
-    with _SESSIONS_LOCK:
-        return _SESSIONS.get(session_id)
-
-
-def destroy_session(session_id: Optional[str]) -> None:
-    if not session_id:
-        return
-    with _SESSIONS_LOCK:
-        _SESSIONS.pop(session_id, None)
 
 
 class CurrentUser:

@@ -1,0 +1,27 @@
+services:
+  taidy:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # false until this sits behind a TLS-terminating reverse proxy on the
+      # internal network -- see ARCHITECTURE.md / api/.env.example.
+      TAIDY_API_SECURE_COOKIES: "false"
+    volumes:
+      # Deployment-specific config -- hand-curated per environment, not baked
+      # into the image.
+      - ./config.json:/app/config.json:ro
+      - ./tables.yaml:/app/tables.yaml
+      - ./factorial_tables.yaml:/app/factorial_tables.yaml
+      # Persisted app state (users, schedules, workflows, history, audit) --
+      # survives container recreation. See webapp/state_dir.py.
+      - taidy_data:/app/data
+      # Exported CSVs and Factorial's local checkpoints.
+      - ./exports:/app/exports
+      - ./exports_factorial:/app/exports_factorial
+    restart: unless-stopped
+
+volumes:
+  taidy_data:

@@ -4,7 +4,12 @@
  * throws a typed ApiError instead of leaving callers to guess at shapes.
  */
 
-const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
+// Empty string (relative URL) by default: in production the API serves the
+// built frontend itself (same origin), so requests should resolve against
+// whatever host the browser loaded the page from, not a hardcoded one. Local
+// dev sets VITE_API_BASE_URL explicitly (frontend/.env.example) since the
+// Vite dev server and the API run on different ports there.
+const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? "";
 
 export class ApiError extends Error {
   readonly status: number;

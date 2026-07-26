@@ -103,3 +103,4 @@ webapp/run_history.json
 webapp/audit.log
 webapp/users.db
 webapp/workflows.json
+api/sessions.json

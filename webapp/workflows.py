@@ -17,6 +17,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from webapp.state_dir import state_path
+
 TRIGGER_ALL_SUCCESS = "all_success"  # only run once every dependency succeeded
 TRIGGER_ALWAYS = "always"  # run regardless of how dependencies ended
 
@@ -25,7 +27,7 @@ TRIGGER_LABELS = {
     TRIGGER_ALWAYS: "Aunque alguna dependencia haya fallado",
 }
 
-_WORKFLOWS_PATH = Path(__file__).resolve().parent / "workflows.json"
+_WORKFLOWS_PATH = state_path("workflows.json", Path(__file__).resolve().parent)
 _LOCK = threading.Lock()
 
 

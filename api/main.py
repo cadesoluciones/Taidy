@@ -12,6 +12,7 @@ Run locally with: uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -19,11 +20,17 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
+
+# Present only in a built image (Dockerfile runs `npm run build` into this
+# exact path before the backend stage starts) -- absent in local dev, where
+# the Vite dev server serves the frontend instead (see _ALLOWED_ORIGINS).
+_FRONTEND_DIST = _PROJECT_ROOT / "frontend" / "dist"
 
 from webapp import scheduler as sched_module  # noqa: E402
 
@@ -41,13 +48,22 @@ from .routers import (  # noqa: E402
 
 logger = logging.getLogger("taidy.api")
 
-# Vite's dev server origin. Deliberately 127.0.0.1, not localhost: the
-# session cookie has no explicit Domain (host-only, matching the exact
-# backend host) and is SameSite=Lax -- "localhost" and "127.0.0.1" are
-# different *sites* for SameSite purposes even though both are loopback, so
-# mixing them silently drops the cookie on every cross-site fetch. Add the
-# real production origin here once one exists -- never "*".
-_ALLOWED_ORIGINS = ["http://127.0.0.1:5173"]
+# Only matters for split-origin setups (local dev: Vite on 5173, API on
+# 8000). The Docker deployment serves both from one origin (see
+# _FRONTEND_DIST above), where CORS never comes into play at all.
+#
+# Deliberately 127.0.0.1, not localhost, by default: the session cookie has
+# no explicit Domain (host-only, matching the exact backend host) and is
+# SameSite=Lax -- "localhost" and "127.0.0.1" are different *sites* for
+# SameSite purposes even though both are loopback, so mixing them silently
+# drops the cookie on every cross-site fetch. Override with a comma-
+# separated TAIDY_CORS_ORIGINS for any other split-origin deployment --
+# never "*".
+_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("TAIDY_CORS_ORIGINS", "http://127.0.0.1:5173").split(",")
+    if origin.strip()
+]
 
 
 @asynccontextmanager
@@ -96,6 +112,22 @@ def create_app() -> FastAPI:
     @app.get("/health")
     def health() -> dict:
         return {"status": "ok"}
+
+    # Same-origin production serving: the built frontend and this API share
+    # one host:port, which sidesteps CORS and the SameSite cookie gotcha
+    # entirely (both only matter *across* origins). Registered last so every
+    # API route above still wins; only a genuinely unmatched path falls
+    # through to this handler, exactly like nginx's `try_files ... /index.html`
+    # for any other single-page app.
+    if _FRONTEND_DIST.is_dir():
+        app.mount("/assets", StaticFiles(directory=_FRONTEND_DIST / "assets"), name="frontend-assets")
+
+        @app.get("/{full_path:path}")
+        async def spa(full_path: str) -> FileResponse:
+            candidate = _FRONTEND_DIST / full_path
+            if full_path and candidate.is_file():
+                return FileResponse(candidate)
+            return FileResponse(_FRONTEND_DIST / "index.html")
 
     return app
 

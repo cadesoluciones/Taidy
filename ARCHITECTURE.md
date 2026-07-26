@@ -67,9 +67,8 @@ Taidy/
       test/                         #   Vitest + Testing Library
     e2e/                        #   Playwright specs
     .env.example                 #   VITE_API_BASE_URL=http://127.0.0.1:8000
-  .env.example                 # backend equivalent (session secret, CORS origins,
-                              #   DB paths) -- no real secrets, matches the
-                              #   existing project's .env.example convention
+  api/.env.example             # TAIDY_API_SECURE_COOKIES, TAIDY_CORS_ORIGINS --
+                              #   no real secrets, see api/.env.example itself
 ```
 
 ## Backend design
@@ -128,6 +127,14 @@ an unawaited exception then swallowed client-side. **Both the API and the
 Vite dev server must be addressed as `127.0.0.1`, never a mix with
 `localhost`**, for the session to work at all locally. Documented here so
 the next person (or session) doesn't lose an hour to the same symptom.
+
+This entire class of gotcha only exists because local dev runs the frontend
+and API as two different origins. The Docker deployment (root `Dockerfile`
++ `docker-compose.yml`) doesn't have this problem at all: the API serves
+the already-built frontend from the same origin, so there's no cross-site
+cookie question and no CORS configuration to get right in production —
+`TAIDY_CORS_ORIGINS`/`_ALLOWED_ORIGINS` in `api/main.py` only matter for
+split-origin setups like local dev.
 
 ## Frontend design
 

@@ -1,0 +1,41 @@
+# Never baked into the image -- secrets and deployment-specific config are
+# mounted at container runtime instead (see docker-compose.yml).
+.env
+.env.*
+!.env.example
+config.json
+tables.yaml
+factorial_tables.yaml
+
+# Persisted state -- lives in a mounted volume, never in the image itself.
+webapp/users.db
+webapp/audit.log
+webapp/schedules.json
+webapp/workflows.json
+webapp/run_history.json
+exports/
+exports_factorial/
+
+# Python
+**/__pycache__/
+**/*.pyc
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node / frontend build artifacts (rebuilt by the frontend-builder stage)
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+
+# VCS / IDE / misc
+.git/
+.github/
+.idea/
+.vscode/
+*.md
+docs/

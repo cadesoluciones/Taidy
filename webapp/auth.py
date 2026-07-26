@@ -20,8 +20,9 @@ from pathlib import Path
 from typing import List
 
 from webapp import users_db
+from webapp.state_dir import state_path
 
-_AUDIT_LOG_PATH = Path(__file__).resolve().parent / "audit.log"
+_AUDIT_LOG_PATH = state_path("audit.log", Path(__file__).resolve().parent)
 _AUDIT_LOCK = threading.Lock()
 
 users_db.init_db()
