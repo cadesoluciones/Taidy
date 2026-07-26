@@ -1,7 +1,7 @@
 # Architecture — Taidy React/FastAPI
 
-Companion to `FUNCTIONAL_EQUIVALENCE.md` (what was migrated from the retired
-Streamlit UI). This document describes the shipped architecture.
+This document describes the shipped architecture (React/FastAPI, replacing
+the retired Streamlit UI).
 
 ## Stack decision
 

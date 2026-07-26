@@ -1,8 +1,8 @@
 # Taidy — Frontend (React + TypeScript + Vite)
 
-React replacement for the Streamlit UI in `../webapp/`, talking to the
-FastAPI backend in `../api/`. See `../MIGRATION_PLAN.md` for the overall
-migration status and `../ARCHITECTURE.md` for design decisions.
+React UI talking to the FastAPI backend in `../api/`, which itself reuses
+the auth/workflows/scheduler business logic in `../webapp/`. See
+`../ARCHITECTURE.md` for design decisions.
 
 ## Prerequisites
 
@@ -54,10 +54,9 @@ src/
   api/          typed fetch client + one module per backend domain
   auth/         session context, route guards (mirrors webapp/auth.py's gate)
   components/   shared UI: NavShell, StatusBadge, ConfirmDialog, Form styles
-  hooks/        usePolling (mirrors the Streamlit app's st.fragment refresh)
+  hooks/        usePolling (periodic refresh for in-flight tasks/runs)
   pages/        one file per route, grouped to match the nav sections
-  styles/       design tokens (reused from .streamlit/config.toml, WCAG-AA
-                verified already)
+  styles/       design tokens (WCAG-AA verified)
   test/         Vitest setup (includes a jsdom <dialog> polyfill)
 e2e/            Playwright specs
 ```

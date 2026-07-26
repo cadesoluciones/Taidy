@@ -48,8 +48,7 @@ Panel web que envuelve los comandos anteriores sin reimplementarlos:
 extracción/subida con seguimiento en vivo, autenticación local (usuario/
 contraseña, bcrypt + SQLite), disparo de pipelines de Fabric Data Factory,
 un diseñador de flujos (DAG) con programación, e historial/auditoría.
-Arquitectura documentada en [`ARCHITECTURE.md`](ARCHITECTURE.md); matriz de
-funcionalidades en [`FUNCTIONAL_EQUIVALENCE.md`](FUNCTIONAL_EQUIVALENCE.md).
+Arquitectura documentada en [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ```bash
 # Backend (API) — desde la raíz del proyecto, con el virtualenv activo

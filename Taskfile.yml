@@ -30,11 +30,10 @@ tasks:
         fi
 
   deps:install:
-    desc: Create virtual environment and sync Python dependencies
+    desc: Create virtual environment and install Python dependencies
     cmds:
       - uv venv --clear {{.VENV}}
-      - uv sync --all-groups
-      - uv run pre-commit install --hook-type pre-commit
+      - uv pip install -r requirements.txt
 
   # ------------------------------
   # ✅ Code Quality & Tests

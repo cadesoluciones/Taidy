@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * Requires the isolated API server + Vite dev server already running (see
- * scripts referenced in MIGRATION_PLAN.md). Uses the "operator1" user seeded
- * by the isolated launcher -- never the real webapp/users.db.
+ * Requires the isolated API server + Vite dev server already running
+ * against throwaway state (see playwright.config.ts). Uses the "operator1"
+ * user seeded by the isolated launcher -- never the real webapp/users.db.
  */
 test.describe("Login journey", () => {
   test("wrong password shows an error and does not navigate away", async ({ page }) => {
