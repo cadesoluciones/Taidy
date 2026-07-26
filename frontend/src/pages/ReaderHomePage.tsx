@@ -4,12 +4,12 @@ import { ApiError } from "../api/client";
 import { fetchMyWorkflows } from "../api/dashboard";
 import { runWorkflow } from "../api/workflows";
 import { useAuth } from "../auth/AuthContext";
+import { ACTION_LABELS } from "../components/actionLabels";
 import formStyles from "../components/Form.module.css";
 import { StatusBadge } from "../components/StatusBadge";
 import { WorkflowDiagram } from "../components/WorkflowDiagram";
 import { usePolling } from "../hooks/usePolling";
 import styles from "./ReaderHomePage.module.css";
-import { ACTION_LABELS } from "./WorkflowsPage";
 
 /** Simplified Inicio for App.Reader users (e.g. one RRHH user, one Compras
  * user): each only sees the workflow(s) an admin assigned them

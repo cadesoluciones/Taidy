@@ -118,20 +118,24 @@ test("operator is redirected away from Conexiones API and sees no manage-tables 
   await page.goto("/administracion/conexiones-api");
   await expect(page).toHaveURL("http://127.0.0.1:5173/");
 
-  await page.goto("/ejecutar/bc-extraer");
-  await expect(page.getByRole("link", { name: "Gestionar tablas" })).toHaveCount(0);
-
-  await page.goto("/ejecutar/factorial-extraer");
-  await expect(page.getByRole("link", { name: "Gestionar tablas" })).toHaveCount(0);
+  for (const path of ["/ejecutar/bc-extraer", "/ejecutar/bc-sync", "/ejecutar/factorial-extraer", "/ejecutar/factorial-subir", "/ejecutar/factorial-sync"]) {
+    await page.goto(path);
+    await expect(page.getByRole("link", { name: "Gestionar tablas" })).toHaveCount(0);
+  }
 });
 
-test("admin sees a 'Gestionar tablas' link on both extract forms", async ({ page }) => {
+test("admin sees a 'Gestionar tablas' link on every form with a table picker", async ({ page }) => {
   await loginAsAdmin(page);
-  await page.goto("/ejecutar/bc-extraer");
-  await expect(page.getByRole("link", { name: "Gestionar tablas" })).toBeVisible();
-
-  await page.goto("/ejecutar/factorial-extraer");
-  await expect(page.getByRole("link", { name: "Gestionar tablas" })).toBeVisible();
+  for (const path of [
+    "/ejecutar/bc-extraer",
+    "/ejecutar/bc-sync",
+    "/ejecutar/factorial-extraer",
+    "/ejecutar/factorial-subir",
+    "/ejecutar/factorial-sync",
+  ]) {
+    await page.goto(path);
+    await expect(page.getByRole("link", { name: "Gestionar tablas" })).toBeVisible();
+  }
 });
 
 test("table selector shows picked tables as removable tags instead of a native multiselect", async ({ page }) => {

@@ -18,7 +18,7 @@ from typing import List, Optional
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import Cookie, Depends, HTTPException, Request, status
 
-from webapp import users_db
+from webapp import auth as webapp_auth, users_db
 
 from .session_store import create_session, destroy_session, get_session_username  # noqa: F401
 
@@ -77,6 +77,7 @@ def get_current_user(
 def require_role(role: str):
     def _checker(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
         if user.role != role:
+            webapp_auth._audit("authorization", "denied", user=user.username, detail=f"missing role {role}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Esta acción requiere el rol '{role}'.",
@@ -89,6 +90,7 @@ def require_role(role: str):
 def require_any_role(roles: List[str]):
     def _checker(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
         if user.role not in roles:
+            webapp_auth._audit("authorization", "denied", user=user.username, detail=f"missing any of {roles}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Esta acción requiere alguno de estos roles: {', '.join(roles)}.",

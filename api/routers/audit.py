@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""GET /audit -- Admin only, mirrors webapp/app.py:page_audit."""
+"""GET /audit -- Admin only."""
 
 from __future__ import annotations
 

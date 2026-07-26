@@ -44,13 +44,16 @@ test("notify checkbox is present and controllable on a task launch form", async 
   await page.getByRole("button", { name: "Acceder al panel" }).click();
   await expect(page).toHaveURL("http://127.0.0.1:5173/");
 
-  await page.goto("/ejecutar/bc-subir");
+  // Uses a Factorial action (not BC) so this doesn't race task-launch.spec.ts's
+  // concurrent sync_bc launch -- both would land in the same BC conflict
+  // group in webapp/tasks.py's _CONFLICT_GROUPS under parallel workers.
+  await page.goto("/ejecutar/factorial-subir");
   const notifyCheckbox = page.getByRole("checkbox", { name: /Avisar por email/ });
   await expect(notifyCheckbox).toBeVisible();
   await expect(notifyCheckbox).not.toBeChecked();
   await notifyCheckbox.check();
   await expect(notifyCheckbox).toBeChecked();
 
-  await page.getByRole("button", { name: "Ejecutar subida BC" }).click();
+  await page.getByRole("button", { name: "Ejecutar subida Factorial" }).click();
   await expect(page.getByText(/Tarea iniciada/)).toBeVisible();
 });

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { Settings } from "lucide-react";
 
-import { ROLE_READER } from "../../api/auth";
+import { ROLE_ADMIN, ROLE_READER } from "../../api/auth";
 import { ApiError } from "../../api/client";
 import { fetchFactorialTables } from "../../api/meta";
 import { uploadFactorial } from "../../api/tasks";
@@ -12,6 +14,7 @@ import { TagMultiSelect } from "../../components/TagMultiSelect";
 
 export function FactorialUploadPage() {
   const { user } = useAuth();
+  const isAdmin = user?.role === ROLE_ADMIN;
   const isReader = user?.role === ROLE_READER;
   const [outputDir, setOutputDir] = useState("./exports_factorial");
   const [tables, setTables] = useState<string[]>([]);
@@ -69,7 +72,14 @@ export function FactorialUploadPage() {
           <input id="output_dir" type="text" value={outputDir} onChange={(e) => setOutputDir(e.target.value)} />
         </div>
         <div className={formStyles.field}>
-          <label htmlFor="tables">Tablas (vacío = todas)</label>
+          <div className={formStyles.labelRow}>
+            <label htmlFor="tables">Tablas (vacío = todas)</label>
+            {isAdmin && (
+              <Link to="/administracion/conexiones-api" className={formStyles.manageLink}>
+                <Settings size={12} /> Gestionar tablas
+              </Link>
+            )}
+          </div>
           <TagMultiSelect id="tables" options={tables} selected={selectedTables} onChange={setSelectedTables} />
         </div>
         <label className={formStyles.checkboxField}>

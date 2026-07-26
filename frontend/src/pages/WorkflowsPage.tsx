@@ -17,6 +17,7 @@ import {
   type WorkflowRun,
 } from "../api/workflows";
 import { useAuth } from "../auth/AuthContext";
+import { ACTION_LABELS } from "../components/actionLabels";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import formStyles from "../components/Form.module.css";
 import { NotifyCheckbox } from "../components/NotifyCheckbox";
@@ -25,16 +26,6 @@ import { TagMultiSelect } from "../components/TagMultiSelect";
 import { WorkflowDiagram } from "../components/WorkflowDiagram";
 import { usePolling } from "../hooks/usePolling";
 import styles from "./WorkflowsPage.module.css";
-
-export const ACTION_LABELS: Record<string, string> = {
-  extract_bc: "BC · Extraer",
-  upload_bc: "BC · Subir",
-  sync_bc: "BC · Sync (extraer + subir)",
-  extract_factorial: "Factorial · Extraer",
-  upload_factorial: "Factorial · Subir",
-  sync_factorial: "Factorial · Sync (extraer + subir)",
-  run_pipeline: "Fabric · Ejecutar pipeline",
-};
 
 /**
  * Baseline parity with webapp/app.py:page_workflows -- form-based designer +

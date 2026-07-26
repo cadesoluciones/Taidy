@@ -7,21 +7,11 @@ import { fetchPipelines } from "../api/meta";
 import { createSchedule, deleteSchedule, fetchSchedules, setScheduleEnabled, type Schedule } from "../api/schedules";
 import { fetchWorkflows, type Workflow } from "../api/workflows";
 import { useAuth } from "../auth/AuthContext";
+import { ACTION_LABELS } from "../components/actionLabels";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import formStyles from "../components/Form.module.css";
 import { NotifyCheckbox } from "../components/NotifyCheckbox";
 import styles from "./SchedulesPage.module.css";
-
-const ACTION_LABELS: Record<string, string> = {
-  extract_bc: "BC · Extraer",
-  upload_bc: "BC · Subir",
-  sync_bc: "BC · Sync (extraer + subir)",
-  extract_factorial: "Factorial · Extraer",
-  upload_factorial: "Factorial · Subir",
-  sync_factorial: "Factorial · Sync (extraer + subir)",
-  run_pipeline: "Fabric · Ejecutar pipeline",
-  run_workflow: "Flujo (varios bloques)",
-};
 
 const NEEDS_MODE_PARALLEL = new Set(["extract_bc", "sync_bc", "extract_factorial", "sync_factorial"]);
 const NEEDS_START_ON = new Set(["extract_factorial", "sync_factorial"]);

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { Settings } from "lucide-react";
 
-import { ROLE_READER } from "../../api/auth";
+import { ROLE_ADMIN, ROLE_READER } from "../../api/auth";
 import { ApiError } from "../../api/client";
 import { fetchBcTables } from "../../api/meta";
 import { syncBc } from "../../api/tasks";
@@ -12,6 +14,7 @@ import { TagMultiSelect } from "../../components/TagMultiSelect";
 
 export function BcSyncPage() {
   const { user } = useAuth();
+  const isAdmin = user?.role === ROLE_ADMIN;
   const isReader = user?.role === ROLE_READER;
   const [tables, setTables] = useState<string[]>([]);
   const [selectedTables, setSelectedTables] = useState<string[]>([]);
@@ -65,7 +68,14 @@ export function BcSyncPage() {
       {isReader && <ReadOnlyNotice action="lanzar sincronizaciones" />}
       <form className={formStyles.card} onSubmit={handleSubmit}>
         <div className={formStyles.field}>
-          <label htmlFor="tables">Tablas (vacío = todas)</label>
+          <div className={formStyles.labelRow}>
+            <label htmlFor="tables">Tablas (vacío = todas)</label>
+            {isAdmin && (
+              <Link to="/administracion/conexiones-api" className={formStyles.manageLink}>
+                <Settings size={12} /> Gestionar tablas
+              </Link>
+            )}
+          </div>
           <TagMultiSelect id="tables" options={tables} selected={selectedTables} onChange={setSelectedTables} />
         </div>
         <div className={formStyles.grid}>
