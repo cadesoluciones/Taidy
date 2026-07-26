@@ -25,3 +25,12 @@ class ChangeRoleRequest(BaseModel):
 
 class UserListOut(BaseModel):
     items: List[UserOut]
+
+
+class SessionOut(BaseModel):
+    session_ref: str
+    created_at: str
+
+
+class SessionListOut(BaseModel):
+    items: List[SessionOut]

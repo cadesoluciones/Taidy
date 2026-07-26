@@ -3,7 +3,17 @@ import { CheckCircle2, Clock, Lock, Plus } from "lucide-react";
 
 import { ROLE_ADMIN, ROLE_OPERATOR, ROLE_READER, type Role } from "../api/auth";
 import { ApiError } from "../api/client";
-import { changeUserRole, createUser, deleteUser, fetchUsers, resetUserPassword, type ManagedUser } from "../api/users";
+import {
+  changeUserRole,
+  createUser,
+  deleteUser,
+  fetchUsers,
+  fetchUserSessions,
+  resetUserPassword,
+  revokeUserSession,
+  type ManagedUser,
+  type UserSession,
+} from "../api/users";
 import { useAuth } from "../auth/AuthContext";
 import { ConfirmDialog } from "./ConfirmDialog";
 import formStyles from "./Form.module.css";
@@ -25,6 +35,7 @@ export function UserDirectory() {
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [resetNotice, setResetNotice] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<UserSession[]>([]);
 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newUsername, setNewUsername] = useState("");
@@ -54,6 +65,23 @@ export function UserDirectory() {
     setRoleDraft(selectedUser?.role ?? null);
     setResetNotice(null);
   }, [selectedUser?.username, selectedUser?.role]);
+
+  async function reloadSessions(username: string) {
+    setSessions((await fetchUserSessions(username)).items);
+  }
+
+  useEffect(() => {
+    setSessions([]);
+    if (selectedUser) void reloadSessions(selectedUser.username);
+    // Only re-fetch when the selected account changes, not on every role edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedUser?.username]);
+
+  async function handleRevokeSession(sessionRef: string) {
+    if (!selectedUser) return;
+    await revokeUserSession(selectedUser.username, sessionRef);
+    await reloadSessions(selectedUser.username);
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -255,6 +283,28 @@ export function UserDirectory() {
                   </button>
                 </div>
               )}
+
+              <div className={styles.sessionsSection}>
+                <span className={styles.sessionsLabel}>Sesiones activas</span>
+                {sessions.length === 0 ? (
+                  <p className={styles.emptySessions}>Sin sesiones activas.</p>
+                ) : (
+                  <ul className={styles.sessionsList}>
+                    {sessions.map((s) => (
+                      <li key={s.session_ref} className={styles.sessionRow}>
+                        <span className={styles.sessionMeta}>Iniciada: {s.created_at}</span>
+                        <button
+                          type="button"
+                          className={styles.btnDanger}
+                          onClick={() => void handleRevokeSession(s.session_ref)}
+                        >
+                          Revocar sesión
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
           </>
         )}

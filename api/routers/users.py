@@ -11,8 +11,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from webapp import users_db
 
+from .. import session_store
 from ..dependencies import require_role
-from ..schemas.users import ChangeRoleRequest, CreateUserRequest, UserListOut, UserOut
+from ..schemas.users import (
+    ChangeRoleRequest,
+    CreateUserRequest,
+    SessionListOut,
+    SessionOut,
+    UserListOut,
+    UserOut,
+)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -69,3 +77,19 @@ def delete_user(username: str) -> None:
         users_db.delete_user(username)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.get(
+    "/{username}/sessions", response_model=SessionListOut, dependencies=[Depends(require_role(users_db.ROLE_ADMIN))]
+)
+def list_sessions(username: str) -> SessionListOut:
+    return SessionListOut(items=[SessionOut(**s) for s in session_store.list_sessions_for_user(username)])
+
+
+@router.delete(
+    "/{username}/sessions/{session_ref}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_role(users_db.ROLE_ADMIN))],
+)
+def revoke_session(username: str, session_ref: str) -> None:
+    session_store.revoke_session_by_ref(username, session_ref)

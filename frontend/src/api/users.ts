@@ -27,3 +27,16 @@ export function resetUserPassword(username: string): Promise<void> {
 export function deleteUser(username: string): Promise<void> {
   return apiDelete<void>(`/users/${encodeURIComponent(username)}`);
 }
+
+export interface UserSession {
+  session_ref: string;
+  created_at: string;
+}
+
+export function fetchUserSessions(username: string): Promise<{ items: UserSession[] }> {
+  return apiGet<{ items: UserSession[] }>(`/users/${encodeURIComponent(username)}/sessions`);
+}
+
+export function revokeUserSession(username: string, sessionRef: string): Promise<void> {
+  return apiDelete<void>(`/users/${encodeURIComponent(username)}/sessions/${encodeURIComponent(sessionRef)}`);
+}
