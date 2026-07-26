@@ -12,6 +12,10 @@ export function usePolling<T>(fetcher: () => Promise<T>, intervalMs: number, ena
   const [isLoading, setIsLoading] = useState(true);
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
+  // Lets a caller force an immediate refresh right after an action it knows
+  // changed the server state, instead of waiting up to `intervalMs` for the
+  // next scheduled tick to notice (see ReaderHomePage's launch button).
+  const tickRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
     if (!enabled) {
@@ -37,6 +41,7 @@ export function usePolling<T>(fetcher: () => Promise<T>, intervalMs: number, ena
         }
       }
     }
+    tickRef.current = tick;
 
     void tick();
     const id = window.setInterval(() => void tick(), intervalMs);
@@ -46,5 +51,5 @@ export function usePolling<T>(fetcher: () => Promise<T>, intervalMs: number, ena
     };
   }, [intervalMs, enabled]);
 
-  return { data, error, isLoading };
+  return { data, error, isLoading, refetch: () => tickRef.current() };
 }

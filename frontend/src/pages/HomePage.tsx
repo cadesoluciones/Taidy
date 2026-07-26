@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Activity, AlertTriangle, CalendarClock, type LucideIcon } from "lucide-react";
 
+import { ROLE_READER } from "../api/auth";
 import { fetchDashboardSummary } from "../api/dashboard";
 import { useAuth } from "../auth/AuthContext";
 import { DataNetworkArt } from "../components/DataNetworkArt";
@@ -8,6 +9,7 @@ import { OutcomeIcon } from "../components/OutcomeIcon";
 import { Timeline, type TimelineItem } from "../components/Timeline";
 import { usePolling } from "../hooks/usePolling";
 import styles from "./HomePage.module.css";
+import { ReaderHomePage } from "./ReaderHomePage";
 
 const QUICK_LINKS = [
   { to: "/ejecutar/bc-sync", label: "Business Central · Sync" },
@@ -19,6 +21,19 @@ const QUICK_LINKS = [
 ];
 
 export function HomePage() {
+  const { user } = useAuth();
+  // Reader's Inicio is a different page entirely -- launch/follow their
+  // assigned workflow(s), nothing about tasks/schedules/checkpoints. The
+  // dashboard-polling hooks below are only safe to call for Admin/Operator,
+  // so they live in their own component rather than being called
+  // conditionally in this one.
+  if (user?.role === ROLE_READER) {
+    return <ReaderHomePage />;
+  }
+  return <AdminOperatorHomePage />;
+}
+
+function AdminOperatorHomePage() {
   const { user } = useAuth();
   const { data: summary } = usePolling(fetchDashboardSummary, 10000);
 

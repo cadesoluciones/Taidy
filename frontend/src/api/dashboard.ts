@@ -1,4 +1,5 @@
 import { apiGet } from "./client";
+import type { WorkflowRun } from "./workflows";
 
 export interface RecentRun {
   action: string;
@@ -18,4 +19,16 @@ export interface DashboardSummary {
 
 export function fetchDashboardSummary(): Promise<DashboardSummary> {
   return apiGet<DashboardSummary>("/dashboard/summary");
+}
+
+export interface MyWorkflowStatus {
+  id: string;
+  name: string;
+  current_run: WorkflowRun | null;
+  last_run: WorkflowRun | null;
+  scheduled: boolean;
+}
+
+export function fetchMyWorkflows(): Promise<{ items: MyWorkflowStatus[] }> {
+  return apiGet<{ items: MyWorkflowStatus[] }>("/dashboard/mine-workflows");
 }

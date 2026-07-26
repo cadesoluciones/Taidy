@@ -99,10 +99,10 @@ def run_workflow(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
-    return _run_to_out(run)
+    return run_to_out(run)
 
 
-def _run_to_out(run) -> WorkflowRunOut:
+def run_to_out(run) -> WorkflowRunOut:
     return WorkflowRunOut(
         id=run.id,
         workflow_id=run.workflow_id,
@@ -129,7 +129,7 @@ def _run_to_out(run) -> WorkflowRunOut:
 
 @runs_router.get("", response_model=WorkflowRunListOut)
 def list_workflow_runs() -> WorkflowRunListOut:
-    return WorkflowRunListOut(items=[_run_to_out(r) for r in workflow_engine.list_runs()])
+    return WorkflowRunListOut(items=[run_to_out(r) for r in workflow_engine.list_runs()])
 
 
 @runs_router.post("/{run_id}/stop", status_code=status.HTTP_204_NO_CONTENT)

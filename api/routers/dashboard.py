@@ -1,14 +1,21 @@
 # -*- coding: utf-8 -*-
-"""GET /dashboard/summary -- backs the React "Inicio" page (F-05)."""
+"""GET /dashboard/summary -- backs the React "Inicio" page (F-05).
+
+GET /dashboard/mine-workflows backs the same page's Reader-facing view: per
+workflow the caller can access (see webapp/workflows.list_workflows_for_user),
+its current run (if any), its most recent finished run, and whether any
+enabled schedule targets it.
+"""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from webapp import history, scheduler as sched_module, tasks, workflow_engine
+from webapp import history, scheduler as sched_module, tasks, workflow_engine, workflows as workflows_module
 
-from ..dependencies import get_current_user
-from ..schemas.dashboard import DashboardSummaryOut, RecentRunOut
+from ..dependencies import CurrentUser, get_current_user
+from ..schemas.dashboard import DashboardSummaryOut, MyWorkflowsOut, MyWorkflowStatusOut, RecentRunOut
+from .workflows import run_to_out
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -37,3 +44,32 @@ def summary() -> DashboardSummaryOut:
             for e in recent
         ],
     )
+
+
+@router.get("/mine-workflows", response_model=MyWorkflowsOut, dependencies=[Depends(get_current_user)])
+def mine_workflows(current: CurrentUser = Depends(get_current_user)) -> MyWorkflowsOut:
+    accessible = workflows_module.list_workflows_for_user(current.username, current.role)
+    runs = workflow_engine.list_runs()  # newest first, see workflow_engine.list_runs()
+    schedules = sched_module.list_schedules()
+
+    items = []
+    for wf in accessible:
+        wf_runs = [r for r in runs if r.workflow_id == wf["id"]]
+        current_run = next((r for r in wf_runs if r.status == "running"), None)
+        last_run = next((r for r in wf_runs if r.status != "running"), None)
+        scheduled = any(
+            s.get("enabled", True)
+            and s.get("action") == "run_workflow"
+            and s.get("params", {}).get("workflow_id") == wf["id"]
+            for s in schedules
+        )
+        items.append(
+            MyWorkflowStatusOut(
+                id=wf["id"],
+                name=wf["name"],
+                current_run=run_to_out(current_run) if current_run else None,
+                last_run=run_to_out(last_run) if last_run else None,
+                scheduled=scheduled,
+            )
+        )
+    return MyWorkflowsOut(items=items)

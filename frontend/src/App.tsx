@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
 import { RequireAdmin } from "./auth/RequireAdmin";
 import { RedirectIfAuthenticated, RequireAuth } from "./auth/RequireAuth";
+import { RequireOperatorOrAdmin } from "./auth/RequireOperatorOrAdmin";
 import { NavShell } from "./components/NavShell";
 import { AccountPage } from "./pages/AccountPage";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
@@ -40,17 +41,19 @@ export function App() {
             <Route path="/change-password" element={<ChangePasswordPage />} />
             <Route element={<NavShell />}>
               <Route path="/" element={<HomePage />} />
-              <Route path="/ejecutar/bc-extraer" element={<BcExtractPage />} />
-              <Route path="/ejecutar/bc-subir" element={<BcUploadPage />} />
-              <Route path="/ejecutar/bc-sync" element={<BcSyncPage />} />
-              <Route path="/ejecutar/factorial-extraer" element={<FactorialExtractPage />} />
-              <Route path="/ejecutar/factorial-subir" element={<FactorialUploadPage />} />
-              <Route path="/ejecutar/factorial-sync" element={<FactorialSyncPage />} />
-              <Route path="/ejecutar/pipelines" element={<PipelinesPage />} />
-              <Route path="/flujos" element={<WorkflowsPage />} />
-              <Route path="/programacion" element={<SchedulesPage />} />
-              <Route path="/actividad/tareas-en-curso" element={<RunningTasksPage />} />
-              <Route path="/actividad/historial" element={<HistoryPage />} />
+              <Route element={<RequireOperatorOrAdmin />}>
+                <Route path="/ejecutar/bc-extraer" element={<BcExtractPage />} />
+                <Route path="/ejecutar/bc-subir" element={<BcUploadPage />} />
+                <Route path="/ejecutar/bc-sync" element={<BcSyncPage />} />
+                <Route path="/ejecutar/factorial-extraer" element={<FactorialExtractPage />} />
+                <Route path="/ejecutar/factorial-subir" element={<FactorialUploadPage />} />
+                <Route path="/ejecutar/factorial-sync" element={<FactorialSyncPage />} />
+                <Route path="/ejecutar/pipelines" element={<PipelinesPage />} />
+                <Route path="/flujos" element={<WorkflowsPage />} />
+                <Route path="/programacion" element={<SchedulesPage />} />
+                <Route path="/actividad/tareas-en-curso" element={<RunningTasksPage />} />
+                <Route path="/actividad/historial" element={<HistoryPage />} />
+              </Route>
               <Route element={<RequireAdmin />}>
                 <Route path="/administracion/usuarios" element={<UsersPage />} />
                 <Route path="/administracion/auditoria" element={<AuditPage />} />

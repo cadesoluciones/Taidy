@@ -3,12 +3,10 @@ import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 
 /**
- * Mirrors webapp/auth.py's require_authenticated_user() hard gate: no
- * session -> the login page; a pending forced password change -> the
- * change-password page, blocking everything else, exactly like the
- * Streamlit app's forced form does. The server re-checks all of this on
- * every request regardless -- this guard is UX only, never the real
- * authorization boundary (see api/dependencies.py).
+ * No session -> the login page; a pending forced password change -> the
+ * change-password page, blocking everything else. The server re-checks all
+ * of this on every request regardless -- this guard is UX only, never the
+ * real authorization boundary (see api/dependencies.py).
  */
 export function RequireAuth() {
   const { user, isLoading } = useAuth();

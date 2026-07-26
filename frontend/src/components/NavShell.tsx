@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { RefreshCw as Sync } from "lucide-react";
 
-import { ROLE_ADMIN } from "../api/auth";
+import { ROLE_ADMIN, ROLE_READER } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
 import { Modal } from "./Modal";
 import styles from "./NavShell.module.css";
@@ -37,8 +37,13 @@ interface NavSection {
   items: NavItem[];
 }
 
-const BASE_SECTIONS: NavSection[] = [
-  { label: "", items: [{ to: "/", label: "Inicio", icon: Home }] },
+const INICIO_SECTION: NavSection = { label: "", items: [{ to: "/", label: "Inicio", icon: Home }] };
+
+// Reader's whole experience is Inicio (launch/follow their assigned
+// workflows) + Cuenta -- these sections assume knowledge Reader isn't meant
+// to need, and every route under them redirects Reader back to Inicio
+// anyway (see RequireOperatorOrAdmin).
+const OPERATIONAL_SECTIONS: NavSection[] = [
   {
     label: "Actividad",
     items: [
@@ -116,7 +121,13 @@ export function NavShell() {
     navigate("/login", { replace: true });
   }
 
-  const sections = [...BASE_SECTIONS, ...(user?.role === ROLE_ADMIN ? [ADMIN_SECTION] : []), ACCOUNT_SECTION];
+  const isReader = user?.role === ROLE_READER;
+  const sections = [
+    INICIO_SECTION,
+    ...(isReader ? [] : OPERATIONAL_SECTIONS),
+    ...(user?.role === ROLE_ADMIN ? [ADMIN_SECTION] : []),
+    ACCOUNT_SECTION,
+  ];
   const breadcrumb = breadcrumbFor(sections, location.pathname);
 
   return (

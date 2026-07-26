@@ -26,7 +26,7 @@ import { WorkflowDiagram } from "../components/WorkflowDiagram";
 import { usePolling } from "../hooks/usePolling";
 import styles from "./WorkflowsPage.module.css";
 
-const ACTION_LABELS: Record<string, string> = {
+export const ACTION_LABELS: Record<string, string> = {
   extract_bc: "BC · Extraer",
   upload_bc: "BC · Subir",
   sync_bc: "BC · Sync (extraer + subir)",
