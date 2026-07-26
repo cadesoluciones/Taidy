@@ -34,13 +34,9 @@ def isolated_state(tmp_path, monkeypatch):
     monkeypatch.setattr(workflows, "_WORKFLOWS_PATH", tmp_path / "workflows.json")
     monkeypatch.setattr(history, "_HISTORY_PATH", tmp_path / "run_history.json")
     users_db.init_db()
-    # webapp/app.py's auth gate (auth.require_authenticated_user()) lives in the
-    # module's top-level code, which only runs once per process -- on whichever
-    # test happens to import webapp.app first. A fresh admin always has
-    # must_change_password=1, so if that first import used "admin" as the faked
-    # identity, every test would hit the forced-password-change screen instead
-    # of real page content, regardless of what that particular test needed.
-    # Clearing it here makes every test's use of "admin" order-independent.
+    # A freshly-seeded admin always has must_change_password=1; clear it so any
+    # test using "admin" doesn't need to handle the forced-password-change case
+    # unless that's specifically what it's testing.
     users_db.change_password(users_db.DEFAULT_ADMIN_USERNAME, "TestAdminPass2026!", must_change_password=False)
 
     with tasks._REGISTRY_LOCK:

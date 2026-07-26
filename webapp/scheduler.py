@@ -4,9 +4,9 @@ Background scheduling for Taidy's webapp.
 
 Schedule *definitions* are persisted as JSON next to this file so they
 survive app restarts. The actual timers live in an APScheduler
-BackgroundScheduler that keeps running in this process regardless of which
-page the browser is showing — see webapp/app.py for how the singleton is
-kept alive across Streamlit reruns (`st.cache_resource`).
+BackgroundScheduler built once per process in FastAPI's lifespan hook (see
+api/main.py) and kept running regardless of which page the browser is
+showing.
 
 When a trigger fires, this module hands off to webapp/tasks.launch(), the
 exact same entry point manual "Run" buttons use — so a scheduled run shows
@@ -214,9 +214,9 @@ def _run_scheduled(schedule_id: str) -> None:
 def build_scheduler() -> BackgroundScheduler:
     """Creates the BackgroundScheduler and re-registers all persisted schedules.
 
-    Call this exactly once per process (wrapped in `st.cache_resource` at the
-    call site in app.py) so restarting the app re-loads schedules.json instead
-    of losing every schedule.
+    Call this exactly once per process (from api/main.py's lifespan startup)
+    so restarting the app re-loads schedules.json instead of losing every
+    schedule.
     """
     scheduler = BackgroundScheduler(timezone="UTC")
     scheduler.start()

@@ -1,7 +1,7 @@
-# Target Architecture — Taidy React/FastAPI migration
+# Architecture — Taidy React/FastAPI
 
-Companion to `FUNCTIONAL_EQUIVALENCE.md` (what's being migrated) and
-`MIGRATION_PLAN.md` (phased execution order). This document is the "how."
+Companion to `FUNCTIONAL_EQUIVALENCE.md` (what was migrated from the retired
+Streamlit UI). This document describes the shipped architecture.
 
 ## Stack decision
 
@@ -74,17 +74,12 @@ Taidy/
 
 ## Backend design
 
-### Auth — preserving the existing mechanism exactly
+### Auth
 
-Per constraint #4 (never invent auth if it doesn't exist) and the explicit
-"conservar Entra ID si existe" clause: **Entra ID does not exist in this
-project.** It was built and then explicitly removed earlier in this project's
-history, replaced by local username/password (bcrypt + SQLite in
-`webapp/users_db.py`) after real production incidents with a persistent-
-cookie library. The only correct reading of constraint #4 here is: *preserve
-the local auth mechanism that actually exists* — not resurrect Entra ID. This
-is flagged again in Open Questions for explicit confirmation before Fase 3
-auth work is finalized.
+Local username/password (bcrypt + SQLite in `webapp/users_db.py`) — Entra ID
+was built and then explicitly removed earlier in this project's history after
+real production incidents with a persistent-cookie library, and is not being
+resurrected.
 
 Session model: FastAPI issues an HttpOnly, `SameSite=Lax`, `Secure`-when-
 possible session cookie (not a bare JWT in `localStorage`, to avoid XSS token
@@ -230,35 +225,17 @@ credentials already live) — **never** sent to or stored in the frontend.
 `services/notifications.py` module; a per-task/schedule/workflow boolean
 ("avisar por email") is the only piece of this that reaches the UI.
 
-## Security checklist (Fase 5, tracked here so it isn't lost)
+## Security checklist
 
-- [ ] Secrets only via `.env`/`config.json` (existing pattern), never in
+- [x] Secrets only via `.env`/`config.json` (existing pattern), never in
       frontend bundle or committed to git.
-- [ ] `.env.example` for both `api/` and `frontend/`, no real values.
-- [ ] CORS restricted to `http://127.0.0.1:5173` (Vite dev) and the eventual
-      production origin — never `*`.
-- [ ] Every mutating endpoint re-validates role server-side (never "the
-      button was hidden so it must be fine" — this is already the Streamlit
-      app's own documented invariant, carried forward unchanged).
-- [ ] Path/traversal checks on any file-serving endpoint (log downloads, if
-      added) — reuse the existing `_MAX_LOG_CHARS`-capped, path-free log
-      storage model rather than serving raw file paths.
-- [ ] No stack traces returned to the client on unhandled exceptions
-      (`.streamlit/config.toml`'s `showErrorDetails = "none"` has a direct
-      FastAPI equivalent: a global exception handler returning a generic
-      500 body, full trace only in server logs).
-
-## Open questions (blocking, need an explicit answer before Fase 3 is "final")
-
-1. **Entra ID vs. local auth** — confirming the reading above (preserve local
-   bcrypt+SQLite auth; Entra ID is not being resurrected) before building
-   `api/routers/auth.py`.
-2. **Session mechanism** — HttpOnly cookie (recommended, matches the current
-   threat model) vs. bearer JWT in a frontend store. Cookie is the default
-   unless told otherwise.
-3. **Polling vs. SSE** for task/workflow-run live status — polling proposed
-   as the Fase-3 baseline; SSE as later enhancement.
-4. **React Flow vs. Cytoscape.js** for the interactive diagram — a reversible
-   technical choice, will be decided during Fase 4 implementation using best
-   judgment (both satisfy the "no custom JS component, use a maintained
-   library" constraint the owner set) unless there's a preference now.
+- [x] `.env.example` for both `api/` and `frontend/`, no real values.
+- [x] CORS restricted to an explicit origin allowlist — never `*`.
+- [x] Every mutating endpoint re-validates role server-side (never "the
+      button was hidden so it must be fine").
+- [x] Path/traversal checks on any file-serving endpoint — reuse the
+      existing `_MAX_LOG_CHARS`-capped, path-free log storage model rather
+      than serving raw file paths.
+- [x] No stack traces returned to the client on unhandled exceptions — a
+      global exception handler returns a generic 500 body, full trace only
+      in server logs.

@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Taidy API -- FastAPI backend for the React migration.
+Taidy API -- FastAPI backend.
 
 A thin layer over the existing webapp/*.py modules (themselves a thin layer
 over src/**, per this project's long-standing rule: business logic lives in
-src/ and is never reimplemented in the UI layer, Streamlit or React).
+src/ and is never reimplemented in the UI layer).
 
 Run locally with: uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
 """
@@ -52,8 +52,7 @@ _ALLOWED_ORIGINS = ["http://127.0.0.1:5173"]
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    # Same singleton pattern webapp/app.py uses via @st.cache_resource: built
-    # once per process, re-registers every persisted schedule.json entry.
+    # Built once per process, re-registers every persisted schedule.json entry.
     app.state.scheduler = sched_module.build_scheduler()
     try:
         yield

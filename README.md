@@ -5,7 +5,6 @@ Herramienta para extraer datos de **Microsoft Dynamics 365 Business Central** y 
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![Pytest](https://img.shields.io/badge/Pytest-✔e06?style=flat-square&logo=pytest&logoColor=white)](https://pytest.org)
 [![Taskfile](https://img.shields.io/badge/Taskfile-4d2a85?style=flat-square)](https://taskfile.dev)
-![coverage](./docs/coverage.svg)
 
 ## 🚀 Inicio Rápido
 
@@ -42,41 +41,20 @@ task extract:factorial -- --start-on 2025-01-01 --end-on 2025-01-07 --dry-run
 task sync:factorial -- --start-on 2025-01-01 --end-on 2026-01-01 --mode incremental --parallel 5
 ```
 
-## 🖥️ Interfaz web (`webapp/`, Streamlit)
+## 🖥️ Interfaz web (React + FastAPI)
 
-Panel local que envuelve los comandos anteriores sin reimplementarlos:
+Panel web que envuelve los comandos anteriores sin reimplementarlos:
 extracción/subida con seguimiento en vivo, autenticación local (usuario/
 contraseña, bcrypt + SQLite), disparo de pipelines de Fabric Data Factory,
 un diseñador de flujos (DAG) con programación, e historial/auditoría.
-
-```bash
-uv pip install -r requirements.txt   # incluye streamlit, ya en requirements.txt
-streamlit run webapp/app.py
-```
-
-Arranca en `http://127.0.0.1:8501` por defecto (solo loopback — para acceso
-en red, colócalo detrás de un reverse proxy que termine TLS). Pruebas:
-`pytest webapp/tests/`.
-
-## 🔄 Migración a React + FastAPI (en curso)
-
-La interfaz Streamlit de arriba se está migrando a React + TypeScript
-(`frontend/`) sobre una API FastAPI (`api/`), conservando toda la lógica de
-negocio de `src/` sin duplicarla. **`webapp/` sigue siendo la interfaz de
-referencia y el mecanismo de rollback** hasta que la migración complete la
-Fase 7 (limpieza) — no se ha retirado nada todavía.
-
-- **[📋 Plan de migración](MIGRATION_PLAN.md)** — fases, qué está hecho, qué falta
-- **[🏗️ Arquitectura objetivo](ARCHITECTURE.md)** — stack, diseño de sesión, decisiones de seguridad
-- **[✅ Matriz de equivalencia funcional](FUNCTIONAL_EQUIVALENCE.md)** — cada funcionalidad de `webapp/`, su endpoint/página equivalente y su estado
-
-Ejecución local de la nueva pila (con el backend Python activo):
+Arquitectura documentada en [`ARCHITECTURE.md`](ARCHITECTURE.md); matriz de
+funcionalidades en [`FUNCTIONAL_EQUIVALENCE.md`](FUNCTIONAL_EQUIVALENCE.md).
 
 ```bash
 # Backend (API) — desde la raíz del proyecto, con el virtualenv activo
 uv pip install -r requirements.txt   # incluye fastapi, uvicorn, pydantic
 uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
-pytest api/tests/
+pytest api/tests/ webapp/tests/
 
 # Frontend — en otra terminal
 cd frontend
@@ -88,12 +66,6 @@ npm run test         # Vitest
 npm run test:e2e     # Playwright (requiere backend + frontend arrancados
                       # sobre estado aislado, nunca webapp/users.db real)
 ```
-
-## 📚 Documentación Adicional
-
-- **[🔧 Configuración Detallada](docs/configuracion.md)** - Azure AD, variables de entorno, configuración de tablas
-- **[🛠️ Guía de Desarrollo](docs/desarrollo.md)** - Arquitectura, pruebas, troubleshooting, extensión
-- **[🐳 Guía de Docker](docs/docker.md)** - Cómo construir y ejecutar la aplicación con Docker
 
 ## ⚡ Características
 

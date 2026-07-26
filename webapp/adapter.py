@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Thin adapter between the Streamlit UI and Taidy's existing CLI entry points.
+Thin adapter between the web UI and Taidy's existing CLI entry points.
 
 Nothing here reimplements extraction/upload logic, and nothing here executes
 anything either: every function builds an argv list from validated UI inputs,
@@ -12,8 +12,8 @@ backend returns only aggregate counts, tasks.py asks these functions to
 reconstruct a per-table breakdown from the captured subprocess output.
 
 Adding a new UI action later means: add an argv-builder function here (or
-reuse one), wire it into webapp/tasks.py's MODULE_FOR_ACTION if it's a new
-action key, and add a form/tab in webapp/app.py — never editing src/**.
+reuse one), and wire it into webapp/tasks.py's MODULE_FOR_ACTION if it's a
+new action key — never editing src/**.
 """
 
 from __future__ import annotations
@@ -21,10 +21,10 @@ from __future__ import annotations
 import re
 import sys
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import List, Optional, Sequence
 
-import streamlit as st
 import yaml
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -312,21 +312,15 @@ def list_factorial_tables() -> List[str]:
 def _list_table_names(path: Path) -> List[str]:
     if not path.is_file():
         return []
-    # Every Streamlit rerun (any widget interaction anywhere in the app, not just
-    # on this page) called this before caching was added, re-reading and
-    # re-parsing the YAML from disk every time. Caching on (path, mtime) avoids
-    # that on every rerun that doesn't touch the file, while still picking up an
-    # edit on the very next rerun (mtime changes -> cache key changes) instead of
-    # requiring an app restart.
+    # Every request that renders a table picker calls this; caching on
+    # (path, mtime) avoids re-reading and re-parsing the YAML from disk each
+    # time, while still picking up an edit on the very next call (mtime
+    # changes -> cache key changes) instead of requiring a process restart.
     return _list_table_names_cached(str(path), path.stat().st_mtime)
 
 
-@st.cache_data
+@lru_cache(maxsize=32)
 def _list_table_names_cached(path_str: str, mtime: float) -> List[str]:
-    # `mtime` must NOT start with "_" -- st.cache_data excludes underscore-prefixed
-    # parameters from the cache key (that convention exists so unhashable objects,
-    # e.g. a DB connection, can be passed through without hashing). Since mtime is
-    # exactly what makes this cache invalidate on file edits, it has to be hashed.
     path = Path(path_str)
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}

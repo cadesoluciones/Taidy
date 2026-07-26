@@ -2,18 +2,13 @@
 """
 Session store and FastAPI auth dependencies.
 
-Mirrors webapp/auth.py's model exactly (never trust a cached client claim
-about role; re-check server-side on every request) but adapted to REST:
-Streamlit could cache the role in st.session_state for a whole script run;
-here every request is independent, so the current role/must_change_password
-is re-read from users_db fresh each time -- the session only remembers WHO
-is asking, not what they're allowed to do.
+Never trust a cached client claim about role -- every request re-reads the
+current role/must_change_password from users_db fresh; the session only
+remembers WHO is asking, not what they're allowed to do.
 
 The session store is an in-memory dict, the same pattern already used by
-webapp/tasks.py's task registry and webapp/workflow_engine.py's run registry
--- consistent with this project's existing style, and appropriate here since
-neither the Streamlit app's st.session_state nor a signed-cookie session
-needs to survive a server restart.
+webapp/tasks.py's task registry and webapp/workflow_engine.py's run
+registry.
 """
 
 from __future__ import annotations
@@ -89,9 +84,8 @@ def get_current_user_allow_pending(
 def get_current_user(
     user: CurrentUser = Depends(get_current_user_allow_pending),
 ) -> CurrentUser:
-    """The gate every OTHER endpoint depends on -- mirrors
-    auth.require_authenticated_user()'s hard stop on a pending forced
-    password change.
+    """The gate every OTHER endpoint depends on -- hard-stops any request
+    from a user with a pending forced password change.
     """
     if user.must_change_password:
         raise HTTPException(
@@ -129,8 +123,8 @@ def require_any_role(roles: List[str]):
 
 
 def get_scheduler(request: Request) -> BackgroundScheduler:
-    """The live APScheduler instance, created once in main.py's lifespan hook
-    (mirrors webapp/app.py's @st.cache_resource singleton) -- schedules.py's
-    add/remove/enable functions need the live object, not just the JSON file.
+    """The live APScheduler instance, created once in main.py's lifespan hook --
+    schedules.py's add/remove/enable functions need the live object, not just
+    the JSON file.
     """
     return request.app.state.scheduler

@@ -3,8 +3,9 @@
 Workflow definitions: named DAGs of existing actions (extract/upload/sync/
 run_pipeline). Each step declares what it depends on and what to do if a
 dependency didn't succeed (trigger_rule). This module only owns the
-persisted *definition* (CRUD + diagram rendering); actually running one
-lives in webapp/workflow_engine.py.
+persisted *definition* (CRUD); actually running one lives in
+webapp/workflow_engine.py. The interactive diagram is rendered client-side
+by the React frontend (@xyflow/react) from this same step data.
 """
 
 from __future__ import annotations
@@ -26,20 +27,6 @@ TRIGGER_LABELS = {
 
 _WORKFLOWS_PATH = Path(__file__).resolve().parent / "workflows.json"
 _LOCK = threading.Lock()
-
-# Every value below was checked against black (#000000) text with the WCAG 2.2
-# contrast formula and clears the 4.5:1 AA minimum (lowest is "error" at 5.67:1) —
-# see audit finding A-02. fontcolor is set explicitly in to_dot() below so this
-# stays true regardless of Graphviz's own default, which isn't guaranteed.
-_STATUS_COLORS = {
-    "pending": "#d0d0d0",
-    "running": "#4a90d9",
-    "ok": "#3fb950",
-    "error": "#e5534b",
-    "cancelled": "#9e9e9e",
-    "stopped": "#c9a227",
-}
-_NODE_FONT_COLOR = "#000000"
 
 
 def _read() -> list:
@@ -146,26 +133,3 @@ def delete_workflow(workflow_id: str) -> None:
         data = _read()
         data = [w for w in data if w["id"] != workflow_id]
         _write(data)
-
-
-def to_dot(steps: List[dict], *, step_status: Optional[Dict[str, str]] = None) -> str:
-    """Renders the DAG as Graphviz DOT source (rendered client-side by Streamlit
-    via st.graphviz_chart — no system Graphviz binary needed on the server).
-    """
-    lines = [
-        "digraph {",
-        "  rankdir=LR;",
-        f'  node [shape=box, style=filled, fontname="Arial", fontcolor="{_NODE_FONT_COLOR}"];',
-    ]
-    for s in steps:
-        status = (step_status or {}).get(s["id"], "pending")
-        color = _STATUS_COLORS.get(status, "#ffffff")
-        label = (s.get("label") or s["id"]).replace('"', "'")
-        node_label = f"{label}\\n({status})" if step_status is not None else label
-        lines.append(f'  "{s["id"]}" [label="{node_label}", fillcolor="{color}"];')
-    for s in steps:
-        for dep in s.get("depends_on", []):
-            style = "solid" if s.get("trigger_rule", TRIGGER_ALL_SUCCESS) == TRIGGER_ALL_SUCCESS else "dashed"
-            lines.append(f'  "{dep}" -> "{s["id"]}" [style={style}];')
-    lines.append("}")
-    return "\n".join(lines)

@@ -1,1 +1,1 @@
-"""Streamlit web interface for Taidy. Imports the existing `src` pipelines as a library."""
+"""Business/orchestration layer for the Taidy API. Imports the existing `src` pipelines as a library."""

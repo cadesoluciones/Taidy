@@ -374,8 +374,9 @@ def stop_task(task_id: str) -> bool:
 
 # --------------------------------------------------------------------------------------
 # Single dispatch point: "action name + params dict" -> the right argv builder(s) + launch.
-# Used identically by manual runs (webapp/app.py) and scheduled runs (webapp/scheduler.py)
-# so both go through the exact same code path and show up the same way in "Tareas en curso".
+# Used identically by manual runs (api/routers/tasks.py) and scheduled runs
+# (webapp/scheduler.py) so both go through the exact same code path and show
+# up the same way in "Tareas en curso".
 # --------------------------------------------------------------------------------------
 
 
