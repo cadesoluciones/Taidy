@@ -173,6 +173,28 @@
   border-left-color: var(--color-info);
 }
 
+.alertsBox {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-warning);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.alertsHeading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-warning);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.alertsList {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
+  font-size: 13px;
+}
+
 .statusDot {
   width: 8px;
   height: 8px;

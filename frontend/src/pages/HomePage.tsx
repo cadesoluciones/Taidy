@@ -4,6 +4,7 @@ import { Activity, AlertTriangle, CalendarClock, type LucideIcon } from "lucide-
 import { ROLE_READER } from "../api/auth";
 import { fetchDashboardSummary } from "../api/dashboard";
 import { useAuth } from "../auth/AuthContext";
+import { ACTION_LABELS } from "../components/actionLabels";
 import { DataNetworkArt } from "../components/DataNetworkArt";
 import { OutcomeIcon } from "../components/OutcomeIcon";
 import { Timeline, type TimelineItem } from "../components/Timeline";
@@ -83,6 +84,23 @@ function AdminOperatorHomePage() {
         <div className={`${styles.statusBar} ${styles[statusTone]}`}>
           <span className={styles.statusDot} aria-hidden="true" />
           <strong>Estado del sistema:</strong> {statusMessage}
+        </div>
+      )}
+
+      {summary && summary.error_rate_alerts.length > 0 && (
+        <div className={styles.alertsBox}>
+          <div className={styles.alertsHeading}>
+            <AlertTriangle size={16} />
+            Tasa de errores elevada
+          </div>
+          <ul className={styles.alertsList}>
+            {summary.error_rate_alerts.map((a) => (
+              <li key={a.action}>
+                <strong>{ACTION_LABELS[a.action] ?? a.action}</strong>: {a.recent_failures} de {a.recent_total}{" "}
+                ejecuciones recientes han fallado.
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

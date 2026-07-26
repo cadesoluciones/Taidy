@@ -11,10 +11,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from webapp import history, scheduler as sched_module, tasks, workflow_engine, workflows as workflows_module
+from webapp import alerts, history, scheduler as sched_module, tasks, workflow_engine, workflows as workflows_module
 
 from ..dependencies import CurrentUser, get_current_user
-from ..schemas.dashboard import DashboardSummaryOut, MyWorkflowsOut, MyWorkflowStatusOut, RecentRunOut
+from ..schemas.dashboard import DashboardSummaryOut, ErrorRateAlertOut, MyWorkflowsOut, MyWorkflowStatusOut, RecentRunOut
 from .workflows import run_to_out
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -43,6 +43,7 @@ def summary() -> DashboardSummaryOut:
             )
             for e in recent
         ],
+        error_rate_alerts=[ErrorRateAlertOut(**a) for a in alerts.detect_elevated_error_rates()],
     )
 
 

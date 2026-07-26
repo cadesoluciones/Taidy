@@ -34,6 +34,19 @@ def test_summary_reflects_history(isolated_state, client):
     assert body["active_schedule_count"] == 0
     assert body["recent_error_count"] == 1
     assert len(body["recent_history"]) == 2
+    assert body["error_rate_alerts"] == []
+
+
+def test_summary_surfaces_an_elevated_error_rate_alert(isolated_state, client):
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+
+    for _ in range(4):
+        history.record_run(action="sync_bc", source="admin", status="error", ok=False, message="bad", log="")
+
+    resp = client.get("/dashboard/summary")
+    alerts = resp.json()["error_rate_alerts"]
+    assert alerts == [{"action": "sync_bc", "recent_failures": 4, "recent_total": 4}]
 
 
 # --------------------------------------------------------------------------------------

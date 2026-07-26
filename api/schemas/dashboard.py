@@ -17,11 +17,18 @@ class RecentRunOut(BaseModel):
     message: str
 
 
+class ErrorRateAlertOut(BaseModel):
+    action: str
+    recent_failures: int
+    recent_total: int
+
+
 class DashboardSummaryOut(BaseModel):
     running_count: int
     active_schedule_count: int
     recent_error_count: int
     recent_history: List[RecentRunOut]
+    error_rate_alerts: List[ErrorRateAlertOut]
 
 
 class MyWorkflowStatusOut(BaseModel):

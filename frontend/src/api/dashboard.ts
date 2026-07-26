@@ -10,11 +10,18 @@ export interface RecentRun {
   message: string;
 }
 
+export interface ErrorRateAlert {
+  action: string;
+  recent_failures: number;
+  recent_total: number;
+}
+
 export interface DashboardSummary {
   running_count: number;
   active_schedule_count: number;
   recent_error_count: number;
   recent_history: RecentRun[];
+  error_rate_alerts: ErrorRateAlert[];
 }
 
 export function fetchDashboardSummary(): Promise<DashboardSummary> {
