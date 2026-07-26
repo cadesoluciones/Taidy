@@ -1,109 +1,56 @@
-import { useEffect, useState } from "react";
 import { Pencil, Plus, Trash2, X } from "lucide-react";
 
-import { ApiError } from "../api/client";
-import {
-  createBcTable,
-  deleteBcTable,
-  fetchBcTablesFull,
-  updateBcTable,
-  type BcTableConfig,
-} from "../api/meta";
+import { createBcTable, deleteBcTable, fetchBcTablesFull, updateBcTable, type BcTableConfig, type UpdateBcTableInput } from "../api/meta";
+import { useTableManager } from "../hooks/useTableManager";
 import { ConfirmDialog } from "./ConfirmDialog";
 import formStyles from "./Form.module.css";
 import styles from "./TableManager.module.css";
 
-const EMPTY_FORM = { url: "", description: "", incremental: false };
+interface BcForm {
+  name: string;
+  url: string;
+  description: string;
+  incremental: boolean;
+}
+
+const EMPTY_FORM: BcForm = { name: "", url: "", description: "", incremental: false };
 
 /** Admin-only: register, edit or remove a Business Central table in
  * tables.yaml directly from the web UI, instead of hand-editing the file
  * on the server -- the exact same file src/bc_client/config.py reads for
  * a real extraction run. */
 export function BcTableManager() {
-  const [tables, setTables] = useState<BcTableConfig[]>([]);
-  const [pendingDelete, setPendingDelete] = useState<BcTableConfig | null>(null);
-  const [isBusy, setIsBusy] = useState(false);
-
-  const [editingName, setEditingName] = useState<string | null>(null);
-  const [name, setName] = useState("");
-  const [url, setUrl] = useState(EMPTY_FORM.url);
-  const [description, setDescription] = useState(EMPTY_FORM.description);
-  const [incremental, setIncremental] = useState(EMPTY_FORM.incremental);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-
-  async function reload() {
-    setTables((await fetchBcTablesFull()).items);
-  }
-
-  useEffect(() => {
-    void reload();
-  }, []);
-
-  function startEdit(t: BcTableConfig) {
-    setEditingName(t.name);
-    setName(t.name);
-    setUrl(t.url);
-    setDescription(t.description);
-    setIncremental(t.incremental);
-    setError(null);
-    setSuccess(null);
-  }
-
-  function cancelEdit() {
-    setEditingName(null);
-    setName("");
-    setUrl(EMPTY_FORM.url);
-    setDescription(EMPTY_FORM.description);
-    setIncremental(EMPTY_FORM.incremental);
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setSuccess(null);
-    try {
-      if (editingName) {
-        await updateBcTable(editingName, { url, description, incremental });
-        setSuccess(`Tabla '${editingName}' actualizada.`);
-        cancelEdit();
-      } else {
-        await createBcTable({ name, url, description, incremental });
-        setSuccess(`Tabla '${name}' añadida.`);
-        setName("");
-        setUrl(EMPTY_FORM.url);
-        setDescription(EMPTY_FORM.description);
-        setIncremental(EMPTY_FORM.incremental);
-      }
-      await reload();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo guardar la tabla.");
-    }
-  }
-
-  async function confirmDelete() {
-    if (!pendingDelete) return;
-    setIsBusy(true);
-    try {
-      await deleteBcTable(pendingDelete.name);
-      if (editingName === pendingDelete.name) cancelEdit();
-      await reload();
-    } finally {
-      setIsBusy(false);
-      setPendingDelete(null);
-    }
-  }
+  const mgr = useTableManager<BcTableConfig, BcForm, UpdateBcTableInput>({
+    fetchAll: fetchBcTablesFull,
+    create: createBcTable,
+    update: updateBcTable,
+    remove: deleteBcTable,
+    emptyForm: EMPTY_FORM,
+    itemToForm: (t) => ({ name: t.name, url: t.url, description: t.description, incremental: t.incremental }),
+    formToInput: (f) => ({ input: { url: f.url, description: f.description, incremental: f.incremental } }),
+  });
 
   return (
     <div className={styles.layout}>
       <div className={styles.formPanel}>
-        {success && <div className={formStyles.successBanner}>{success}</div>}
-        {error && <div className={formStyles.errorBanner}>{error}</div>}
-        <form className={formStyles.card} onSubmit={handleSubmit}>
-          {editingName && (
+        {mgr.success && <div className={formStyles.successBanner}>{mgr.success}</div>}
+        {mgr.error && <div className={formStyles.errorBanner}>{mgr.error}</div>}
+        <form
+          className={formStyles.card}
+          onSubmit={(e) => {
+            e.preventDefault();
+            void mgr.submit();
+          }}
+        >
+          {mgr.editingName && (
             <div className={styles.editingBanner}>
-              Editando <strong>{editingName}</strong>
-              <button type="button" className={styles.cancelEditBtn} onClick={cancelEdit} aria-label="Cancelar edición">
+              Editando <strong>{mgr.editingName}</strong>
+              <button
+                type="button"
+                className={styles.cancelEditBtn}
+                onClick={mgr.cancelEdit}
+                aria-label="Cancelar edición"
+              >
                 <X size={13} />
               </button>
             </div>
@@ -113,30 +60,41 @@ export function BcTableManager() {
             <input
               id="new_bc_table_name"
               type="text"
-              value={name}
-              disabled={!!editingName}
-              onChange={(e) => setName(e.target.value)}
+              value={mgr.form.name}
+              disabled={!!mgr.editingName}
+              onChange={(e) => mgr.setForm((f) => ({ ...f, name: e.target.value }))}
             />
           </div>
           <div className={formStyles.field}>
             <label htmlFor="new_bc_table_url">URL de OData</label>
-            <input id="new_bc_table_url" type="text" value={url} onChange={(e) => setUrl(e.target.value)} />
+            <input
+              id="new_bc_table_url"
+              type="text"
+              value={mgr.form.url}
+              onChange={(e) => mgr.setForm((f) => ({ ...f, url: e.target.value }))}
+            />
           </div>
           <div className={formStyles.field}>
             <label htmlFor="new_bc_table_desc">Descripción (opcional)</label>
             <input
               id="new_bc_table_desc"
               type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              value={mgr.form.description}
+              onChange={(e) => mgr.setForm((f) => ({ ...f, description: e.target.value }))}
             />
           </div>
           <label className={formStyles.checkboxField}>
-            <input type="checkbox" checked={incremental} onChange={(e) => setIncremental(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={mgr.form.incremental}
+              onChange={(e) => mgr.setForm((f) => ({ ...f, incremental: e.target.checked }))}
+            />
             <span>Soporta extracción incremental (watermark)</span>
           </label>
           <button type="submit" className={formStyles.submit}>
-            {editingName ? "Guardar cambios" : (
+            {mgr.editingName ? (
+              "Guardar cambios"
+            ) : (
               <>
                 <Plus size={14} /> Añadir tabla
               </>
@@ -146,9 +104,9 @@ export function BcTableManager() {
       </div>
 
       <div className={styles.listPanel}>
-        {tables.length > 0 ? (
+        {mgr.items.length > 0 ? (
           <ul className={styles.list}>
-            {tables.map((t) => (
+            {mgr.items.map((t) => (
               <li key={t.name} className={styles.listItem}>
                 <div>
                   <strong>{t.name}</strong>
@@ -160,7 +118,7 @@ export function BcTableManager() {
                     type="button"
                     className={styles.editBtn}
                     aria-label={`Editar tabla ${t.name}`}
-                    onClick={() => startEdit(t)}
+                    onClick={() => mgr.startEdit(t)}
                   >
                     <Pencil size={14} />
                   </button>
@@ -168,7 +126,7 @@ export function BcTableManager() {
                     type="button"
                     className={styles.deleteBtn}
                     aria-label={`Borrar tabla ${t.name}`}
-                    onClick={() => setPendingDelete(t)}
+                    onClick={() => mgr.setPendingDelete(t)}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -182,13 +140,13 @@ export function BcTableManager() {
       </div>
 
       <ConfirmDialog
-        open={pendingDelete !== null}
+        open={mgr.pendingDelete !== null}
         title="Borrar tabla"
-        description={`Vas a borrar la tabla "${pendingDelete?.name}" de tables.yaml. Cualquier tarea programada que la seleccione explícitamente dejará de encontrarla.`}
+        description={`Vas a borrar la tabla "${mgr.pendingDelete?.name}" de tables.yaml. Cualquier tarea programada que la seleccione explícitamente dejará de encontrarla.`}
         confirmLabel="Borrar definitivamente"
-        busy={isBusy}
-        onConfirm={confirmDelete}
-        onCancel={() => setPendingDelete(null)}
+        busy={mgr.isBusy}
+        onConfirm={mgr.confirmDelete}
+        onCancel={() => mgr.setPendingDelete(null)}
       />
     </div>
   );

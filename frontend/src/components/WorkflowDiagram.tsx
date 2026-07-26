@@ -13,6 +13,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
+import { statusMeta } from "./statusMeta";
 import styles from "./WorkflowDiagram.module.css";
 
 /** Structural subset shared by StepDefinition (draft/saved steps) and
@@ -35,15 +36,6 @@ type StepNodeData = Record<string, unknown> & {
 
 type StepFlowNode = Node<StepNodeData, "step">;
 
-const STATUS_LABELS: Record<string, string> = {
-  pending: "pendiente",
-  running: "en curso",
-  ok: "correcto",
-  error: "error",
-  cancelled: "cancelado",
-  stopped: "detenido",
-};
-
 function StepNode({ data, selected }: NodeProps<StepFlowNode>) {
   const status = data.status;
   return (
@@ -51,7 +43,7 @@ function StepNode({ data, selected }: NodeProps<StepFlowNode>) {
       <Handle type="target" position={Position.Left} className={styles.handle} />
       <div className={styles.nodeLabel}>{data.label}</div>
       <div className={styles.nodeAction}>{data.actionLabel}</div>
-      {status && <div className={styles.nodeStatus}>{STATUS_LABELS[status] ?? status}</div>}
+      {status && <div className={styles.nodeStatus}>{statusMeta(status).label.toLowerCase()}</div>}
       {data.alwaysRun && <div className={styles.nodeHint}>se lanza aunque falle una dependencia</div>}
       <Handle type="source" position={Position.Right} className={styles.handle} />
     </div>

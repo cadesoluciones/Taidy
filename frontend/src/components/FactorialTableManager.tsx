@@ -1,19 +1,32 @@
-import { useEffect, useState } from "react";
 import { Pencil, Plus, Trash2, X } from "lucide-react";
 
-import { ApiError } from "../api/client";
 import {
   createFactorialTable,
   deleteFactorialTable,
   fetchFactorialTablesFull,
   updateFactorialTable,
   type FactorialTableConfig,
+  type UpdateFactorialTableInput,
 } from "../api/meta";
+import { useTableManager } from "../hooks/useTableManager";
 import { ConfirmDialog } from "./ConfirmDialog";
 import formStyles from "./Form.module.css";
 import styles from "./TableManager.module.css";
 
-const EMPTY_FORM = {
+interface FactorialForm {
+  name: string;
+  path: string;
+  fieldsRaw: string;
+  description: string;
+  dateRange: boolean;
+  employeeFilter: boolean;
+  incremental: boolean;
+  overlapDays: string;
+  chunkDays: string;
+}
+
+const EMPTY_FORM: FactorialForm = {
+  name: "",
   path: "",
   fieldsRaw: "",
   description: "",
@@ -30,121 +43,67 @@ const EMPTY_FORM = {
  * reads for a real extraction run. `fields` is required there too (the
  * API response fields to keep), so it's required here as well. */
 export function FactorialTableManager() {
-  const [tables, setTables] = useState<FactorialTableConfig[]>([]);
-  const [pendingDelete, setPendingDelete] = useState<FactorialTableConfig | null>(null);
-  const [isBusy, setIsBusy] = useState(false);
-
-  const [editingName, setEditingName] = useState<string | null>(null);
-  const [name, setName] = useState("");
-  const [path, setPath] = useState(EMPTY_FORM.path);
-  const [fieldsRaw, setFieldsRaw] = useState(EMPTY_FORM.fieldsRaw);
-  const [description, setDescription] = useState(EMPTY_FORM.description);
-  const [dateRange, setDateRange] = useState(EMPTY_FORM.dateRange);
-  const [employeeFilter, setEmployeeFilter] = useState(EMPTY_FORM.employeeFilter);
-  const [incremental, setIncremental] = useState(EMPTY_FORM.incremental);
-  const [overlapDays, setOverlapDays] = useState(EMPTY_FORM.overlapDays);
-  const [chunkDays, setChunkDays] = useState(EMPTY_FORM.chunkDays);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-
-  async function reload() {
-    setTables((await fetchFactorialTablesFull()).items);
-  }
-
-  useEffect(() => {
-    void reload();
-  }, []);
-
-  function startEdit(t: FactorialTableConfig) {
-    setEditingName(t.name);
-    setName(t.name);
-    setPath(t.path);
-    setFieldsRaw(t.fields.join(", "));
-    setDescription(t.description);
-    setDateRange(t.date_range);
-    setEmployeeFilter(t.employee_filter);
-    setIncremental(t.incremental);
-    setOverlapDays(t.overlap_days != null ? String(t.overlap_days) : "");
-    setChunkDays(t.chunk_days != null ? String(t.chunk_days) : "");
-    setError(null);
-    setSuccess(null);
-  }
-
-  function cancelEdit() {
-    setEditingName(null);
-    setName("");
-    setPath(EMPTY_FORM.path);
-    setFieldsRaw(EMPTY_FORM.fieldsRaw);
-    setDescription(EMPTY_FORM.description);
-    setDateRange(EMPTY_FORM.dateRange);
-    setEmployeeFilter(EMPTY_FORM.employeeFilter);
-    setIncremental(EMPTY_FORM.incremental);
-    setOverlapDays(EMPTY_FORM.overlapDays);
-    setChunkDays(EMPTY_FORM.chunkDays);
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setSuccess(null);
-    const fields = fieldsRaw
-      .split(",")
-      .map((f) => f.trim())
-      .filter(Boolean);
-    if (fields.length === 0) {
-      setError("Indica al menos un campo que devuelve la API (separados por comas).");
-      return;
-    }
-    const shared = {
-      path,
-      fields,
-      description,
-      date_range: dateRange,
-      employee_filter: employeeFilter,
-      incremental,
-      overlap_days: overlapDays ? Number(overlapDays) : null,
-      chunk_days: chunkDays ? Number(chunkDays) : null,
-    };
-    try {
-      if (editingName) {
-        await updateFactorialTable(editingName, shared);
-        setSuccess(`Tabla '${editingName}' actualizada.`);
-        cancelEdit();
-      } else {
-        await createFactorialTable({ name, ...shared });
-        setSuccess(`Tabla '${name}' añadida.`);
-        setName("");
-        cancelEdit();
+  const mgr = useTableManager<FactorialTableConfig, FactorialForm, UpdateFactorialTableInput>({
+    fetchAll: fetchFactorialTablesFull,
+    create: createFactorialTable,
+    update: updateFactorialTable,
+    remove: deleteFactorialTable,
+    emptyForm: EMPTY_FORM,
+    itemToForm: (t) => ({
+      name: t.name,
+      path: t.path,
+      fieldsRaw: t.fields.join(", "),
+      description: t.description,
+      dateRange: t.date_range,
+      employeeFilter: t.employee_filter,
+      incremental: t.incremental,
+      overlapDays: t.overlap_days != null ? String(t.overlap_days) : "",
+      chunkDays: t.chunk_days != null ? String(t.chunk_days) : "",
+    }),
+    formToInput: (f) => {
+      const fields = f.fieldsRaw
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (fields.length === 0) {
+        return { error: "Indica al menos un campo que devuelve la API (separados por comas)." };
       }
-      await reload();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo guardar la tabla.");
-    }
-  }
-
-  async function confirmDelete() {
-    if (!pendingDelete) return;
-    setIsBusy(true);
-    try {
-      await deleteFactorialTable(pendingDelete.name);
-      if (editingName === pendingDelete.name) cancelEdit();
-      await reload();
-    } finally {
-      setIsBusy(false);
-      setPendingDelete(null);
-    }
-  }
+      return {
+        input: {
+          path: f.path,
+          fields,
+          description: f.description,
+          date_range: f.dateRange,
+          employee_filter: f.employeeFilter,
+          incremental: f.incremental,
+          overlap_days: f.overlapDays ? Number(f.overlapDays) : null,
+          chunk_days: f.chunkDays ? Number(f.chunkDays) : null,
+        },
+      };
+    },
+  });
 
   return (
     <div className={styles.layout}>
       <div className={styles.formPanel}>
-        {success && <div className={formStyles.successBanner}>{success}</div>}
-        {error && <div className={formStyles.errorBanner}>{error}</div>}
-        <form className={formStyles.card} onSubmit={handleSubmit}>
-          {editingName && (
+        {mgr.success && <div className={formStyles.successBanner}>{mgr.success}</div>}
+        {mgr.error && <div className={formStyles.errorBanner}>{mgr.error}</div>}
+        <form
+          className={formStyles.card}
+          onSubmit={(e) => {
+            e.preventDefault();
+            void mgr.submit();
+          }}
+        >
+          {mgr.editingName && (
             <div className={styles.editingBanner}>
-              Editando <strong>{editingName}</strong>
-              <button type="button" className={styles.cancelEditBtn} onClick={cancelEdit} aria-label="Cancelar edición">
+              Editando <strong>{mgr.editingName}</strong>
+              <button
+                type="button"
+                className={styles.cancelEditBtn}
+                onClick={mgr.cancelEdit}
+                aria-label="Cancelar edición"
+              >
                 <X size={13} />
               </button>
             </div>
@@ -154,22 +113,27 @@ export function FactorialTableManager() {
             <input
               id="new_fac_table_name"
               type="text"
-              value={name}
-              disabled={!!editingName}
-              onChange={(e) => setName(e.target.value)}
+              value={mgr.form.name}
+              disabled={!!mgr.editingName}
+              onChange={(e) => mgr.setForm((f) => ({ ...f, name: e.target.value }))}
             />
           </div>
           <div className={formStyles.field}>
             <label htmlFor="new_fac_table_path">Ruta de la API (ej. resources/employees/employees)</label>
-            <input id="new_fac_table_path" type="text" value={path} onChange={(e) => setPath(e.target.value)} />
+            <input
+              id="new_fac_table_path"
+              type="text"
+              value={mgr.form.path}
+              onChange={(e) => mgr.setForm((f) => ({ ...f, path: e.target.value }))}
+            />
           </div>
           <div className={formStyles.field}>
             <label htmlFor="new_fac_table_fields">Campos a conservar (separados por comas)</label>
             <input
               id="new_fac_table_fields"
               type="text"
-              value={fieldsRaw}
-              onChange={(e) => setFieldsRaw(e.target.value)}
+              value={mgr.form.fieldsRaw}
+              onChange={(e) => mgr.setForm((f) => ({ ...f, fieldsRaw: e.target.value }))}
               placeholder="id, email, active"
             />
           </div>
@@ -178,8 +142,8 @@ export function FactorialTableManager() {
             <input
               id="new_fac_table_desc"
               type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              value={mgr.form.description}
+              onChange={(e) => mgr.setForm((f) => ({ ...f, description: e.target.value }))}
             />
           </div>
           <div className={formStyles.grid}>
@@ -189,8 +153,8 @@ export function FactorialTableManager() {
                 id="new_fac_table_overlap"
                 type="number"
                 min={0}
-                value={overlapDays}
-                onChange={(e) => setOverlapDays(e.target.value)}
+                value={mgr.form.overlapDays}
+                onChange={(e) => mgr.setForm((f) => ({ ...f, overlapDays: e.target.value }))}
               />
             </div>
             <div className={formStyles.field}>
@@ -199,25 +163,39 @@ export function FactorialTableManager() {
                 id="new_fac_table_chunk"
                 type="number"
                 min={1}
-                value={chunkDays}
-                onChange={(e) => setChunkDays(e.target.value)}
+                value={mgr.form.chunkDays}
+                onChange={(e) => mgr.setForm((f) => ({ ...f, chunkDays: e.target.value }))}
               />
             </div>
           </div>
           <label className={formStyles.checkboxField}>
-            <input type="checkbox" checked={dateRange} onChange={(e) => setDateRange(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={mgr.form.dateRange}
+              onChange={(e) => mgr.setForm((f) => ({ ...f, dateRange: e.target.checked }))}
+            />
             <span>Envía 'Desde'/'Hasta' a la API</span>
           </label>
           <label className={formStyles.checkboxField}>
-            <input type="checkbox" checked={employeeFilter} onChange={(e) => setEmployeeFilter(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={mgr.form.employeeFilter}
+              onChange={(e) => mgr.setForm((f) => ({ ...f, employeeFilter: e.target.checked }))}
+            />
             <span>Admite filtrar por empleados</span>
           </label>
           <label className={formStyles.checkboxField}>
-            <input type="checkbox" checked={incremental} onChange={(e) => setIncremental(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={mgr.form.incremental}
+              onChange={(e) => mgr.setForm((f) => ({ ...f, incremental: e.target.checked }))}
+            />
             <span>Soporta extracción incremental (checkpoint)</span>
           </label>
           <button type="submit" className={formStyles.submit}>
-            {editingName ? "Guardar cambios" : (
+            {mgr.editingName ? (
+              "Guardar cambios"
+            ) : (
               <>
                 <Plus size={14} /> Añadir tabla
               </>
@@ -227,9 +205,9 @@ export function FactorialTableManager() {
       </div>
 
       <div className={styles.listPanel}>
-        {tables.length > 0 ? (
+        {mgr.items.length > 0 ? (
           <ul className={styles.list}>
-            {tables.map((t) => (
+            {mgr.items.map((t) => (
               <li key={t.name} className={styles.listItem}>
                 <div>
                   <strong>{t.name}</strong>
@@ -241,7 +219,7 @@ export function FactorialTableManager() {
                     type="button"
                     className={styles.editBtn}
                     aria-label={`Editar tabla ${t.name}`}
-                    onClick={() => startEdit(t)}
+                    onClick={() => mgr.startEdit(t)}
                   >
                     <Pencil size={14} />
                   </button>
@@ -249,7 +227,7 @@ export function FactorialTableManager() {
                     type="button"
                     className={styles.deleteBtn}
                     aria-label={`Borrar tabla ${t.name}`}
-                    onClick={() => setPendingDelete(t)}
+                    onClick={() => mgr.setPendingDelete(t)}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -263,13 +241,13 @@ export function FactorialTableManager() {
       </div>
 
       <ConfirmDialog
-        open={pendingDelete !== null}
+        open={mgr.pendingDelete !== null}
         title="Borrar tabla"
-        description={`Vas a borrar la tabla "${pendingDelete?.name}" de factorial_tables.yaml. Cualquier tarea programada que la seleccione explícitamente dejará de encontrarla.`}
+        description={`Vas a borrar la tabla "${mgr.pendingDelete?.name}" de factorial_tables.yaml. Cualquier tarea programada que la seleccione explícitamente dejará de encontrarla.`}
         confirmLabel="Borrar definitivamente"
-        busy={isBusy}
-        onConfirm={confirmDelete}
-        onCancel={() => setPendingDelete(null)}
+        busy={mgr.isBusy}
+        onConfirm={mgr.confirmDelete}
+        onCancel={() => mgr.setPendingDelete(null)}
       />
     </div>
   );
