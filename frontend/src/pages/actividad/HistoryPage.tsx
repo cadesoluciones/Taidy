@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 
-import { fetchHistory, type HistoryFilters, type HistoryPage as HistoryPageData } from "../../api/history";
+import { Download } from "lucide-react";
+
+import { fetchHistory, historyExportCsvUrl, type HistoryFilters, type HistoryPage as HistoryPageData } from "../../api/history";
 import { ACTION_LABELS } from "../../components/actionLabels";
 import formStyles from "../../components/Form.module.css";
 import { OutcomeIcon } from "../../components/OutcomeIcon";
@@ -24,6 +26,15 @@ export function HistoryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  function buildFilters(): Omit<HistoryFilters, "page" | "page_size"> {
+    const filters: Omit<HistoryFilters, "page" | "page_size"> = { result: resultFilter };
+    if (actionFilter) filters.action = [actionFilter];
+    if (sourceFilter.trim()) filters.source = [sourceFilter.trim()];
+    if (dateFrom) filters.date_from = dateFrom;
+    if (dateTo) filters.date_to = dateTo;
+    return filters;
+  }
+
   useEffect(() => {
     // Guards against a stale, earlier-fired request resolving after a
     // later one and overwriting it with results for the wrong filters --
@@ -31,11 +42,7 @@ export function HistoryPage() {
     let cancelled = false;
     setIsLoading(true);
     setError(null);
-    const filters: HistoryFilters = { result: resultFilter, page, page_size: 20 };
-    if (actionFilter) filters.action = [actionFilter];
-    if (sourceFilter.trim()) filters.source = [sourceFilter.trim()];
-    if (dateFrom) filters.date_from = dateFrom;
-    if (dateTo) filters.date_to = dateTo;
+    const filters: HistoryFilters = { ...buildFilters(), page, page_size: 20 };
     fetchHistory(filters)
       .then((res) => {
         if (!cancelled) setResult(res);
@@ -106,9 +113,15 @@ export function HistoryPage() {
       {isLoading && !result && <p>Cargando…</p>}
 
       {result && (
-        <p>
-          Mostrando {result.total_matching} de {result.total_available} ejecuciones.
-        </p>
+        <div className={styles.summaryRow}>
+          <p>
+            Mostrando {result.total_matching} de {result.total_available} ejecuciones.
+          </p>
+          <a className={formStyles.manageLink} href={historyExportCsvUrl(buildFilters())} download>
+            <Download size={14} />
+            Exportar CSV
+          </a>
+        </div>
       )}
 
       {result && (

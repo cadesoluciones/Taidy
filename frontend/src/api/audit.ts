@@ -1,4 +1,4 @@
-import { apiGet, buildQuery } from "./client";
+import { apiGet, apiUrl, buildQuery } from "./client";
 
 export interface AuditEntry {
   ts: string;
@@ -24,4 +24,8 @@ export interface AuditFilters {
 
 export function fetchAudit(filters: AuditFilters = {}): Promise<AuditPage> {
   return apiGet<AuditPage>(`/audit${buildQuery(filters)}`);
+}
+
+export function auditExportCsvUrl(filters: AuditFilters): string {
+  return apiUrl(`/audit/export.csv${buildQuery(filters)}`);
 }

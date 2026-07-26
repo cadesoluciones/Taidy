@@ -80,6 +80,13 @@ export function apiDelete<T>(path: string): Promise<T> {
   return request<T>(path, { method: "DELETE" });
 }
 
+/** Absolute URL for a plain browser navigation (e.g. an <a href>-triggered
+ * file download) that still needs the same base URL fetch()-based calls use.
+ * The session cookie rides along automatically -- no fetch() wrapper needed. */
+export function apiUrl(path: string): string {
+  return `${API_BASE_URL}${path}`;
+}
+
 export type QueryValue = string | number | boolean | undefined | string[];
 
 /** Builds a query string, repeating the key for array values (`action=a&action=b`)

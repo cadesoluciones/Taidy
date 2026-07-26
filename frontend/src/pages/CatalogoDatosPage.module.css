@@ -1,0 +1,47 @@
+.tableWrap {
+  overflow-x: auto;
+  margin-bottom: var(--space-5);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: top;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+/* Solid backgrounds, not a translucent tint -- see StatusBadge.module.css's
+   comment: tinted backgrounds measured below the 4.5:1 AA contrast minimum
+   for several of these colors. */
+.badgeYes,
+.badgeNo {
+  display: inline-flex;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.badgeYes {
+  color: var(--color-on-status);
+  background: var(--color-success);
+}
+
+.badgeNo {
+  color: var(--color-text-muted);
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-border);
+}

@@ -45,6 +45,22 @@ def _matches(
     return True
 
 
+def filter_only(
+    entries: List[dict],
+    *,
+    actions: Sequence[str] = (),
+    sources: Sequence[str] = (),
+    result: str = RESULT_ALL,
+    date_from=None,
+    date_to=None,
+) -> List[dict]:
+    """All matching entries, unpaginated -- used by the CSV export, which
+    always exports the full filtered set rather than one page of it."""
+    return [
+        e for e in entries if _matches(e, actions=actions, sources=sources, result=result, date_from=date_from, date_to=date_to)
+    ]
+
+
 def filter_and_paginate(
     entries: List[dict],
     *,
@@ -57,9 +73,7 @@ def filter_and_paginate(
     page_size: int = 20,
 ) -> Tuple[List[dict], int]:
     """Returns (page of matching entries, total matching count)."""
-    matching = [
-        e for e in entries if _matches(e, actions=actions, sources=sources, result=result, date_from=date_from, date_to=date_to)
-    ]
+    matching = filter_only(entries, actions=actions, sources=sources, result=result, date_from=date_from, date_to=date_to)
     total_pages = max(1, (len(matching) + page_size - 1) // page_size)
     page = min(max(page, 1), total_pages)
     start = (page - 1) * page_size

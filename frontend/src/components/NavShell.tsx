@@ -11,6 +11,7 @@ import {
   LogOut,
   Menu,
   ShieldCheck,
+  Table2,
   Upload,
   UserCircle,
   Users,
@@ -56,6 +57,10 @@ const OPERATIONAL_SECTIONS: NavSection[] = [
     items: [{ to: "/programacion", label: "Tareas programadas", icon: CalendarClock }],
   },
   { label: "Flujos", items: [{ to: "/flujos", label: "Flujos", icon: GitFork }] },
+  {
+    label: "Catálogo de datos",
+    items: [{ to: "/catalogo-datos", label: "Catálogo de datos", icon: Table2 }],
+  },
   {
     label: "Business Central",
     items: [

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { Download } from "lucide-react";
 
-import { fetchAudit, type AuditFilters, type AuditPage as AuditPageData } from "../../api/audit";
+import { auditExportCsvUrl, fetchAudit, type AuditFilters, type AuditPage as AuditPageData } from "../../api/audit";
 import formStyles from "../../components/Form.module.css";
 import styles from "./AuditPage.module.css";
 
@@ -21,6 +22,16 @@ export function AuditPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
+  function buildFilters(): AuditFilters {
+    const filters: AuditFilters = {};
+    if (eventFilter) filters.event = [eventFilter];
+    if (outcomeFilter) filters.outcome = [outcomeFilter];
+    if (userFilter.trim()) filters.user = [userFilter.trim()];
+    if (dateFrom) filters.date_from = dateFrom;
+    if (dateTo) filters.date_to = dateTo;
+    return filters;
+  }
+
   useEffect(() => {
     // A later-changed filter's request can resolve before an earlier one
     // (or React 19 dev-mode's double-invoked first effect) -- without this
@@ -30,13 +41,7 @@ export function AuditPage() {
     let cancelled = false;
     setIsLoading(true);
     setError(null);
-    const filters: AuditFilters = {};
-    if (eventFilter) filters.event = [eventFilter];
-    if (outcomeFilter) filters.outcome = [outcomeFilter];
-    if (userFilter.trim()) filters.user = [userFilter.trim()];
-    if (dateFrom) filters.date_from = dateFrom;
-    if (dateTo) filters.date_to = dateTo;
-    fetchAudit(filters)
+    fetchAudit(buildFilters())
       .then((res) => {
         if (!cancelled) setData(res);
       })
@@ -93,9 +98,15 @@ export function AuditPage() {
       </div>
 
       {data && (
-        <p>
-          Mostrando {data.total_matching} de {data.total_available} eventos.
-        </p>
+        <div className={styles.summaryRow}>
+          <p>
+            Mostrando {data.total_matching} de {data.total_available} eventos.
+          </p>
+          <a className={formStyles.manageLink} href={auditExportCsvUrl(buildFilters())} download>
+            <Download size={14} />
+            Exportar CSV
+          </a>
+        </div>
       )}
 
       {isLoading && !data ? (

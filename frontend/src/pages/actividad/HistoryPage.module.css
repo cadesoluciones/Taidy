@@ -26,6 +26,13 @@
   font-size: 13px;
 }
 
+.summaryRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
 .entrySource {
   color: var(--color-text-muted);
   font-weight: 400;

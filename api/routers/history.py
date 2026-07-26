@@ -13,9 +13,22 @@ from webapp import history as history_module
 
 from ..dependencies import get_current_user
 from ..schemas.history import HistoryEntryOut, HistoryPageOut
-from ..services.history_filters import RESULT_ALL, filter_and_paginate
+from ..services.csv_export import csv_response
+from ..services.history_filters import RESULT_ALL, filter_and_paginate, filter_only
 
 router = APIRouter(prefix="/history", tags=["history"], dependencies=[Depends(get_current_user)])
+
+_CSV_COLUMNS = [
+    ("Fecha", "finished_at"),
+    ("Acción", "action"),
+    ("Origen", "source"),
+    ("Resultado", "status_label"),
+    ("Duración (s)", "duration_seconds"),
+    ("Mensaje", "message"),
+    ("Log", "log"),
+]
+
+_STATUS_LABELS = {"ok": "Correcto", "error": "Error", "stopped": "Detenida"}
 
 
 @router.get("", response_model=HistoryPageOut)
@@ -48,3 +61,19 @@ def list_history(
         page_size=page_size,
         total_pages=total_pages,
     )
+
+
+@router.get("/export.csv")
+def export_history_csv(
+    action: List[str] = Query(default=[]),
+    source: List[str] = Query(default=[]),
+    result: str = Query(default=RESULT_ALL),
+    date_from: Optional[date] = Query(default=None),
+    date_to: Optional[date] = Query(default=None),
+):
+    """Same filters as GET /history, but the full matching set (not one
+    page) as a CSV download."""
+    all_entries = history_module.get_history(limit=200)
+    matching = filter_only(all_entries, actions=action, sources=source, result=result, date_from=date_from, date_to=date_to)
+    rows = [{**e, "status_label": _STATUS_LABELS.get(e["status"], e["status"])} for e in matching]
+    return csv_response(rows, columns=_CSV_COLUMNS, filename="historial.csv")

@@ -6,6 +6,7 @@ import { RedirectIfAuthenticated, RequireAuth } from "./auth/RequireAuth";
 import { RequireOperatorOrAdmin } from "./auth/RequireOperatorOrAdmin";
 import { NavShell } from "./components/NavShell";
 import { AccountPage } from "./pages/AccountPage";
+import { CatalogoDatosPage } from "./pages/CatalogoDatosPage";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
@@ -50,6 +51,7 @@ export function App() {
                 <Route path="/ejecutar/factorial-sync" element={<FactorialSyncPage />} />
                 <Route path="/ejecutar/pipelines" element={<PipelinesPage />} />
                 <Route path="/flujos" element={<WorkflowsPage />} />
+                <Route path="/catalogo-datos" element={<CatalogoDatosPage />} />
                 <Route path="/programacion" element={<SchedulesPage />} />
                 <Route path="/actividad/tareas-en-curso" element={<RunningTasksPage />} />
                 <Route path="/actividad/historial" element={<HistoryPage />} />

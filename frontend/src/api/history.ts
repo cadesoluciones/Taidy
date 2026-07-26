@@ -1,4 +1,4 @@
-import { apiGet, buildQuery } from "./client";
+import { apiGet, apiUrl, buildQuery } from "./client";
 
 export interface HistoryEntry {
   action: string;
@@ -32,4 +32,10 @@ export interface HistoryFilters {
 
 export function fetchHistory(filters: HistoryFilters = {}): Promise<HistoryPage> {
   return apiGet<HistoryPage>(`/history${buildQuery(filters)}`);
+}
+
+/** Filters minus pagination -- the export always covers the full filtered
+ * set, not one page of it. */
+export function historyExportCsvUrl(filters: Omit<HistoryFilters, "page" | "page_size">): string {
+  return apiUrl(`/history/export.csv${buildQuery(filters)}`);
 }
