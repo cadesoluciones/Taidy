@@ -44,12 +44,18 @@ def test_admin_can_create_pause_and_delete_a_schedule(isolated_state, client):
     assert created.status_code == 200
     schedule_id = created.json()["id"]
     assert created.json()["enabled"] is True
+    # A live scheduler backs this endpoint (see conftest's `client` fixture),
+    # so creating a schedule must immediately compute its next fire time.
+    assert created.json()["next_run_time"] is not None
+    assert created.json()["missed_last_run"] is False
 
     paused = client.patch(f"/schedules/{schedule_id}", json={"enabled": False})
     assert paused.status_code == 204
 
     schedules = client.get("/schedules").json()["items"]
-    assert next(s for s in schedules if s["id"] == schedule_id)["enabled"] is False
+    paused_schedule = next(s for s in schedules if s["id"] == schedule_id)
+    assert paused_schedule["enabled"] is False
+    assert paused_schedule["next_run_time"] is None
 
     deleted = client.delete(f"/schedules/{schedule_id}")
     assert deleted.status_code == 204

@@ -9,6 +9,8 @@ export interface Schedule {
   trigger_args: Record<string, unknown>;
   enabled: boolean;
   created_at: string;
+  next_run_time: string | null;
+  missed_last_run: boolean;
 }
 
 export interface CreateScheduleInput {

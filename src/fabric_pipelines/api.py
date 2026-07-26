@@ -12,6 +12,8 @@ from typing import Any, Dict, List, Optional
 
 import requests
 from azure.identity import ClientSecretCredential
+from requests.exceptions import ChunkedEncodingError
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from .config import Settings
 from ..utils import get_logger
@@ -50,15 +52,28 @@ class FabricPipelineClient:
         token = self._credential.get_token(_FABRIC_SCOPE)
         return {"Authorization": f"Bearer {token.token}", "Content-Type": "application/json"}
 
+    # Retries only transient, transport-level failures (dropped connection,
+    # timeout) -- same policy as src/bc_client/api.py's _get. A bad HTTP
+    # status from Fabric itself (auth rejected, pipeline not found, ...) is
+    # not a transient condition and is handled by each caller as before.
+    @retry(
+        retry=retry_if_exception_type((requests.ConnectionError, requests.Timeout, ChunkedEncodingError)),
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=1, min=2, max=30),
+        reraise=True,
+    )
+    def _request(self, method: str, url: str, **kwargs: Any) -> requests.Response:
+        return self._session.request(method, url, timeout=self._timeout, **kwargs)
+
     def trigger_run(self, item_id: str) -> str:
         """Starts an on-demand pipeline run. Returns the job instance id."""
         url = f"{_FABRIC_API_BASE}/workspaces/{self._settings.workspace_id}/items/{item_id}/jobs/instances"
-        response = self._session.post(
+        response = self._request(
+            "POST",
             url,
             headers=self._headers(),
             params={"jobType": "Pipeline"},
             json={},
-            timeout=self._timeout,
         )
         if response.status_code not in (200, 202):
             raise FabricPipelineError(
@@ -81,7 +96,7 @@ class FabricPipelineClient:
         results: List[Dict[str, str]] = []
         params: Dict[str, str] = {"type": "DataPipeline"}
         while True:
-            response = self._session.get(url, headers=self._headers(), params=params, timeout=self._timeout)
+            response = self._request("GET", url, headers=self._headers(), params=params)
             if response.status_code != 200:
                 raise FabricPipelineError(
                     f"No se pudo listar los pipelines (HTTP {response.status_code}): {response.text}"
@@ -100,7 +115,7 @@ class FabricPipelineClient:
             f"{_FABRIC_API_BASE}/workspaces/{self._settings.workspace_id}/items/{item_id}"
             f"/jobs/instances/{job_instance_id}"
         )
-        response = self._session.get(url, headers=self._headers(), timeout=self._timeout)
+        response = self._request("GET", url, headers=self._headers())
         if response.status_code != 200:
             raise FabricPipelineError(
                 f"No se pudo consultar el estado del pipeline (HTTP {response.status_code}): {response.text}"

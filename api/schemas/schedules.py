@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
@@ -15,6 +15,8 @@ class ScheduleOut(BaseModel):
     trigger_args: Dict[str, Any]
     enabled: bool
     created_at: str
+    next_run_time: Optional[str] = None
+    missed_last_run: bool = False
 
 
 class ScheduleListOut(BaseModel):

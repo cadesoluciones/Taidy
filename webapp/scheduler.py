@@ -26,10 +26,11 @@ import json
 import sys
 import threading
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
 
+from apscheduler.events import EVENT_JOB_EXECUTED
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -48,6 +49,12 @@ _STORE_LOCK = threading.Lock()
 # Actions whose stored `end_on` would go stale for a recurring job; recomputed
 # as "today" at execution time instead of trusting whatever was saved.
 _RECOMPUTE_END_ON = {"extract_factorial", "sync_factorial"}
+
+# How long APScheduler waits past a job's due time before giving up on that
+# fire (also passed as misfire_grace_time below). Used again at startup to
+# decide whether a next_run_time saved before a restart is now far enough in
+# the past that the fire it represented was genuinely missed, not just late.
+_MISFIRE_GRACE_SECONDS = 3600
 
 
 # --------------------------------------------------------------------------------------
@@ -77,6 +84,27 @@ def list_schedules() -> List[dict]:
 
 def _find_schedule(schedule_id: str) -> Optional[dict]:
     return next((s for s in list_schedules() if s["id"] == schedule_id), None)
+
+
+def _update_schedule_fields(schedule_id: str, **fields) -> None:
+    with _STORE_LOCK:
+        schedules = _read_json(_SCHEDULES_PATH, [])
+        changed = False
+        for s in schedules:
+            if s["id"] == schedule_id:
+                s.update(fields)
+                changed = True
+        if changed:
+            _write_json(_SCHEDULES_PATH, schedules)
+
+
+def _snapshot_next_run_time(scheduler: BackgroundScheduler, schedule_id: str) -> None:
+    """Persists APScheduler's live next_run_time so it survives a restart --
+    it's the only way to later tell whether a fire was missed while the
+    process was down (see build_scheduler's startup check)."""
+    job = scheduler.get_job(schedule_id)
+    next_run = job.next_run_time.isoformat() if job and job.next_run_time else None
+    _update_schedule_fields(schedule_id, next_run_time=next_run)
 
 
 # --------------------------------------------------------------------------------------
@@ -119,6 +147,8 @@ def add_schedule(
         "trigger_args": trigger_args,
         "enabled": True,
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "next_run_time": None,
+        "missed_last_run": False,
     }
     with _STORE_LOCK:
         schedules = _read_json(_SCHEDULES_PATH, [])
@@ -131,11 +161,14 @@ def add_schedule(
         args=[schedule["id"]],
         id=schedule["id"],
         replace_existing=True,
-        misfire_grace_time=3600,
+        misfire_grace_time=_MISFIRE_GRACE_SECONDS,
         coalesce=True,
         max_instances=1,
     )
-    return schedule
+    _snapshot_next_run_time(scheduler, schedule["id"])
+    # _snapshot_next_run_time updated the persisted copy, not this local dict --
+    # re-read so the caller (and the API response) reflects next_run_time too.
+    return _find_schedule(schedule["id"])
 
 
 def remove_schedule(scheduler: BackgroundScheduler, schedule_id: str) -> None:
@@ -167,21 +200,26 @@ def set_schedule_enabled(scheduler: BackgroundScheduler, schedule_id: str, enabl
                 args=[schedule_id],
                 id=schedule_id,
                 replace_existing=True,
-                misfire_grace_time=3600,
+                misfire_grace_time=_MISFIRE_GRACE_SECONDS,
                 coalesce=True,
                 max_instances=1,
             )
+            _snapshot_next_run_time(scheduler, schedule_id)
     else:
         try:
             scheduler.remove_job(schedule_id)
         except JobLookupError:
             pass
+        _update_schedule_fields(schedule_id, next_run_time=None, missed_last_run=False)
 
 
 def _run_scheduled(schedule_id: str) -> None:
     schedule = _find_schedule(schedule_id)
     if schedule is None or not schedule.get("enabled", True):
         return
+
+    if schedule.get("missed_last_run"):
+        _update_schedule_fields(schedule_id, missed_last_run=False)
 
     action = schedule["action"]
     params = dict(schedule.get("params") or {})
@@ -222,6 +260,14 @@ def build_scheduler() -> BackgroundScheduler:
     scheduler = BackgroundScheduler(timezone="UTC")
     scheduler.start()
 
+    def _on_job_executed(event) -> None:
+        # Recurring triggers get a new next_run_time as soon as they fire;
+        # re-snapshot it so a later restart's missed-run check compares
+        # against an up-to-date value instead of the one from before this run.
+        _snapshot_next_run_time(scheduler, event.job_id)
+
+    scheduler.add_listener(_on_job_executed, EVENT_JOB_EXECUTED)
+
     for schedule in list_schedules():
         if not schedule.get("enabled", True):
             continue
@@ -229,14 +275,29 @@ def build_scheduler() -> BackgroundScheduler:
             apscheduler_trigger = _build_trigger(schedule["trigger"], schedule["trigger_args"])
         except Exception:
             continue  # malformed entry from an old version — skip rather than crash startup
+
+        # The scheduler (and this in-memory job) didn't exist while the
+        # process was down, so APScheduler itself never saw whatever fire
+        # was due in that window -- it can't self-report a missed run here.
+        # The only trace of it is the next_run_time we saved before shutdown.
+        stored_next_run = schedule.get("next_run_time")
+        if stored_next_run:
+            try:
+                due_at = datetime.fromisoformat(stored_next_run)
+                if datetime.now(timezone.utc) > due_at + timedelta(seconds=_MISFIRE_GRACE_SECONDS):
+                    _update_schedule_fields(schedule["id"], missed_last_run=True)
+            except ValueError:
+                pass
+
         scheduler.add_job(
             _run_scheduled,
             trigger=apscheduler_trigger,
             args=[schedule["id"]],
             id=schedule["id"],
             replace_existing=True,
-            misfire_grace_time=3600,
+            misfire_grace_time=_MISFIRE_GRACE_SECONDS,
             coalesce=True,
             max_instances=1,
         )
+        _snapshot_next_run_time(scheduler, schedule["id"])
     return scheduler

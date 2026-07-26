@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CirclePause, CirclePlay } from "lucide-react";
+import { AlertTriangle, CirclePause, CirclePlay } from "lucide-react";
 
 import { ROLE_ADMIN } from "../api/auth";
 import { ApiError } from "../api/client";
@@ -353,6 +353,15 @@ export function SchedulesPage() {
               {s.enabled ? "Activa" : "Pausada"}
             </span>
             <span className={styles.freq}>{describeFrequency(s)}</span>
+            {s.missed_last_run && (
+              <span
+                className={styles.missedWarning}
+                title="El servidor estuvo caído en el momento en que debía ejecutarse; se retoma en la próxima fecha programada."
+              >
+                <AlertTriangle size={14} color="var(--color-warning)" />
+                Se perdió la última ejecución
+              </span>
+            )}
             {isAdmin && (
               <div className={styles.actions}>
                 <button type="button" className={styles.btn} onClick={() => void toggleEnabled(s)}>
