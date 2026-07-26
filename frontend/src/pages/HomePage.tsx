@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Activity, AlertTriangle, CalendarClock, type LucideIcon } from "lucide-react";
+import { Activity, AlertTriangle, CalendarClock, Sparkles, type LucideIcon } from "lucide-react";
 
 import { ROLE_READER } from "../api/auth";
-import { fetchDashboardSummary } from "../api/dashboard";
+import { ApiError } from "../api/client";
+import { fetchDashboardSummary, fetchNarrativeSummary } from "../api/dashboard";
 import { useAuth } from "../auth/AuthContext";
 import { ACTION_LABELS } from "../components/actionLabels";
 import { DataNetworkArt } from "../components/DataNetworkArt";
+import formStyles from "../components/Form.module.css";
 import { OutcomeIcon } from "../components/OutcomeIcon";
 import { Timeline, type TimelineItem } from "../components/Timeline";
 import { usePolling } from "../hooks/usePolling";
@@ -104,6 +107,8 @@ function AdminOperatorHomePage() {
         </div>
       )}
 
+      <ActivitySummaryCard />
+
       <h2>Accesos directos</h2>
       <ul>
         {QUICK_LINKS.map((link) => (
@@ -139,6 +144,69 @@ function AdminOperatorHomePage() {
         Sesión iniciada como {user?.username} ({user?.role}).
       </p>
     </section>
+  );
+}
+
+/** On-demand ("Generar", not polled): an LLM-generated summary has real
+ * latency and, depending on the configured provider, real cost. "Plantilla"
+ * always works with zero configuration; "IA generativa" needs
+ * TAIDY_SUMMARY_PROVIDER set server-side, and silently falls back to the
+ * template (reflected in the note below) when it isn't. */
+function ActivitySummaryCard() {
+  const [mode, setMode] = useState<"template" | "llm">("template");
+  const [text, setText] = useState<string | null>(null);
+  const [modeUsed, setModeUsed] = useState<"template" | "llm" | null>(null);
+  const [llmProvider, setLlmProvider] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleGenerate() {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await fetchNarrativeSummary(mode);
+      setText(result.text);
+      setModeUsed(result.mode_used);
+      setLlmProvider(result.llm_provider);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo generar el resumen.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  return (
+    <div className={styles.summaryCard}>
+      <div className={styles.summaryHeading}>
+        <Sparkles size={16} />
+        Resumen de actividad
+      </div>
+      <div className={styles.summaryControls}>
+        <label className={styles.summaryModeOption}>
+          <input type="radio" name="summary_mode" checked={mode === "template"} onChange={() => setMode("template")} />
+          Plantilla
+        </label>
+        <label className={styles.summaryModeOption}>
+          <input type="radio" name="summary_mode" checked={mode === "llm"} onChange={() => setMode("llm")} />
+          IA generativa
+        </label>
+        <button type="button" className={formStyles.submit} disabled={isLoading} onClick={() => void handleGenerate()}>
+          {isLoading ? "Generando…" : "Generar"}
+        </button>
+      </div>
+      {error && <div className={formStyles.errorBanner}>{error}</div>}
+      {text && (
+        <div className={styles.summaryText}>
+          <p>{text}</p>
+          {mode === "llm" && modeUsed === "template" && (
+            <p className={styles.summaryFallbackNote}>
+              No hay un proveedor de IA configurado (o la llamada ha fallado); se ha mostrado el resumen por plantilla.
+            </p>
+          )}
+          {modeUsed === "llm" && llmProvider && <p className={styles.summaryFallbackNote}>Generado con {llmProvider}.</p>}
+        </div>
+      )}
+    </div>
   );
 }
 

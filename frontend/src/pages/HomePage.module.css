@@ -173,6 +173,53 @@
   border-left-color: var(--color-info);
 }
 
+.summaryCard {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-primary);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.summaryHeading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: var(--space-3);
+}
+
+.summaryControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.summaryModeOption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.summaryText {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.summaryFallbackNote {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
 .alertsBox {
   border-radius: var(--radius-md);
   border: 1px solid var(--color-warning);

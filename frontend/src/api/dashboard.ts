@@ -39,3 +39,17 @@ export interface MyWorkflowStatus {
 export function fetchMyWorkflows(): Promise<{ items: MyWorkflowStatus[] }> {
   return apiGet<{ items: MyWorkflowStatus[] }>("/dashboard/mine-workflows");
 }
+
+export interface NarrativeSummary {
+  text: string;
+  mode_used: "template" | "llm";
+  llm_provider: string | null;
+}
+
+/** On-demand only -- never polled, unlike fetchDashboardSummary above (an
+ * LLM-generated summary has real latency and, depending on the configured
+ * provider, real cost). mode "llm" falls back to "template" server-side
+ * (reflected in mode_used) when no provider is configured or the call fails. */
+export function fetchNarrativeSummary(mode: "template" | "llm"): Promise<NarrativeSummary> {
+  return apiGet<NarrativeSummary>(`/dashboard/narrative-summary?mode=${mode}`);
+}

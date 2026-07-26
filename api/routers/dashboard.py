@@ -9,12 +9,28 @@ enabled schedule targets it.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
-from webapp import alerts, history, scheduler as sched_module, tasks, workflow_engine, workflows as workflows_module
+from webapp import (
+    alerts,
+    history,
+    llm_providers,
+    scheduler as sched_module,
+    summary as summary_module,
+    tasks,
+    workflow_engine,
+    workflows as workflows_module,
+)
 
 from ..dependencies import CurrentUser, get_current_user
-from ..schemas.dashboard import DashboardSummaryOut, ErrorRateAlertOut, MyWorkflowsOut, MyWorkflowStatusOut, RecentRunOut
+from ..schemas.dashboard import (
+    DashboardSummaryOut,
+    ErrorRateAlertOut,
+    MyWorkflowsOut,
+    MyWorkflowStatusOut,
+    NarrativeSummaryOut,
+    RecentRunOut,
+)
 from .workflows import run_to_out
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -44,6 +60,22 @@ def summary() -> DashboardSummaryOut:
             for e in recent
         ],
         error_rate_alerts=[ErrorRateAlertOut(**a) for a in alerts.detect_elevated_error_rates()],
+    )
+
+
+@router.get("/narrative-summary", response_model=NarrativeSummaryOut, dependencies=[Depends(get_current_user)])
+def narrative_summary(mode: str = Query(default="template", pattern="^(template|llm)$")) -> NarrativeSummaryOut:
+    """On-demand, not polled: an LLM call has real latency and cost, unlike
+    the rest of this router. mode="llm" falls back to "template" (reported
+    via mode_used) whenever no provider is configured or the call fails --
+    this endpoint never errors out just because the optional LLM path isn't
+    available."""
+    entries = history.get_history(limit=20)
+    text, mode_used = summary_module.build_summary(entries, use_llm=(mode == "llm"))
+    return NarrativeSummaryOut(
+        text=text,
+        mode_used=mode_used,
+        llm_provider=llm_providers.active_provider() if mode_used == "llm" else None,
     )
 
 

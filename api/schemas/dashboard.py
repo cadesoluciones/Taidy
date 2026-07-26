@@ -31,6 +31,12 @@ class DashboardSummaryOut(BaseModel):
     error_rate_alerts: List[ErrorRateAlertOut]
 
 
+class NarrativeSummaryOut(BaseModel):
+    text: str
+    mode_used: str  # "template" | "llm" -- may differ from the requested mode (see /dashboard/narrative-summary)
+    llm_provider: Optional[str] = None
+
+
 class MyWorkflowStatusOut(BaseModel):
     id: str
     name: str
