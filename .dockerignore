@@ -13,6 +13,8 @@ webapp/audit.log
 webapp/schedules.json
 webapp/workflows.json
 webapp/run_history.json
+webapp/app_settings.json
+api/sessions.json
 exports/
 exports_factorial/
 
@@ -39,3 +41,7 @@ frontend/blob-report/
 .vscode/
 *.md
 docs/
+
+# Host-side deployment helper (runs before `docker compose up`, never inside
+# the container -- see README's "Despliegue con Docker").
+scripts/docker-bootstrap.sh

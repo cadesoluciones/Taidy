@@ -74,18 +74,30 @@ frontend ya compilado desde el mismo origen (sin CORS, sin el problema de
 cookies `SameSite` entre `localhost`/`127.0.0.1` — ver `ARCHITECTURE.md`).
 
 ```bash
-cp .env.example .env             # rellena los secretos reales
+task docker:up
+```
+
+`config.json`, `tables.yaml` y `factorial_tables.yaml` se montan como
+volúmenes (nunca se hornean en la imagen, para poder editarlos sin
+reconstruir); `task docker:up` comprueba antes de arrancar que existen en la
+raíz del proyecto y, si falta alguno (o falta `.env`, o falta un directorio
+`exports/`/`exports_factorial/`), lo restaura por ti — ver
+`scripts/docker-bootstrap.sh`. Si `.env` se acaba de crear, edítalo con los
+secretos reales (`BC_CLIENT_SECRET`, `FACTORIAL_API_KEY`,
+`FABRIC_CLIENT_SECRET`, ...) antes de volver a lanzar `task docker:up`.
+
+Sin `task` (go-task), el equivalente manual es:
+
+```bash
+bash scripts/docker-bootstrap.sh   # o: cp .env.example .env && rellena los secretos
 docker compose up --build -d
 ```
 
-Antes del primer arranque, asegúrate de que existen en la raíz del proyecto
-(se montan como volúmenes, nunca se hornean en la imagen): `config.json`,
-`tables.yaml`, `factorial_tables.yaml`, y los directorios `exports/` /
-`exports_factorial/`. El estado persistente de la aplicación (usuarios,
-programaciones, flujos, historial, auditoría) vive en el volumen nombrado
-`taidy_data`, no en el contenedor — sobrevive a un `docker compose up`
-posterior. La app queda accesible en `http://<host-o-ip-del-contenedor>:8000`
-desde cualquier equipo de la red.
+El estado persistente de la aplicación (usuarios, programaciones, flujos,
+historial, auditoría) vive en el volumen nombrado `taidy_data`, no en el
+contenedor — sobrevive a un `docker compose up` posterior. La app queda
+accesible en `http://<host-o-ip-del-contenedor>:8000` desde cualquier equipo
+de la red.
 
 ## ⚡ Características
 

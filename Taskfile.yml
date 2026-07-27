@@ -145,6 +145,30 @@ tasks:
       - time uv run python -m src.cli.sync {{.CLI_ARGS}}
 
   # ------------------------------
+  # 🐳 Docker deployment
+  # ------------------------------
+  docker:bootstrap:
+    desc: "Ensure config.json/tables.yaml/factorial_tables.yaml/.env/exports exist before docker compose touches them"
+    cmds:
+      - bash scripts/docker-bootstrap.sh
+
+  docker:up:
+    desc: Bootstrap deployment files, then build and start the container in the background
+    cmds:
+      - task: docker:bootstrap
+      - docker compose up --build -d
+
+  docker:down:
+    desc: Stop the container (persisted state in the taidy_data volume survives)
+    cmds:
+      - docker compose down
+
+  docker:logs:
+    desc: Follow the running container's logs
+    cmds:
+      - docker compose logs -f
+
+  # ------------------------------
   # 🛠 Utilities
   # ------------------------------
   tools:csv-to-yaml:
