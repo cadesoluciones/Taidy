@@ -14,6 +14,7 @@ import { SchedulesPage } from "./pages/SchedulesPage";
 import { WorkflowsPage } from "./pages/WorkflowsPage";
 import { AuditPage } from "./pages/administracion/AuditPage";
 import { ConexionesApiPage } from "./pages/administracion/ConexionesApiPage";
+import { ConfiguracionPage } from "./pages/administracion/ConfiguracionPage";
 import { UsersPage } from "./pages/administracion/UsersPage";
 import { HistoryPage } from "./pages/actividad/HistoryPage";
 import { RunningTasksPage } from "./pages/actividad/RunningTasksPage";
@@ -60,6 +61,7 @@ export function App() {
                 <Route path="/administracion/usuarios" element={<UsersPage />} />
                 <Route path="/administracion/auditoria" element={<AuditPage />} />
                 <Route path="/administracion/conexiones-api" element={<ConexionesApiPage />} />
+                <Route path="/administracion/configuracion" element={<ConfiguracionPage />} />
               </Route>
               <Route path="/cuenta" element={<AccountPage />} />
             </Route>

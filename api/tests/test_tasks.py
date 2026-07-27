@@ -64,6 +64,21 @@ def test_factorial_date_validation(isolated_state, client, fake_subprocess):
     assert resp.status_code == 400
 
 
+def test_run_pipeline_action_label_names_the_pipeline(isolated_state, client, fake_subprocess):
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.post("/tasks/run-pipeline", json={"pipeline": "Pipeline_CADE_Silver"})
+    assert resp.status_code == 200
+    assert resp.json()["action_label"] == "Fabric · Ejecutar pipeline (Pipeline_CADE_Silver)"
+
+    task_id = resp.json()["id"]
+    _wait_until_finished(task_id)
+    detail = client.get(f"/tasks/{task_id}").json()
+    assert detail["table_statuses"] == []
+    assert "fake output" in detail["log_tail"]
+
+
 def test_task_list_filters_by_action(isolated_state, client, fake_subprocess):
     make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
     _login(client, "operator1", "OperatorPass2026!")

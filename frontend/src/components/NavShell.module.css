@@ -221,6 +221,6 @@
 .content {
   grid-area: content;
   padding: var(--space-5);
-  max-width: 1100px;
   width: 100%;
+  min-width: 0;
 }

@@ -17,7 +17,7 @@ async function login(page: Page, username: string, password: string) {
 }
 
 const ADMIN_ROUTES: Array<[string, string | RegExp]> = [
-  ["/", /Bienvenido|Taidy — Panel de datos/],
+  ["/", /Bienvenido|NEXUS-BDB — Panel de datos/],
   ["/ejecutar/bc-extraer", "Extraer tablas de Business Central"],
   ["/ejecutar/bc-subir", "Subir CSVs de Business Central a Fabric OneLake"],
   ["/ejecutar/bc-sync", "Extraer + subir Business Central en un paso"],

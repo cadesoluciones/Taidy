@@ -9,4 +9,9 @@ export interface TableStatus {
   status: TableStatusValue;
   detail: string;
   phase: string;
+  /** Only set for sync tasks (extract + upload in one run): the same
+   * table's upload-phase outcome, folded into this entry instead of a
+   * second, separate card -- see webapp/adapter.py's merge_sync_statuses(). */
+  upload_status: TableStatusValue | "pending" | null;
+  upload_detail: string;
 }

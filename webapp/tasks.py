@@ -65,6 +65,19 @@ _STOP_GRACE_SECONDS = 5
 _MAX_FINISHED_IN_MEMORY = 50
 
 
+def task_action_label(task: "Task") -> str:
+    """ACTION_LABELS' generic label is ambiguous for run_pipeline -- several
+    different pipelines all show up as just "Fabric · Ejecutar pipeline"
+    otherwise. resource_key already carries the pipeline name (see launch()'s
+    f"run_pipeline:{pipeline}"), so pull it back out instead of threading a
+    separate field through Task/TaskOut."""
+    label = ACTION_LABELS.get(task.action, task.action)
+    if task.action == "run_pipeline" and ":" in task.resource_key:
+        pipeline = task.resource_key.split(":", 1)[1]
+        return f"{label} ({pipeline})"
+    return label
+
+
 @dataclass
 class Task:
     id: str
@@ -96,6 +109,13 @@ class Task:
         end = datetime.fromisoformat(self.finished_at) if self.finished_at else datetime.now(timezone.utc)
         return (end - start).total_seconds()
 
+    def log_tail(self, chars: int = 4000) -> str:
+        """Last `chars` of the log -- for actions with no per-table
+        breakdown (run_pipeline just logs status transitions as plain
+        lines), this is the only way to see progress while it's running."""
+        text = self.log()
+        return text[-chars:]
+
     def table_statuses(self):
         log_text = self.log()
         # A table "started but not yet confirmed finished" is completely normal
@@ -112,11 +132,7 @@ class Task:
             parser = adapter.parse_bc_extract_tables if self.action == "sync_bc" else adapter.parse_factorial_extract_tables
             extract_statuses = parser(self.expected_tables, log_text, finished=finished)
             upload_statuses = adapter.parse_upload_files(log_text)
-            for t in extract_statuses:
-                t.phase = "extraer"
-            for t in upload_statuses:
-                t.phase = "subir"
-            return extract_statuses + upload_statuses
+            return adapter.merge_sync_statuses(extract_statuses, upload_statuses)
         return []
 
 
@@ -224,7 +240,7 @@ def _finalize(task: Task, return_code: int) -> None:
     )
     if task.notify:
         notifications.notify_task_finished(
-            action_label=ACTION_LABELS.get(task.action, task.action),
+            action_label=task_action_label(task),
             triggered_by=task.triggered_by,
             status=task.status,
             message=message,

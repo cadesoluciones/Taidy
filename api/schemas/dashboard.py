@@ -33,8 +33,16 @@ class DashboardSummaryOut(BaseModel):
 
 class NarrativeSummaryOut(BaseModel):
     text: str
-    mode_used: str  # "template" | "llm" -- may differ from the requested mode (see /dashboard/narrative-summary)
+    mode_used: str  # "template" | "llm" -- may differ from the configured mode (see SummaryModeOut)
     llm_provider: Optional[str] = None
+
+
+class SummaryModeOut(BaseModel):
+    mode: str  # "template" | "llm"
+
+
+class SetSummaryModeRequest(BaseModel):
+    mode: str
 
 
 class MyWorkflowStatusOut(BaseModel):

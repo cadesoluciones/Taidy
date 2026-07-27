@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Thin adapter between the web UI and Taidy's existing CLI entry points.
+Thin adapter between the web UI and NEXUS-BDB's existing CLI entry points.
 
 Nothing here reimplements extraction/upload logic, and nothing here executes
 anything either: every function builds an argv list from validated UI inputs,
@@ -50,6 +50,11 @@ class TableStatus:
     status: str  # "ok" | "skipped" | "dry_run" | "error" | "unknown"
     detail: str = ""
     phase: str = ""  # only set on combined sync results: "extraer" | "subir"
+    # Only set by merge_sync_statuses(): a sync task's upload-phase outcome
+    # for this same table, folded into the extract entry instead of a
+    # second, separate card for what a user experiences as one table.
+    upload_status: Optional[str] = None
+    upload_detail: str = ""
 
 
 def _flag(argv: List[str], name: str, value: bool) -> None:
@@ -291,6 +296,48 @@ def parse_upload_files(log: str) -> List[TableStatus]:
     for name in dict.fromkeys(_UPLOAD_DRYRUN_RE.findall(log)):
         statuses.append(TableStatus(name=name, status=_STATUS_DRY_RUN, detail="simulación"))
     return statuses
+
+
+def merge_sync_statuses(
+    extract_statuses: List[TableStatus], upload_statuses: List[TableStatus]
+) -> List[TableStatus]:
+    """A sync task extracts a table to CSV, then uploads that same CSV --
+    one table, two phases. Concatenating extract_statuses + upload_statuses
+    (the previous behavior) showed two separate cards for the same table, one
+    per phase; this folds the upload outcome into the extract entry as a
+    second status instead, so the UI can show one card per table with an
+    extra icon for "subido / pendiente de subir / error al subir".
+
+    Matches upload entries back to their table by stripping the ".csv" upload
+    filenames carry (parse_upload_files() names entries after the uploaded
+    file, e.g. "customers.csv", while parse_*_extract_tables() names them
+    after the table, e.g. "customers").
+    """
+    upload_by_table = {(u.name[:-4] if u.name.endswith(".csv") else u.name): u for u in upload_statuses}
+
+    merged: List[TableStatus] = []
+    for e in extract_statuses:
+        upload = upload_by_table.get(e.name)
+        if upload is not None:
+            upload_status, upload_detail = upload.status, upload.detail
+        elif e.status == _STATUS_OK:
+            # Extracted successfully but the upload phase hasn't reached (or
+            # logged anything about) this table yet.
+            upload_status, upload_detail = "pending", "pendiente de subir"
+        else:
+            # Never extracted (error/unknown/dry_run/skipped) -- nothing to
+            # upload yet, and no upload icon to show for it.
+            upload_status, upload_detail = None, ""
+        merged.append(
+            TableStatus(
+                name=e.name,
+                status=e.status,
+                detail=e.detail,
+                upload_status=upload_status,
+                upload_detail=upload_detail,
+            )
+        )
+    return merged
 
 
 # --------------------------------------------------------------------------------------

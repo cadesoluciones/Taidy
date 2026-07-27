@@ -1,4 +1,4 @@
-# Taidy — Frontend (React + TypeScript + Vite)
+# NEXUS-BDB — Frontend (React + TypeScript + Vite)
 
 React UI talking to the FastAPI backend in `../api/`, which itself reuses
 the auth/workflows/scheduler business logic in `../webapp/`. See

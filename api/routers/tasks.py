@@ -50,10 +50,11 @@ def _launch(action: str, params: dict, current: CurrentUser) -> TaskOut:
 
 
 def _task_to_out(task) -> TaskOut:
+    table_statuses = task.table_statuses()
     return TaskOut(
         id=task.id,
         action=task.action,
-        action_label=tasks_module.ACTION_LABELS.get(task.action, task.action),
+        action_label=tasks_module.task_action_label(task),
         triggered_by=task.triggered_by,
         status=task.status,
         started_at=task.started_at,
@@ -62,8 +63,21 @@ def _task_to_out(task) -> TaskOut:
         current_step=task.current_step,
         step_labels=task.step_labels,
         table_statuses=[
-            TableStatusOut(name=s.name, status=s.status, detail=s.detail, phase=s.phase) for s in task.table_statuses()
+            TableStatusOut(
+                name=s.name,
+                status=s.status,
+                detail=s.detail,
+                phase=s.phase,
+                upload_status=s.upload_status,
+                upload_detail=s.upload_detail,
+            )
+            for s in table_statuses
         ],
+        # Actions with no per-table breakdown (run_pipeline) have nothing
+        # else to show progress with -- skip it otherwise, it'd just bloat
+        # every /tasks poll response for BC/Factorial runs that already
+        # have table_statuses.
+        log_tail=task.log_tail() if not table_statuses else "",
     )
 
 

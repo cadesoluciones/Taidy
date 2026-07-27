@@ -1,28 +1,21 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Activity, AlertTriangle, CalendarClock, Sparkles, type LucideIcon } from "lucide-react";
 
 import { ROLE_READER } from "../api/auth";
 import { ApiError } from "../api/client";
-import { fetchDashboardSummary, fetchNarrativeSummary } from "../api/dashboard";
+import { fetchDashboardSummary, fetchNarrativeSummary, fetchSummaryMode } from "../api/dashboard";
 import { useAuth } from "../auth/AuthContext";
 import { ACTION_LABELS } from "../components/actionLabels";
 import { DataNetworkArt } from "../components/DataNetworkArt";
 import formStyles from "../components/Form.module.css";
 import { OutcomeIcon } from "../components/OutcomeIcon";
+import { RunningActivityPreview } from "../components/RunningActivityPreview";
 import { Timeline, type TimelineItem } from "../components/Timeline";
+import { WeeklyScheduleCalendar } from "../components/WeeklyScheduleCalendar";
 import { usePolling } from "../hooks/usePolling";
 import styles from "./HomePage.module.css";
 import { ReaderHomePage } from "./ReaderHomePage";
-
-const QUICK_LINKS = [
-  { to: "/ejecutar/bc-sync", label: "Business Central · Sync" },
-  { to: "/ejecutar/bc-extraer", label: "Business Central · Extraer" },
-  { to: "/ejecutar/factorial-sync", label: "Factorial · Sync" },
-  { to: "/ejecutar/pipelines", label: "Fabric · Pipelines" },
-  { to: "/flujos", label: "Flujos" },
-  { to: "/programacion", label: "Tareas programadas" },
-];
 
 export function HomePage() {
   const { user } = useAuth();
@@ -53,6 +46,16 @@ function AdminOperatorHomePage() {
     statusMessage = `${runningCount} tarea${runningCount === 1 ? "" : "s"} en curso ahora mismo.`;
   }
 
+  // A cheap fingerprint of "did something worth re-summarizing just happen":
+  // the most recent history entry's identity, plus the current set of
+  // error-rate alerts. Recomputed every 10s poll tick (same cadence as
+  // `summary` itself) but only changes value when the underlying activity
+  // actually changes, which is what triggers ActivitySummaryCard's effect.
+  const latestEntry = summary?.recent_history[0];
+  const changeSignature = summary
+    ? JSON.stringify([latestEntry?.finished_at, latestEntry?.action, latestEntry?.source, summary.error_rate_alerts])
+    : "";
+
   return (
     <section>
       <div className={styles.heroRow}>
@@ -60,7 +63,7 @@ function AdminOperatorHomePage() {
           <DataNetworkArt className={styles.heroArt} />
           <div className={styles.heroContent}>
             <div className={styles.heroEyebrow}>Panel de datos</div>
-            <h1 className={styles.heroTitle}>Taidy — Panel de datos</h1>
+            <h1 className={styles.heroTitle}>NEXUS-BDB — Panel de datos</h1>
             <p className={styles.heroSubtitle}>
               Extracción y carga al datalake de Business Central y Factorial HR, sin depender de la terminal.
             </p>
@@ -107,16 +110,18 @@ function AdminOperatorHomePage() {
         </div>
       )}
 
-      <ActivitySummaryCard />
+      <ActivitySummaryCard changeSignature={changeSignature} />
 
-      <h2>Accesos directos</h2>
-      <ul>
-        {QUICK_LINKS.map((link) => (
-          <li key={link.to}>
-            <Link to={link.to}>{link.label}</Link>
-          </li>
-        ))}
-      </ul>
+      <div className={styles.midRow}>
+        <div>
+          <h2>Tareas en curso</h2>
+          <RunningActivityPreview />
+        </div>
+        <div>
+          <h2>Esta semana</h2>
+          <WeeklyScheduleCalendar />
+        </div>
+      </div>
 
       <h2>Actividad reciente</h2>
       <p>
@@ -147,27 +152,29 @@ function AdminOperatorHomePage() {
   );
 }
 
-/** On-demand ("Generar", not polled): an LLM-generated summary has real
- * latency and, depending on the configured provider, real cost. "Plantilla"
- * always works with zero configuration; "IA generativa" needs
- * TAIDY_SUMMARY_PROVIDER set server-side, and silently falls back to the
- * template (reflected in the note below) when it isn't. */
-function ActivitySummaryCard() {
-  const [mode, setMode] = useState<"template" | "llm">("template");
+/** Auto-regenerates whenever `changeSignature` changes (a new run finished,
+ * an error-rate alert appeared/cleared) instead of requiring a manual click
+ * -- an admin-configured mode (Administración > Configuración) decides
+ * whether that's a free template or an LLM call; either way this always has
+ * something to show (the LLM path falls back to the template server-side,
+ * reflected in modeUsed/llmProvider below). */
+function ActivitySummaryCard({ changeSignature }: { changeSignature: string }) {
   const [text, setText] = useState<string | null>(null);
   const [modeUsed, setModeUsed] = useState<"template" | "llm" | null>(null);
+  const [configuredMode, setConfiguredMode] = useState<"template" | "llm" | null>(null);
   const [llmProvider, setLlmProvider] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleGenerate() {
+  async function generate() {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await fetchNarrativeSummary(mode);
+      const [result, configured] = await Promise.all([fetchNarrativeSummary(), fetchSummaryMode()]);
       setText(result.text);
       setModeUsed(result.mode_used);
       setLlmProvider(result.llm_provider);
+      setConfiguredMode(configured.mode);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo generar el resumen.");
     } finally {
@@ -175,35 +182,40 @@ function ActivitySummaryCard() {
     }
   }
 
+  useEffect(() => {
+    if (changeSignature) void generate();
+    // Only re-run when the underlying activity actually changed, not on
+    // every 10s poll tick that leaves changeSignature unchanged.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [changeSignature]);
+
   return (
     <div className={styles.summaryCard}>
       <div className={styles.summaryHeading}>
         <Sparkles size={16} />
         Resumen de actividad
-      </div>
-      <div className={styles.summaryControls}>
-        <label className={styles.summaryModeOption}>
-          <input type="radio" name="summary_mode" checked={mode === "template"} onChange={() => setMode("template")} />
-          Plantilla
-        </label>
-        <label className={styles.summaryModeOption}>
-          <input type="radio" name="summary_mode" checked={mode === "llm"} onChange={() => setMode("llm")} />
-          IA generativa
-        </label>
-        <button type="button" className={formStyles.submit} disabled={isLoading} onClick={() => void handleGenerate()}>
-          {isLoading ? "Generando…" : "Generar"}
+        <button
+          type="button"
+          className={styles.summaryRefreshBtn}
+          disabled={isLoading}
+          onClick={() => void generate()}
+        >
+          {isLoading ? "Actualizando…" : "Actualizar"}
         </button>
       </div>
       {error && <div className={formStyles.errorBanner}>{error}</div>}
       {text && (
         <div className={styles.summaryText}>
           <p>{text}</p>
-          {mode === "llm" && modeUsed === "template" && (
+          {modeUsed === "llm" && llmProvider && (
+            <p className={styles.summaryFallbackNote}>Generado con {llmProvider}.</p>
+          )}
+          {configuredMode === "llm" && modeUsed === "template" && (
             <p className={styles.summaryFallbackNote}>
-              No hay un proveedor de IA configurado (o la llamada ha fallado); se ha mostrado el resumen por plantilla.
+              La IA generativa está configurada (Administración &gt; Configuración) pero no está disponible ahora
+              mismo; se muestra el resumen por plantilla.
             </p>
           )}
-          {modeUsed === "llm" && llmProvider && <p className={styles.summaryFallbackNote}>Generado con {llmProvider}.</p>}
         </div>
       )}
     </div>

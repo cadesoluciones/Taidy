@@ -125,7 +125,7 @@ def notify_task_finished(
     sender: Optional[SenderFn] = None,
 ) -> None:
     label = _STATUS_LABELS.get(status, status)
-    subject = f"Taidy · {action_label}: {label}"
+    subject = f"NEXUS-BDB · {action_label}: {label}"
     body = f"Tarea: {action_label}\nLanzada por: {triggered_by}\nEstado: {label}\n\n{message}\n"
     _send_notification(subject, body, sender=sender)
 
@@ -139,6 +139,6 @@ def notify_workflow_finished(
     sender: Optional[SenderFn] = None,
 ) -> None:
     label = _STATUS_LABELS.get(status, status)
-    subject = f"Taidy · Flujo '{workflow_name}': {label}"
+    subject = f"NEXUS-BDB · Flujo '{workflow_name}': {label}"
     body = f"Flujo: {workflow_name}\nLanzado por: {triggered_by}\nEstado: {label}\n\n{message}\n"
     _send_notification(subject, body, sender=sender)

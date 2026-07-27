@@ -66,3 +66,15 @@
   color: var(--color-text-muted);
   font-size: 14px;
 }
+
+.log {
+  background: var(--color-bg-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  font-size: 12px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  margin: 0;
+  max-height: 320px;
+  overflow-y: auto;
+}

@@ -77,3 +77,25 @@ def test_invalid_cron_expression_is_rejected(isolated_state, client):
         },
     )
     assert resp.status_code == 400
+
+
+def test_schedules_week_reflects_a_created_schedule(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    create = client.post(
+        "/schedules",
+        json={
+            "name": "Nightly BC",
+            "action": "extract_bc",
+            "params": {},
+            "trigger": "interval",
+            "trigger_args": {"hours": 24},
+        },
+    )
+    schedule_id = create.json()["id"]
+
+    resp = client.get("/schedules/week")
+    assert resp.status_code == 200
+    occurrences = resp.json()["occurrences"]
+    assert schedule_id in occurrences

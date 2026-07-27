@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Background scheduling for Taidy's webapp.
+Background scheduling for NEXUS-BDB's webapp.
 
 Schedule *definitions* are persisted as JSON next to this file so they
 survive app restarts. The actual timers live in an APScheduler
@@ -28,7 +28,7 @@ import threading
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from apscheduler.events import EVENT_JOB_EXECUTED
 from apscheduler.jobstores.base import JobLookupError
@@ -118,6 +118,64 @@ def _build_trigger(trigger: str, trigger_args: dict):
     if trigger == "cron":
         return CronTrigger.from_crontab(trigger_args["expr"])
     raise ValueError(f"Tipo de trigger desconocido: {trigger}")
+
+
+# Safety net for a pathological trigger (e.g. "every minute") that would
+# otherwise flood a week view with thousands of occurrences.
+_MAX_WEEK_OCCURRENCES_PER_SCHEDULE = 200
+
+
+def _build_trigger_for_display(schedule: dict):
+    """Like _build_trigger, but an interval schedule with no explicit
+    start_date (the normal case -- the UI never sets one) gets anchored to
+    when the schedule was actually created instead of "now".
+
+    IntervalTrigger(**trigger_args) with no start_date defaults to
+    datetime.now(local_tz) + interval -- correct for the *live* scheduler,
+    where that trigger object is built exactly once (in add_schedule/
+    build_scheduler) and kept in memory for the job's whole lifetime, so its
+    anchor never moves again. week_occurrences() has no such live object to
+    reuse and rebuilds the trigger from scratch on every call; without this,
+    every call would silently re-anchor to whatever moment it happened to
+    run at, making a schedule's week-view occurrences drift depending on
+    when the calendar page happens to be loaded instead of reflecting when
+    the schedule was actually created.
+    """
+    if schedule["trigger"] == "interval" and "start_date" not in schedule["trigger_args"]:
+        args = dict(schedule["trigger_args"])
+        args["start_date"] = datetime.fromisoformat(schedule["created_at"])
+        return IntervalTrigger(**args)
+    return _build_trigger(schedule["trigger"], schedule["trigger_args"])
+
+
+def week_occurrences(reference: Optional[datetime] = None) -> Dict[str, List[str]]:
+    """schedule_id -> ISO datetimes this schedule is due to fire within the
+    current week (Monday 00:00 through the following Sunday 23:59:59, UTC),
+    computed via the exact same trigger objects the live scheduler uses
+    (IntervalTrigger/CronTrigger.get_next_fire_time) -- not a reimplemented
+    cron/interval calculation that could silently drift from what actually
+    fires.
+    """
+    now = reference or datetime.now(timezone.utc)
+    week_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    week_end = week_start + timedelta(days=7)
+
+    result: Dict[str, List[str]] = {}
+    for schedule in list_schedules():
+        if not schedule.get("enabled", True):
+            continue
+        try:
+            trigger = _build_trigger_for_display(schedule)
+        except Exception:
+            continue
+
+        occurrences: List[str] = []
+        fire = trigger.get_next_fire_time(None, week_start)
+        while fire is not None and fire < week_end and len(occurrences) < _MAX_WEEK_OCCURRENCES_PER_SCHEDULE:
+            occurrences.append(fire.isoformat())
+            fire = trigger.get_next_fire_time(fire, fire)
+        result[schedule["id"]] = occurrences
+    return result
 
 
 # --------------------------------------------------------------------------------------

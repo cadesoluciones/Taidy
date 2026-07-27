@@ -10,6 +10,7 @@ import {
   History as HistoryIcon,
   LogOut,
   Menu,
+  Settings,
   ShieldCheck,
   Table2,
   Upload,
@@ -89,6 +90,7 @@ const ADMIN_SECTION: NavSection = {
     { to: "/administracion/usuarios", label: "Usuarios", icon: Users },
     { to: "/administracion/conexiones-api", label: "Conexiones API", icon: Database },
     { to: "/administracion/auditoria", label: "Auditoría", icon: ShieldCheck },
+    { to: "/administracion/configuracion", label: "Configuración", icon: Settings },
   ],
 };
 
@@ -148,7 +150,7 @@ export function NavShell() {
           >
             {mobileNavOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
-          <span className={styles.brandName}>Taidy</span>
+          <span className={styles.brandName}>NEXUS-BDB</span>
           <span className={styles.pageTitle}>{breadcrumb}</span>
         </div>
         <div className={styles.right}>

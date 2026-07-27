@@ -9,10 +9,11 @@ enabled schedule targets it.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from webapp import (
     alerts,
+    app_settings,
     history,
     llm_providers,
     scheduler as sched_module,
@@ -21,8 +22,9 @@ from webapp import (
     workflow_engine,
     workflows as workflows_module,
 )
+from webapp.users_db import ROLE_ADMIN
 
-from ..dependencies import CurrentUser, get_current_user
+from ..dependencies import CurrentUser, get_current_user, require_role
 from ..schemas.dashboard import (
     DashboardSummaryOut,
     ErrorRateAlertOut,
@@ -30,6 +32,8 @@ from ..schemas.dashboard import (
     MyWorkflowStatusOut,
     NarrativeSummaryOut,
     RecentRunOut,
+    SetSummaryModeRequest,
+    SummaryModeOut,
 )
 from .workflows import run_to_out
 
@@ -64,19 +68,38 @@ def summary() -> DashboardSummaryOut:
 
 
 @router.get("/narrative-summary", response_model=NarrativeSummaryOut, dependencies=[Depends(get_current_user)])
-def narrative_summary(mode: str = Query(default="template", pattern="^(template|llm)$")) -> NarrativeSummaryOut:
-    """On-demand, not polled: an LLM call has real latency and cost, unlike
-    the rest of this router. mode="llm" falls back to "template" (reported
-    via mode_used) whenever no provider is configured or the call fails --
-    this endpoint never errors out just because the optional LLM path isn't
-    available."""
+def narrative_summary() -> NarrativeSummaryOut:
+    """On-demand (called on mount and whenever Inicio detects a relevant
+    change, not on the 10s dashboard-summary poll): an LLM call has real
+    latency and cost, unlike the rest of this router. Which mode is active
+    is an Admin-configured, app-wide setting (see GET/PATCH summary-mode
+    below), not a per-request choice -- "llm" still falls back to
+    "template" (reported via mode_used) whenever no provider is configured
+    or the call fails, so this never errors out just because the optional
+    LLM path isn't available.
+    """
     entries = history.get_history(limit=20)
-    text, mode_used = summary_module.build_summary(entries, use_llm=(mode == "llm"))
+    use_llm = app_settings.get_summary_mode() == app_settings.SUMMARY_MODE_LLM
+    text, mode_used = summary_module.build_summary(entries, use_llm=use_llm)
     return NarrativeSummaryOut(
         text=text,
         mode_used=mode_used,
         llm_provider=llm_providers.active_provider() if mode_used == "llm" else None,
     )
+
+
+@router.get("/summary-mode", response_model=SummaryModeOut, dependencies=[Depends(get_current_user)])
+def get_summary_mode() -> SummaryModeOut:
+    return SummaryModeOut(mode=app_settings.get_summary_mode())
+
+
+@router.patch("/summary-mode", response_model=SummaryModeOut, dependencies=[Depends(require_role(ROLE_ADMIN))])
+def set_summary_mode(payload: SetSummaryModeRequest) -> SummaryModeOut:
+    try:
+        mode = app_settings.set_summary_mode(payload.mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return SummaryModeOut(mode=mode)
 
 
 @router.get("/mine-workflows", response_model=MyWorkflowsOut, dependencies=[Depends(get_current_user)])

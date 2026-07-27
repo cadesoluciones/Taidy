@@ -21,6 +21,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from webapp import (  # noqa: E402
+    app_settings,
     auth,
     history,
     scheduler as sched_module,
@@ -45,6 +46,7 @@ def isolated_state(tmp_path, monkeypatch):
     monkeypatch.setattr(table_configs, "_BC_TABLES_PATH", tmp_path / "tables.yaml")
     monkeypatch.setattr(table_configs, "_FACTORIAL_TABLES_PATH", tmp_path / "factorial_tables.yaml")
     monkeypatch.setattr(session_store, "_SESSIONS_PATH", tmp_path / "sessions.json")
+    monkeypatch.setattr(app_settings, "_SETTINGS_PATH", tmp_path / "app_settings.json")
     users_db.init_db()
 
     with tasks._REGISTRY_LOCK:

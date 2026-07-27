@@ -24,6 +24,41 @@
 .icon.neutral {
   color: var(--color-text-muted);
 }
+.icon.warning {
+  color: var(--color-warning);
+}
+
+.iconRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.uploadIconWrap {
+  display: inline-flex;
+}
+
+.uploadIcon.success {
+  color: var(--color-success);
+}
+.uploadIcon.danger {
+  color: var(--color-danger);
+}
+.uploadIcon.info {
+  color: var(--color-info);
+}
+.uploadIcon.neutral {
+  color: var(--color-text-muted);
+}
+.uploadIcon.warning {
+  color: var(--color-warning);
+}
+
+.uploadDetail {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  margin-top: 2px;
+}
 
 .name {
   font-weight: 600;

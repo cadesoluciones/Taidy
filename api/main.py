@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Taidy API -- FastAPI backend.
+NEXUS-BDB API -- FastAPI backend.
 
 A thin layer over the existing webapp/*.py modules (themselves a thin layer
 over src/**, per this project's long-standing rule: business logic lives in
@@ -40,6 +40,7 @@ from .routers import (  # noqa: E402
     dashboard as dashboard_router,
     history as history_router,
     meta as meta_router,
+    pipelines as pipelines_router,
     schedules as schedules_router,
     tasks as tasks_router,
     users as users_router,
@@ -77,7 +78,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Taidy API", lifespan=lifespan)
+    app = FastAPI(title="NEXUS-BDB API", lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,
@@ -108,6 +109,7 @@ def create_app() -> FastAPI:
     app.include_router(workflows_router.runs_router)
     app.include_router(tasks_router.router)
     app.include_router(meta_router.router)
+    app.include_router(pipelines_router.router)
 
     @app.get("/health")
     def health() -> dict:

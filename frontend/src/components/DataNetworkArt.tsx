@@ -1,7 +1,7 @@
 /** Abstract decorative background for the dashboard hero -- a generic
  * data/server network motif (nodes, connecting lines, rack silhouettes),
  * generated inline rather than sourced from a stock photo: nothing here
- * claims to depict real Taidy infrastructure, so a literal photograph would
+ * claims to depict real NEXUS-BDB infrastructure, so a literal photograph would
  * be misleading. Purely decorative -- aria-hidden, no interaction. */
 export function DataNetworkArt({ className }: { className?: string | undefined }) {
   return (

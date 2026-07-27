@@ -1,4 +1,4 @@
-import { apiGet } from "./client";
+import { apiGet, apiPatch } from "./client";
 import type { WorkflowRun } from "./workflows";
 
 export interface RecentRun {
@@ -48,8 +48,22 @@ export interface NarrativeSummary {
 
 /** On-demand only -- never polled, unlike fetchDashboardSummary above (an
  * LLM-generated summary has real latency and, depending on the configured
- * provider, real cost). mode "llm" falls back to "template" server-side
- * (reflected in mode_used) when no provider is configured or the call fails. */
-export function fetchNarrativeSummary(mode: "template" | "llm"): Promise<NarrativeSummary> {
-  return apiGet<NarrativeSummary>(`/dashboard/narrative-summary?mode=${mode}`);
+ * provider, real cost). Which mode is used is an Admin-configured, app-wide
+ * setting (see fetchSummaryMode/setSummaryMode below), not a per-request
+ * choice -- "llm" still falls back to "template" server-side (reflected in
+ * mode_used) when no provider is configured or the call fails. */
+export function fetchNarrativeSummary(): Promise<NarrativeSummary> {
+  return apiGet<NarrativeSummary>("/dashboard/narrative-summary");
+}
+
+export interface SummaryMode {
+  mode: "template" | "llm";
+}
+
+export function fetchSummaryMode(): Promise<SummaryMode> {
+  return apiGet<SummaryMode>("/dashboard/summary-mode");
+}
+
+export function setSummaryMode(mode: "template" | "llm"): Promise<SummaryMode> {
+  return apiPatch<SummaryMode>("/dashboard/summary-mode", { mode });
 }

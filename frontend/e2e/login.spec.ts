@@ -23,7 +23,7 @@ test.describe("Login journey", () => {
     await page.getByRole("button", { name: "Acceder al panel" }).click();
 
     await expect(page).toHaveURL("http://127.0.0.1:5173/");
-    await expect(page.getByRole("heading", { level: 1, name: "Taidy — Panel de datos" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "NEXUS-BDB — Panel de datos" })).toBeVisible();
     await expect(page.getByRole("banner").getByText("App.Operator")).toBeVisible();
   });
 

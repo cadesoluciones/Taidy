@@ -80,6 +80,11 @@ export function RunningTasksPage() {
                     <StepStatusGrid items={task.table_statuses} />
                   </div>
                 )}
+                {expanded.has(task.id) && task.table_statuses.length === 0 && task.log_tail && (
+                  <div className={styles.expanded}>
+                    <pre className={styles.log}>{task.log_tail}</pre>
+                  </div>
+                )}
               </div>
             );
           })}

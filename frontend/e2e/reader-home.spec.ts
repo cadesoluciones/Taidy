@@ -58,7 +58,7 @@ test("Reader gets a simplified Inicio: reduced nav, launches their assigned work
   await page.goto("/flujos");
   await expect(page).toHaveURL("http://127.0.0.1:5173/");
 
-  await expect(page.getByRole("heading", { name: "Taidy — Panel de datos" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "NEXUS-BDB — Panel de datos" })).toBeVisible();
   const myCard = page.getByTestId("my-workflow-card").filter({ hasText: workflowName });
   await expect(myCard).toBeVisible();
   await expect(myCard.getByText("Nunca se ha ejecutado")).toBeVisible();

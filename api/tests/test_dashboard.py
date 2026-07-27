@@ -51,8 +51,10 @@ def test_summary_surfaces_an_elevated_error_rate_alert(isolated_state, client):
 
 # --------------------------------------------------------------------------------------
 # GET /dashboard/narrative-summary -- on-demand only, never polled (real
-# latency/cost when mode=llm), and never errors just because the optional
-# LLM path isn't configured.
+# latency/cost when the configured mode is "llm"), and never errors just
+# because the optional LLM path isn't configured. Which mode is active is an
+# Admin-only, app-wide setting (GET/PATCH /dashboard/summary-mode), not a
+# per-request choice.
 # --------------------------------------------------------------------------------------
 
 
@@ -73,37 +75,74 @@ def test_narrative_summary_defaults_to_template_mode(isolated_state, client):
     assert "correcta" in body["text"]
 
 
-def test_narrative_summary_llm_mode_falls_back_to_template_when_unconfigured(isolated_state, client, monkeypatch):
+def test_narrative_summary_falls_back_to_template_when_llm_mode_is_set_but_unconfigured(
+    isolated_state, client, monkeypatch
+):
     monkeypatch.delenv("TAIDY_SUMMARY_PROVIDER", raising=False)
-    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
-    _login(client, "reader1", "ReaderPass2026!")
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
     history.record_run(action="extract_bc", source="admin", status="ok", ok=True, message="ok", log="")
+    client.patch("/dashboard/summary-mode", json={"mode": "llm"})
 
-    resp = client.get("/dashboard/narrative-summary", params={"mode": "llm"})
-    body = resp.json()
-    assert body["mode_used"] == "template"
+    resp = client.get("/dashboard/narrative-summary")
+    assert resp.json()["mode_used"] == "template"
 
 
-def test_narrative_summary_llm_mode_uses_the_llm_when_it_succeeds(isolated_state, client, monkeypatch):
+def test_narrative_summary_uses_the_llm_when_configured_and_it_succeeds(isolated_state, client, monkeypatch):
     monkeypatch.setattr(llm_providers, "generate_narrative_summary", lambda prompt, env=None: "texto de la IA")
     monkeypatch.setattr(llm_providers, "active_provider", lambda env=None: "anthropic")
-    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
-    _login(client, "reader1", "ReaderPass2026!")
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
     history.record_run(action="extract_bc", source="admin", status="ok", ok=True, message="ok", log="")
+    client.patch("/dashboard/summary-mode", json={"mode": "llm"})
 
-    resp = client.get("/dashboard/narrative-summary", params={"mode": "llm"})
+    resp = client.get("/dashboard/narrative-summary")
     body = resp.json()
     assert body["mode_used"] == "llm"
     assert body["text"] == "texto de la IA"
     assert body["llm_provider"] == "anthropic"
 
 
-def test_narrative_summary_rejects_an_invalid_mode(isolated_state, client):
+# --------------------------------------------------------------------------------------
+# GET/PATCH /dashboard/summary-mode -- reading it only requires being logged
+# in (Inicio shows the active mode to everyone); changing it is Admin-only.
+# --------------------------------------------------------------------------------------
+
+
+def test_get_summary_mode_defaults_to_template(isolated_state, client):
     make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
     _login(client, "reader1", "ReaderPass2026!")
 
-    resp = client.get("/dashboard/narrative-summary", params={"mode": "not-a-real-mode"})
-    assert resp.status_code == 422
+    resp = client.get("/dashboard/summary-mode")
+    assert resp.status_code == 200
+    assert resp.json()["mode"] == "template"
+
+
+def test_reader_cannot_change_summary_mode(isolated_state, client):
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+
+    resp = client.patch("/dashboard/summary-mode", json={"mode": "llm"})
+    assert resp.status_code == 403
+
+
+def test_admin_can_change_summary_mode_and_it_persists(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    resp = client.patch("/dashboard/summary-mode", json={"mode": "llm"})
+    assert resp.status_code == 200
+    assert resp.json()["mode"] == "llm"
+    assert client.get("/dashboard/summary-mode").json()["mode"] == "llm"
+
+
+def test_admin_setting_an_invalid_mode_is_rejected(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    resp = client.patch("/dashboard/summary-mode", json={"mode": "not-a-real-mode"})
+    assert resp.status_code == 400
+    assert client.get("/dashboard/summary-mode").json()["mode"] == "template"
 
 
 # --------------------------------------------------------------------------------------

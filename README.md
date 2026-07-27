@@ -1,4 +1,4 @@
-# 📊 TAIDY — Extracción y Carga de Datos al Datalake
+# 📊 NEXUS-BDB — Extracción y Carga de Datos al Datalake
 
 Herramienta para extraer datos de **Microsoft Dynamics 365 Business Central** y **Factorial HR** a archivos CSV y subirlos a Microsoft Fabric OneLake. Incluye autenticación OAuth / API Key, paginación automática, procesamiento paralelo, exportación atómica e ingesta incremental con checkpoints.
 

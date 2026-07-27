@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Shared helper for where Taidy's persisted JSON/SQLite/YAML state files live.
+Shared helper for where NEXUS-BDB's persisted JSON/SQLite/YAML state files live.
 
 Every one of these files defaults to living next to the module that owns it
 (unchanged local-dev behavior) -- but a container's own filesystem is

@@ -185,3 +185,140 @@ def test_disabling_a_schedule_clears_next_run_time_and_missed_flag(isolated_stat
     reloaded = sched_module._find_schedule(schedule["id"])
     assert reloaded["next_run_time"] is None
     assert reloaded["missed_last_run"] is False
+
+
+# --------------------------------------------------------------------------------------
+# week_occurrences(): backs Inicio's weekly schedule calendar. Uses the exact
+# same trigger objects (IntervalTrigger/CronTrigger.get_next_fire_time) the
+# live scheduler fires from, rather than a hand-rolled reimplementation of
+# interval/cron math that could silently drift out of sync with reality.
+# --------------------------------------------------------------------------------------
+
+
+def _week_start_for(reference):
+    return (reference - timedelta(days=reference.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def test_week_occurrences_enumerates_a_daily_interval_schedule(isolated_state):
+    reference = datetime(2026, 3, 18, 10, 0, tzinfo=timezone.utc)
+    week_start = _week_start_for(reference)
+    schedule = {
+        "id": "s1",
+        "name": "Diario",
+        "action": "extract_bc",
+        "params": {},
+        "trigger": "interval",
+        # ISO string + explicit "timezone": "UTC" -- IntervalTrigger falls
+        # back to the local system timezone otherwise, which would make this
+        # test's exact-datetime assertions depend on the machine running it.
+        # (trigger_args must also stay JSON-serializable, so no raw datetime.)
+        "trigger_args": {"hours": 24, "start_date": week_start.isoformat(), "timezone": "UTC"},
+        "enabled": True,
+        "created_at": "2025-01-01T00:00:00+00:00",
+    }
+    sched_module._write_json(sched_module._SCHEDULES_PATH, [schedule])
+
+    result = sched_module.week_occurrences(reference)
+
+    assert len(result["s1"]) == 7
+    assert result["s1"][0] == week_start.isoformat()
+    assert result["s1"][1] == (week_start + timedelta(days=1)).isoformat()
+    assert result["s1"][-1] == (week_start + timedelta(days=6)).isoformat()
+
+
+def test_week_occurrences_enumerates_a_cron_schedule(isolated_state):
+    reference = datetime(2026, 3, 18, 10, 0, tzinfo=timezone.utc)
+    schedule = {
+        "id": "s1",
+        "name": "Cada mañana",
+        "action": "extract_bc",
+        "params": {},
+        "trigger": "cron",
+        "trigger_args": {"expr": "0 6 * * *"},
+        "enabled": True,
+        "created_at": "2025-01-01T00:00:00+00:00",
+    }
+    sched_module._write_json(sched_module._SCHEDULES_PATH, [schedule])
+
+    result = sched_module.week_occurrences(reference)
+
+    # _build_trigger() doesn't pass an explicit timezone for cron schedules
+    # (pre-existing behavior, unrelated to this feature), so the exact hour
+    # depends on the machine's local timezone -- assert only what's
+    # timezone-independent: one occurrence per day, all at the same time.
+    assert len(result["s1"]) == 7
+    times = {(datetime.fromisoformat(iso).hour, datetime.fromisoformat(iso).minute) for iso in result["s1"]}
+    assert len(times) == 1
+    days = {datetime.fromisoformat(iso).date() for iso in result["s1"]}
+    assert len(days) == 7
+
+
+def test_week_occurrences_skips_disabled_schedules(isolated_state):
+    reference = datetime(2026, 3, 18, 10, 0, tzinfo=timezone.utc)
+    week_start = _week_start_for(reference)
+    schedule = {
+        "id": "s1",
+        "name": "Pausada",
+        "action": "extract_bc",
+        "params": {},
+        "trigger": "interval",
+        "trigger_args": {"hours": 24, "start_date": week_start.isoformat(), "timezone": "UTC"},
+        "enabled": False,
+        "created_at": "2025-01-01T00:00:00+00:00",
+    }
+    sched_module._write_json(sched_module._SCHEDULES_PATH, [schedule])
+
+    result = sched_module.week_occurrences(reference)
+
+    assert "s1" not in result
+
+
+def test_week_occurrences_caps_a_pathological_frequent_schedule(isolated_state):
+    reference = datetime(2026, 3, 18, 10, 0, tzinfo=timezone.utc)
+    week_start = _week_start_for(reference)
+    schedule = {
+        "id": "s1",
+        "name": "Cada minuto",
+        "action": "extract_bc",
+        "params": {},
+        "trigger": "interval",
+        "trigger_args": {"minutes": 1, "start_date": week_start.isoformat(), "timezone": "UTC"},
+        "enabled": True,
+        "created_at": "2025-01-01T00:00:00+00:00",
+    }
+    sched_module._write_json(sched_module._SCHEDULES_PATH, [schedule])
+
+    result = sched_module.week_occurrences(reference)
+
+    assert len(result["s1"]) == sched_module._MAX_WEEK_OCCURRENCES_PER_SCHEDULE
+
+
+def test_week_occurrences_anchors_an_interval_schedule_to_its_creation_time_not_now(isolated_state):
+    """Real-world shape: the UI never sends an explicit start_date for an
+    interval schedule (SchedulesPage.tsx only sends {hours, minutes}), so
+    IntervalTrigger(**trigger_args) would otherwise default start_date to
+    "now + interval" -- wrong here, since week_occurrences() rebuilds the
+    trigger from scratch on every call and has no live job object to anchor
+    against. It must use created_at instead, so a schedule created earlier
+    in the week still shows its earlier-in-the-week occurrences."""
+    reference = datetime(2026, 3, 18, 10, 0, tzinfo=timezone.utc)  # a Wednesday
+    week_start = _week_start_for(reference)
+    created_at = week_start + timedelta(hours=6)  # Monday 06:00 -- before "reference"
+
+    schedule = {
+        "id": "s1",
+        "name": "Diario",
+        "action": "extract_bc",
+        "params": {},
+        "trigger": "interval",
+        "trigger_args": {"hours": 24},  # no start_date, matching what the UI actually sends
+        "enabled": True,
+        "created_at": created_at.isoformat(),
+    }
+    sched_module._write_json(sched_module._SCHEDULES_PATH, [schedule])
+
+    result = sched_module.week_occurrences(reference)
+
+    assert len(result["s1"]) == 7
+    assert result["s1"][0] == created_at.isoformat()
+    assert result["s1"][1] == (created_at + timedelta(days=1)).isoformat()

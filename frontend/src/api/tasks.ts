@@ -13,6 +13,7 @@ export interface Task {
   current_step: number;
   step_labels: string[];
   table_statuses: TableStatus[];
+  log_tail: string;
 }
 
 export interface TaskFilters {

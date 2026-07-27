@@ -90,6 +90,8 @@ class TableStatusOut(BaseModel):
     status: str
     detail: str = ""
     phase: str = ""
+    upload_status: Optional[str] = None
+    upload_detail: str = ""
 
 
 class TaskOut(BaseModel):
@@ -104,6 +106,7 @@ class TaskOut(BaseModel):
     current_step: int
     step_labels: List[str]
     table_statuses: List[TableStatusOut]
+    log_tail: str = ""
 
 
 class TaskListOut(BaseModel):

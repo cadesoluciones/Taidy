@@ -1,0 +1,36 @@
+.layout {
+  display: grid;
+  grid-template-columns: 640px 1fr;
+  gap: var(--space-5);
+  align-items: start;
+}
+
+@media (max-width: 1000px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.diagramPanel {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-card);
+  min-width: 0;
+}
+
+.diagramPanel h2 {
+  margin: 0 0 var(--space-3);
+  font-size: 15px;
+}
+
+.diagramState {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.diagramError {
+  font-size: 13px;
+  color: var(--color-danger);
+}

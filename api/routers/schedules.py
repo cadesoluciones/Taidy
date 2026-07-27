@@ -16,6 +16,7 @@ from ..schemas.schedules import (
     CreateScheduleRequest,
     ScheduleListOut,
     ScheduleOut,
+    ScheduleWeekOut,
     SetScheduleEnabledRequest,
 )
 
@@ -25,6 +26,13 @@ router = APIRouter(prefix="/schedules", tags=["schedules"], dependencies=[Depend
 @router.get("", response_model=ScheduleListOut)
 def list_schedules() -> ScheduleListOut:
     return ScheduleListOut(items=[ScheduleOut(**s) for s in sched_module.list_schedules()])
+
+
+@router.get("/week", response_model=ScheduleWeekOut)
+def schedules_week() -> ScheduleWeekOut:
+    """Backs Inicio's weekly calendar: schedule_id -> ISO datetimes it's due
+    to fire between this week's Monday and Sunday."""
+    return ScheduleWeekOut(occurrences=sched_module.week_occurrences())
 
 
 @router.post("", response_model=ScheduleOut, dependencies=[Depends(require_role(ROLE_ADMIN))])

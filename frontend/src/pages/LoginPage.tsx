@@ -40,7 +40,7 @@ export function LoginPage() {
     <div className={styles.screen}>
       <div className={styles.card}>
         <aside className={styles.brandPanel}>
-          <div className={styles.brandLogo}>Taidy</div>
+          <div className={styles.brandLogo}>NEXUS-BDB</div>
           <div>
             <div className={styles.brandEyebrow}>Datos de negocio</div>
             <h1 className={styles.brandTitle}>Panel de datos</h1>
@@ -104,7 +104,7 @@ export function LoginPage() {
             {isSubmitting ? "Accediendo…" : "Acceder al panel"}
           </button>
 
-          <div className={styles.footerNote}>Taidy · Panel de datos interno</div>
+          <div className={styles.footerNote}>NEXUS-BDB · Panel de datos interno</div>
         </form>
       </div>
     </div>

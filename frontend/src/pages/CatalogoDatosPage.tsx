@@ -33,7 +33,7 @@ export function CatalogoDatosPage() {
     <section>
       <h1>Catálogo de datos</h1>
       <p>
-        Qué tablas extrae Taidy de cada origen y con qué configuración, en modo solo lectura. Para añadir, editar o
+        Qué tablas extrae NEXUS-BDB de cada origen y con qué configuración, en modo solo lectura. Para añadir, editar o
         borrar tablas, ve a "Conexiones API" (Administración).
       </p>
 

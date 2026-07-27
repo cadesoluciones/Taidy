@@ -45,7 +45,7 @@ export function ReaderHomePage() {
 
   return (
     <section>
-      <h1>Taidy — Panel de datos</h1>
+      <h1>NEXUS-BDB — Panel de datos</h1>
       <p>Hola, {user?.username}. Aquí puedes lanzar y seguir tus flujos.</p>
 
       {pollError && <div className={formStyles.errorBanner}>No se pudo actualizar el estado. Reintentando…</div>}

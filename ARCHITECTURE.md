@@ -1,4 +1,4 @@
-# Architecture — Taidy React/FastAPI
+# Architecture — NEXUS-BDB React/FastAPI
 
 This document describes the shipped architecture (React/FastAPI, replacing
 the retired Streamlit UI).
@@ -149,9 +149,9 @@ hero/status emphasis, metric tile rows, a two-column list/detail layout, a
 modal-based management pattern (list on the left, detail form on the
 right), timeline lists with dot markers, and a split-screen login page
 (dark photographic/brand panel left, form panel right). Adopted structurally;
-colors use Taidy's own already-WCAG-AA-verified palette from
+colors use NEXUS-BDB's own already-WCAG-AA-verified palette from
 `.streamlit/config.toml` (see `frontend/src/styles/tokens.css`) rather than
-literally copying the other product's blue/orange branding — Taidy isn't
+literally copying the other product's blue/orange branding — NEXUS-BDB isn't
 ANEMIOT and reusing already-vetted, accessible tokens is strictly better
 than introducing an unverified new palette.
 
@@ -159,7 +159,7 @@ A second, more detailed round of ANEMIOT screenshots (directory/detail user
 management modal, a checklist-style step grid, connected-line timelines, a
 dark hero + metric tiles + accent card + system-status bar, and an explicit
 "read-only" indicator for a restricted role) drove a follow-up pass that
-actually built those specific patterns, each mapped onto real Taidy data —
+actually built those specific patterns, each mapped onto real NEXUS-BDB data —
 never a fabricated field or a control that doesn't call anything real (see
 each component's own doc comment for the specific tradeoff):
 
@@ -180,7 +180,7 @@ each component's own doc comment for the specific tradeoff):
   used both as `/administracion/usuarios`'s page content and inside a
   `<Modal>` opened from a header icon (lazily mounted only while the modal
   is actually open, so the two entry points never double-fetch). ANEMIOT's
-  mockup has fields Taidy has no backend for (an admin-typed new password, an
+  mockup has fields NEXUS-BDB has no backend for (an admin-typed new password, an
   "active/inactive" toggle) — rather than fake them, the "Seguridad" section
   only exposes what `webapp/users_db.py` actually supports: forcing a
   password change on next login, not setting one directly.
@@ -196,7 +196,7 @@ each component's own doc comment for the specific tradeoff):
   find out via a 403 after the fact.
 - **HomePage hero**: a dark panel with an abstract, inline-SVG data/network
   motif (`<DataNetworkArt>`) rather than a stock photo — nothing here claims
-  to depict real Taidy infrastructure. The accent card and status bar below
+  to depict real NEXUS-BDB infrastructure. The accent card and status bar below
   it are both driven by the same `/dashboard/summary` fields already in use
   (active schedule count; a derived tone from recent-error/running counts),
   not decorative placeholders.

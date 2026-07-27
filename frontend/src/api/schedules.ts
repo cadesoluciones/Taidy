@@ -36,3 +36,9 @@ export function setScheduleEnabled(id: string, enabled: boolean): Promise<void> 
 export function deleteSchedule(id: string): Promise<void> {
   return apiDelete<void>(`/schedules/${id}`);
 }
+
+/** schedule_id -> ISO datetimes it's due to fire between this week's Monday
+ * and Sunday -- backs Inicio's weekly calendar. */
+export function fetchSchedulesWeek(): Promise<{ occurrences: Record<string, string[]> }> {
+  return apiGet<{ occurrences: Record<string, string[]> }>("/schedules/week");
+}

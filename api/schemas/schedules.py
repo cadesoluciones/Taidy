@@ -33,3 +33,7 @@ class CreateScheduleRequest(BaseModel):
 
 class SetScheduleEnabledRequest(BaseModel):
     enabled: bool
+
+
+class ScheduleWeekOut(BaseModel):
+    occurrences: Dict[str, List[str]]  # schedule_id -> ISO datetimes due this week
