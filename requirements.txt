@@ -19,7 +19,11 @@ pytest>=8.0
 httpx>=0.27
 
 # --- Lint (dev) ---
-ruff>=0.14
+# Pinned exactly, not >= : ruff 0.16 silently expanded its default rule set
+# (no pyproject.toml/ruff.toml in this repo pins one explicitly) and started
+# reporting 760 pre-existing style findings that 0.14.6 never flagged --
+# breaking CI with no code change on our side. Bump deliberately, not via drift.
+ruff==0.14.6
 
 # --- API backend (api/) ---
 fastapi>=0.115
