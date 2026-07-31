@@ -11,16 +11,19 @@ services:
       TAIDY_API_SECURE_COOKIES: "false"
     volumes:
       # Deployment-specific config -- hand-curated per environment, not baked
-      # into the image.
-      - ./config.json:/app/config.json:ro
-      - ./tables.yaml:/app/tables.yaml
-      - ./factorial_tables.yaml:/app/factorial_tables.yaml
+      # into the image. The ":z" suffix relabels the host path for shared
+      # container access under SELinux (Enforcing, e.g. RHEL/Rocky) -- a
+      # no-op everywhere else (Windows/macOS Docker Desktop, non-SELinux
+      # Linux), so it's safe to always set.
+      - ./config.json:/app/config.json:ro,z
+      - ./tables.yaml:/app/tables.yaml:z
+      - ./factorial_tables.yaml:/app/factorial_tables.yaml:z
       # Persisted app state (users, schedules, workflows, history, audit) --
       # survives container recreation. See webapp/state_dir.py.
       - taidy_data:/app/data
       # Exported CSVs and Factorial's local checkpoints.
-      - ./exports:/app/exports
-      - ./exports_factorial:/app/exports_factorial
+      - ./exports:/app/exports:z
+      - ./exports_factorial:/app/exports_factorial:z
     restart: unless-stopped
 
 volumes:
