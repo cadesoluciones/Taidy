@@ -2,7 +2,9 @@ services:
   taidy:
     build: .
     ports:
-      - "8000:8000"
+      # Host 80 (HTTP por defecto, sin puerto en la URL) -> 8000 dentro del
+      # contenedor (uvicorn sigue escuchando ahí, sin cambios en el Dockerfile).
+      - "80:8000"
     env_file:
       - .env
     environment:

@@ -96,7 +96,8 @@ docker compose up --build -d
 El estado persistente de la aplicación (usuarios, programaciones, flujos,
 historial, auditoría) vive en el volumen nombrado `taidy_data`, no en el
 contenedor — sobrevive a un `docker compose up` posterior. La app queda
-accesible en `http://<host-o-ip-del-contenedor>:8000` desde cualquier equipo
+accesible en `http://<host-o-ip-del-contenedor>` (puerto 80, el HTTP por
+defecto -- no hay que escribir el puerto en la URL) desde cualquier equipo
 de la red.
 
 ## ⚡ Características

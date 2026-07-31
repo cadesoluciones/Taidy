@@ -9,11 +9,12 @@ actualizaciones. Si la IP o el servidor cambian, actualiza la sección
 | | |
 |---|---|
 | IP | `172.16.12.41` (red interna) |
+| Nombre DNS | `bdb.cade.local` |
 | SO | Rocky Linux 9.8 (Blue Onyx) |
 | Acceso | SSH como `root`, clave dedicada `nexus-bdb-deploy` (ver "Acceso SSH" abajo) |
 | Ruta del despliegue | `/opt/nexus-bdb` (clon git de la rama `migration/streamlit-to-react`) |
-| Puerto | `8000` (abierto en firewalld, zona `public`) |
-| URL | `http://172.16.12.41:8000` |
+| Puerto | `80` (host) -> `8000` (contenedor); 80 abierto en firewalld, zona `public` |
+| URL | `http://bdb.cade.local` (o `http://172.16.12.41`) -- sin puerto |
 
 ## Actualizar la aplicación (lo normal, día a día)
 
@@ -67,7 +68,7 @@ El repo es **público** en GitHub, así que no hace falta ninguna clave para
 clonarlo. Solo hay que abrir el puerto de la app:
 
 ```bash
-firewall-cmd --permanent --zone=public --add-port=8000/tcp
+firewall-cmd --permanent --zone=public --add-port=80/tcp
 firewall-cmd --reload
 ```
 
@@ -127,7 +128,7 @@ recomienda, en cuanto sea posible:
 ## Verificación tras un despliegue nuevo
 
 ```bash
-curl -s http://<ip>:8000/health          # {"status":"ok"}
+curl -s http://<ip>/health                # {"status":"ok"}
 docker compose ps                         # el contenedor debe estar "Up"
 systemctl is-enabled docker                # debe decir "enabled"
 ```
