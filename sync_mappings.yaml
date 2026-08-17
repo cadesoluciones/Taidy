@@ -1,0 +1,20 @@
+mappings:
+- name: mapeo prueba
+  description: ''
+  source:
+    system: business_central
+    table: bc_contact
+  target:
+    system: hubspot
+    table: hubspot_contacts
+  matching_key:
+    source: email
+    target: email
+  date_field:
+    source: systemModifiedAt
+    target: lastmodifieddate
+  fields:
+  - source: email
+    target: email
+  - source: name
+    target: firstname
