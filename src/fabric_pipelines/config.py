@@ -3,9 +3,10 @@
 Configuration for triggering Microsoft Fabric Data Factory pipelines on demand.
 
 Credentials (tenant_id, client_id, client_secret) are intentionally reused
-from the existing `fabric_upload` config section — the same service
-principal already used to write into OneLake, provided it also has at least
-Contributor access on the workspace so it's allowed to run pipeline jobs.
+from the existing `business_central_upload` config section — the same
+service principal already used to write into OneLake, provided it also has
+at least Contributor access on the workspace so it's allowed to run
+pipeline jobs.
 """
 
 from __future__ import annotations
@@ -42,6 +43,14 @@ class Settings:
         raise ValueError(f"Pipeline desconocido: '{name}'. Configurados: {available}")
 
 
+def _workspace_id(section: dict) -> Optional[str]:
+    """Soft lookup of section['workspace_id'] -- this section's own value is
+    optional (it can fall back to business_central_upload's), so a missing
+    value here just means "nothing to fall back to", not an error."""
+    value = section.get("workspace_id")
+    return str(value).strip() if value else None
+
+
 def load_settings(
     env: Optional[Iterable[tuple[str, str]]] = None,
     *,
@@ -59,17 +68,19 @@ def load_settings(
     else:
         data, _root = load_config_data(config_file)
 
-    fabric_upload = data.get("fabric_upload")
-    if not isinstance(fabric_upload, dict):
-        raise ValueError("Configuration file missing 'fabric_upload' section (its credentials are reused here)")
+    bc_upload = data.get("business_central_upload")
+    if not isinstance(bc_upload, dict):
+        raise ValueError(
+            "Configuration file missing 'business_central_upload' section (its credentials are reused here)"
+        )
 
     section = data.get("fabric_pipelines")
     if not isinstance(section, dict):
         raise ValueError("Configuration file missing 'fabric_pipelines' section")
 
-    workspace_id = section.get("workspace_id") or fabric_upload.get("workspace_id")
+    workspace_id = _workspace_id(section) or _workspace_id(bc_upload)
     if not workspace_id:
-        raise ValueError("'fabric_pipelines.workspace_id' (or 'fabric_upload.workspace_id') is required")
+        raise ValueError("No 'workspace_id' configured in 'fabric_pipelines' or 'business_central_upload'")
 
     raw_pipelines = section.get("pipelines") or []
     if not isinstance(raw_pipelines, list):
@@ -82,8 +93,8 @@ def load_settings(
         pipelines.append(PipelineConfig(name=str(entry["name"]), item_id=str(entry["item_id"])))
 
     return Settings(
-        tenant_id=fabric_upload["tenant_id"].strip(),
-        client_id=fabric_upload["client_id"].strip(),
+        tenant_id=bc_upload["tenant_id"].strip(),
+        client_id=bc_upload["client_id"].strip(),
         client_secret=raw_env["FABRIC_CLIENT_SECRET"].strip(),
         workspace_id=str(workspace_id).strip(),
         pipelines=pipelines,

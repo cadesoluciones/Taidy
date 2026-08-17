@@ -79,12 +79,26 @@ tasks:
     cmds:
       - .venv/Scripts/python -m src.factorial_main {{.CLI_ARGS}}
 
+  extract:hubspot:
+    desc: Run HubSpot CRM data extraction (contacts, companies, deals)
+    env:
+      PYTHONPATH: .
+    cmds:
+      - .venv/Scripts/python -m src.hubspot_main {{.CLI_ARGS}}
+
   push:fabric:factorial:
     desc: Upload Factorial CSV exports to Fabric OneLake (raw/factorial/)
     env:
       PYTHONPATH: .
     cmds:
       - .venv/Scripts/python -m src.factorial_client.push {{.CLI_ARGS}}
+
+  push:fabric:hubspot:
+    desc: Upload HubSpot CSV exports to Fabric OneLake (raw/hubspot/)
+    env:
+      PYTHONPATH: .
+    cmds:
+      - .venv/Scripts/python -m src.hubspot_client.push {{.CLI_ARGS}}
 
   sync:factorial:
     desc: Extract Factorial data and upload to Fabric OneLake
@@ -93,6 +107,14 @@ tasks:
     cmds:
       - .venv/Scripts/python -m src.factorial_main {{.CLI_ARGS}}
       - .venv/Scripts/python -m src.factorial_client.push {{.CLI_ARGS}}
+
+  sync:hubspot:
+    desc: Extract HubSpot data and upload to Fabric OneLake
+    env:
+      PYTHONPATH: .
+    cmds:
+      - .venv/Scripts/python -m src.hubspot_main {{.CLI_ARGS}}
+      - .venv/Scripts/python -m src.hubspot_client.push {{.CLI_ARGS}}
 
   sync:all:
     desc: "Extrae y sube BC + Factorial. Vars: MODE=incremental|full, START_ON, END_ON (def: hoy), PARALLEL=5, FIRST=bc|factorial (def: bc)"

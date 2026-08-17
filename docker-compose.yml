@@ -18,14 +18,19 @@ services:
       # no-op everywhere else (Windows/macOS Docker Desktop, non-SELinux
       # Linux), so it's safe to always set.
       - ./config.json:/app/config.json:ro,z
+      # tables.yaml is shared by every BC environment -- each table's `url`
+      # carries a literal `{ENVIRONMENT}` placeholder resolved at load time
+      # from BC_ENVIRONMENT (see .env.example), never a per-environment file.
       - ./tables.yaml:/app/tables.yaml:z
       - ./factorial_tables.yaml:/app/factorial_tables.yaml:z
+      - ./hubspot_tables.yaml:/app/hubspot_tables.yaml:z
       # Persisted app state (users, schedules, workflows, history, audit) --
       # survives container recreation. See webapp/state_dir.py.
       - taidy_data:/app/data
       # Exported CSVs and Factorial's local checkpoints.
       - ./exports:/app/exports:z
       - ./exports_factorial:/app/exports_factorial:z
+      - ./exports_hubspot:/app/exports_hubspot:z
     restart: unless-stopped
 
 volumes:

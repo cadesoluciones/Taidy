@@ -1,13 +1,10 @@
 {
   "business_central": {
     "tenant_id": "2d6ec162-8eb4-42d3-93e2-7ee771e85da5",
-    "environment": "PRODUCCION",
     "client_id": "9e6fdf36-87c3-46fe-aa67-d294eb3ef774",
     "scope": "https://api.businesscentral.dynamics.com/.default",
     "token_url": "https://login.microsoftonline.com/2d6ec162-8eb4-42d3-93e2-7ee771e85da5/oauth2/v2.0/token",
-    "company_id": null,
     "company_name": "CADE Soluciones",
-    "tables_file": "tables.yaml",
     "page_size": 1000,
     "output_dir": "./exports"
   },
@@ -16,34 +13,47 @@
     "tables_file": "factorial_tables.yaml",
     "output_dir": "./exports_factorial"
   },
+  "hubspot": {
+    "base_url": "https://api.hubapi.com",
+    "tables_file": "hubspot_tables.yaml",
+    "output_dir": "./exports_hubspot"
+  },
   "factorial_upload": {
     "tenant_id": "2d6ec162-8eb4-42d3-93e2-7ee771e85da5",
     "client_id": "99d4b523-996d-415a-83c8-825cd32e012e",
-    "workspace_name": "Sandbox",
-    "lakehouse_name": "Lakehouse",
-    "workspace_id": "44b1286f-484d-41b1-9259-6904105d8d09",
-    "lakehouse_id": "1287f84f-d048-4967-a27f-b3f3019345d9",
     "path_prefix": "raw",
     "source_name": "factorial",
-    "overwrite": true,
     "max_retries": 3,
-    "enabled": true
-  },
-  "fabric_upload": {
-    "tenant_id": "2d6ec162-8eb4-42d3-93e2-7ee771e85da5",
-    "client_id": "99d4b523-996d-415a-83c8-825cd32e012e",
     "workspace_name": "Sandbox",
     "lakehouse_name": "Lakehouse",
     "workspace_id": "44b1286f-484d-41b1-9259-6904105d8d09",
-    "lakehouse_id": "1287f84f-d048-4967-a27f-b3f3019345d9",
+    "lakehouse_id": "1287f84f-d048-4967-a27f-b3f3019345d9"
+  },
+  "business_central_upload": {
+    "tenant_id": "2d6ec162-8eb4-42d3-93e2-7ee771e85da5",
+    "client_id": "99d4b523-996d-415a-83c8-825cd32e012e",
     "path_prefix": "raw",
     "source_name": "business_central",
     "overwrite": true,
     "max_retries": 3,
-    "enabled": true
+    "enabled": true,
+    "workspace_name": "Sandbox",
+    "lakehouse_name": "Lakehouse",
+    "workspace_id": "44b1286f-484d-41b1-9259-6904105d8d09",
+    "lakehouse_id": "1287f84f-d048-4967-a27f-b3f3019345d9"
+  },
+  "hubspot_upload": {
+    "tenant_id": "2d6ec162-8eb4-42d3-93e2-7ee771e85da5",
+    "client_id": "99d4b523-996d-415a-83c8-825cd32e012e",
+    "path_prefix": "raw",
+    "source_name": "hubspot",
+    "max_retries": 3,
+    "workspace_name": "Sandbox",
+    "lakehouse_name": "Lakehouse",
+    "workspace_id": "44b1286f-484d-41b1-9259-6904105d8d09",
+    "lakehouse_id": "1287f84f-d048-4967-a27f-b3f3019345d9"
   },
   "fabric_pipelines": {
-    "workspace_id": "44b1286f-484d-41b1-9259-6904105d8d09",
     "pipelines": [
       { "name": "Pipeline_CADE", "item_id": "95928168-0d58-499c-8ea1-6b1e73e2ce68" },
       { "name": "Pipeline_CADE_Bronce", "item_id": "6f865d7a-c463-4dd7-b44f-c72df678792a" },

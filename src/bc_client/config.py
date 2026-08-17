@@ -21,6 +21,7 @@ from typing import Any, Dict, Iterable, List, Optional
 import yaml
 
 from src.config_loader import load_config_data
+from src.config_loader import resolve_environment as _resolve_environment
 
 # --------------------------------------------------------------------------------------
 # Data Models
@@ -56,7 +57,6 @@ class Settings:
 
     # --- Authentication and API details ---
     tenant_id: str
-    environment: str
     client_id: str
     client_secret: str
     scope: str
@@ -124,13 +124,12 @@ def load_settings(
 
     # Parse individual settings from the config section.
     page_size = _read_page_size(config_section)
-    tables = _read_tables(config_section, config_root)
+    tables = _read_tables(config_root, raw_env)
     output_dir = _read_output_dir(config_section, config_root)
 
     # Construct the final, immutable Settings object.
     return Settings(
         tenant_id=config_section["tenant_id"],
-        environment=config_section["environment"],
         client_id=config_section["client_id"],
         client_secret=raw_env["BC_CLIENT_SECRET"],
         scope=config_section["scope"],
@@ -184,29 +183,34 @@ def _read_page_size(config: Dict[str, Any]) -> int:
     return page_size
 
 
-def _read_tables(config: Dict[str, str], root: Path) -> List[TableConfig]:
-    """
-    Loads table configurations from the specified YAML file.
+_ENVIRONMENT_PLACEHOLDER = "{ENVIRONMENT}"
 
-    Resolves the path to the tables file relative to the main config's
-    directory (`root`) if it's not absolute.
+
+def _read_tables(root: Path, env: Optional[Dict[str, str]] = None) -> List[TableConfig]:
+    """
+    Loads table configurations from `tables.yaml`.
+
+    Every table's `url` is otherwise identical between BC environments --
+    only the environment path segment changes (e.g. `.../PRODUCTION/ODataV4/...`
+    vs `.../SANDBOX_CADE/ODataV4/...`), never the per-table API id. So there's a
+    single `tables.yaml`, with that one segment written as the literal
+    placeholder `{ENVIRONMENT}` in each URL, substituted here with the
+    current BC_ENVIRONMENT (see src/config_loader.py:resolve_environment)
+    -- not a separate tables file per environment.
 
     Args:
-        config: The `business_central` config section.
         root: The parent directory of the main `config.json`.
+        env: Optional environment mapping, primarily for testing.
 
     Returns:
         A list of `TableConfig` objects.
     """
-    tables_file = config.get("tables_file", "tables.yaml")
-    path = Path(tables_file)
-    if not path.is_absolute():
-        path = (root / path).resolve()
+    path = root / "tables.yaml"
 
     if not path.is_file():
         raise ValueError(f"Tables file not found or not a file: {path}")
 
-    return _load_tables_from_file(path)
+    return _load_tables_from_file(path, _resolve_environment(env))
 
 
 def _read_output_dir(config: Dict[str, str], root: Path) -> Path:
@@ -220,12 +224,14 @@ def _read_output_dir(config: Dict[str, str], root: Path) -> Path:
     return path
 
 
-def _load_tables_from_file(path: Path) -> List[TableConfig]:
+def _load_tables_from_file(path: Path, environment: str) -> List[TableConfig]:
     """
     Parses a list of TableConfig objects from a YAML file.
 
     Args:
         path: The absolute path to the YAML file.
+        environment: The resolved BC_ENVIRONMENT value (e.g. "PRODUCTION"),
+                     substituted into each URL's `{ENVIRONMENT}` placeholder.
 
     Returns:
         A list of `TableConfig` objects.
@@ -247,7 +253,7 @@ def _load_tables_from_file(path: Path) -> List[TableConfig]:
 
     tables: List[TableConfig] = []
     for entry in raw_tables:
-        tables.append(_parse_table_entry(entry, path))
+        tables.append(_parse_table_entry(entry, path, environment))
 
     return tables
 
@@ -268,13 +274,15 @@ def _read_yaml(path: Path) -> dict:
         raise ValueError(f"Failed to parse tables file {path}: {exc}") from exc
 
 
-def _parse_table_entry(entry: object, path: Path) -> TableConfig:
+def _parse_table_entry(entry: object, path: Path, environment: str) -> TableConfig:
     """
     Parses a single dictionary from the YAML file into a `TableConfig` object.
 
     Args:
         entry: A dictionary representing a table.
         path: The path to the YAML file, for use in error messages.
+        environment: The resolved BC_ENVIRONMENT value substituted into
+                     the URL's `{ENVIRONMENT}` placeholder, if present.
 
     Returns:
         A validated `TableConfig` object.
@@ -288,7 +296,7 @@ def _parse_table_entry(entry: object, path: Path) -> TableConfig:
         raise ValueError(
             f"Invalid table entry in {path}: 'api_path' is not supported; use full 'url'"
         )
-    url = _clean_str(entry.get("url"), path, "url")
+    url = _clean_str(entry.get("url"), path, "url").replace(_ENVIRONMENT_PLACEHOLDER, environment)
     incremental = bool(entry.get("incremental", False))
 
     return TableConfig(name=name, url=url, incremental=incremental)

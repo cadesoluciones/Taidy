@@ -16,9 +16,10 @@ interface BcForm {
 const EMPTY_FORM: BcForm = { name: "", url: "", description: "", incremental: false };
 
 /** Admin-only: register, edit or remove a Business Central table in
- * tables.yaml directly from the web UI, instead of hand-editing the file
- * on the server -- the exact same file src/bc_client/config.py reads for
- * a real extraction run. */
+ * tables.yaml directly from the web UI, instead of hand-editing the file on
+ * the server -- the exact same file src/bc_client/config.py reads for a real
+ * extraction run. Each table's `url` may carry a literal `{ENVIRONMENT}`
+ * placeholder, substituted with BC_ENVIRONMENT at extraction time. */
 export function BcTableManager() {
   const mgr = useTableManager<BcTableConfig, BcForm, UpdateBcTableInput>({
     fetchAll: fetchBcTablesFull,

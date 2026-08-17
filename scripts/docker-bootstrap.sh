@@ -3,8 +3,8 @@
 # project root actually exists *as the right kind of thing* before `docker
 # compose up` ever runs.
 #
-# Why this exists: config.json/tables.yaml/factorial_tables.yaml are
-# deliberately excluded from the image (.dockerignore) and bind-mounted from
+# Why this exists: config.json/tables.yaml/factorial_tables.yaml
+# are deliberately excluded from the image (.dockerignore) and bind-mounted from
 # the host instead, so they can be hand-edited without rebuilding. But if the
 # host path is missing when Compose tries to bind-mount it, Docker silently
 # creates an EMPTY DIRECTORY at that path (both on the host and in the
@@ -15,8 +15,8 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-# git-tracked config: config.json/tables.yaml/factorial_tables.yaml are
-# committed with this deployment's real (non-secret) settings -- if one is
+# git-tracked config: config.json/tables.yaml/factorial_tables.yaml
+# are committed with this deployment's real (non-secret) settings -- if one is
 # missing, or is a directory (the Docker footgun above from a previous
 # attempt), restore the tracked version instead of inventing placeholder
 # content that could silently diverge from what's actually configured.
@@ -40,11 +40,12 @@ restore_tracked_file() {
 restore_tracked_file config.json
 restore_tracked_file tables.yaml
 restore_tracked_file factorial_tables.yaml
+restore_tracked_file hubspot_tables.yaml
 
 # Plain directories -- Docker already auto-creates a missing bind-mount
 # directory correctly (no footgun here), this is just belt-and-suspenders so
 # they exist with the right permissions before the first run either way.
-mkdir -p exports exports_factorial
+mkdir -p exports exports_factorial exports_hubspot
 
 # .env holds real secrets (BC/Factorial/Fabric credentials) that can't be
 # auto-filled -- but an entirely missing .env hits the same "Docker invents
@@ -54,7 +55,7 @@ if [ ! -f .env ]; then
   cp .env.example .env
   echo
   echo "docker-bootstrap: created .env from .env.example -- edit it with real secrets"
-  echo "docker-bootstrap: (BC_CLIENT_SECRET, FACTORIAL_API_KEY, FABRIC_CLIENT_SECRET, ...) before continuing."
+  echo "docker-bootstrap: (BC_CLIENT_SECRET, FACTORIAL_API_KEY, HUBSPOT_API_KEY, FABRIC_CLIENT_SECRET, ...) before continuing."
   echo
 fi
 

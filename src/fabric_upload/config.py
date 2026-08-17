@@ -2,10 +2,11 @@
 """
 Configuration loading, validation, and data models for Fabric OneLake uploads.
 
-This module is responsible for consolidating settings from the `fabric_upload`
-section of the main JSON config file and relevant environment variables into a
-single, type-safe `FabricUploadSettings` object. It handles validation, default
-values, and normalization for all upload-related configuration.
+This module is responsible for consolidating settings from the
+`business_central_upload` section of the main JSON config file and relevant
+environment variables into a single, type-safe `FabricUploadSettings` object.
+It handles validation, default values, and normalization for all
+upload-related configuration.
 """
 
 # --------------------------------------------------------------------------------------
@@ -151,18 +152,18 @@ def _resolve_fabric_config(
     config_dir: Optional[Path],
 ) -> tuple[dict[str, Any], Path]:
     """
-    Loads the main JSON config and extracts the 'fabric_upload' section.
+    Loads the main JSON config and extracts the 'business_central_upload' section.
     """
     if config_data is not None:
-        section = config_data.get("fabric_upload")
+        section = config_data.get("business_central_upload")
         if not isinstance(section, dict):
-            raise ValueError("Configuration file missing 'fabric_upload' section")
+            raise ValueError("Configuration file missing 'business_central_upload' section")
         return section, config_dir or Path.cwd()
 
     data, root = load_config_data(config_file)
-    section = data.get("fabric_upload")
+    section = data.get("business_central_upload")
     if not isinstance(section, dict):
-        raise ValueError("Configuration file missing 'fabric_upload' section")
+        raise ValueError("Configuration file missing 'business_central_upload' section")
     return section, root
 
 

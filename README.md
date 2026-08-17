@@ -1,6 +1,6 @@
 # 📊 NEXUS-BDB — Extracción y Carga de Datos al Datalake
 
-Herramienta para extraer datos de **Microsoft Dynamics 365 Business Central** y **Factorial HR** a archivos CSV y subirlos a Microsoft Fabric OneLake. Incluye autenticación OAuth / API Key, paginación automática, procesamiento paralelo, exportación atómica e ingesta incremental con checkpoints.
+Herramienta para extraer datos de **Microsoft Dynamics 365 Business Central**, **Factorial HR** y **HubSpot CRM** a archivos CSV y subirlos a Microsoft Fabric OneLake. Incluye autenticación OAuth / API Key, paginación automática, procesamiento paralelo, exportación atómica e ingesta incremental con checkpoints (HubSpot, por ahora, solo en modo extracción completa).
 
 [![CI](https://github.com/cadesoluciones/Taidy/actions/workflows/ci.yml/badge.svg)](https://github.com/cadesoluciones/Taidy/actions/workflows/ci.yml)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
@@ -18,7 +18,7 @@ uv pip install -r requirements.txt
 
 # 2. Configurar credenciales
 cp .env.example .env
-# Editar .env con BC_CLIENT_SECRET y FABRIC_CLIENT_SECRET; actualizar config.json y tables.yaml
+# Editar .env con BC_CLIENT_SECRET, FABRIC_CLIENT_SECRET y BC_ENVIRONMENT; actualizar config.json y tables.yaml
 
 # 3. Probar configuración
 task extract:bc -- --dry-run --verbose
@@ -40,6 +40,22 @@ task extract:factorial -- --start-on 2025-01-01 --end-on 2025-01-07 --dry-run
 
 # 3. Extraer y subir al datalake en un paso
 task sync:factorial -- --start-on 2025-01-01 --end-on 2026-01-01 --mode incremental --parallel 5
+```
+
+### HubSpot CRM
+
+```bash
+# 1. Añadir el token al .env (Private App access token, empieza por "pat-")
+HUBSPOT_API_KEY=pat-eu1-tu-token-aqui
+
+# 2. Probar configuración (sin llamar a la API)
+task extract:hubspot -- --dry-run --verbose
+
+# 3. Extraer contactos, empresas y oportunidades (solo extracción completa por ahora)
+task extract:hubspot -- --verbose
+
+# 4. Extraer y subir al datalake en un paso
+task sync:hubspot -- --verbose
 ```
 
 ## 🖥️ Interfaz web (React + FastAPI)
@@ -77,14 +93,15 @@ cookies `SameSite` entre `localhost`/`127.0.0.1` — ver `ARCHITECTURE.md`).
 task docker:up
 ```
 
-`config.json`, `tables.yaml` y `factorial_tables.yaml` se montan como
-volúmenes (nunca se hornean en la imagen, para poder editarlos sin
-reconstruir); `task docker:up` comprueba antes de arrancar que existen en la
-raíz del proyecto y, si falta alguno (o falta `.env`, o falta un directorio
-`exports/`/`exports_factorial/`), lo restaura por ti — ver
-`scripts/docker-bootstrap.sh`. Si `.env` se acaba de crear, edítalo con los
-secretos reales (`BC_CLIENT_SECRET`, `FACTORIAL_API_KEY`,
-`FABRIC_CLIENT_SECRET`, ...) antes de volver a lanzar `task docker:up`.
+`config.json`, `tables.yaml`, `factorial_tables.yaml` y `hubspot_tables.yaml`
+se montan como volúmenes (nunca se hornean en la imagen, para poder
+editarlos sin reconstruir); `task docker:up` comprueba antes de arrancar que
+existen en la raíz del proyecto y, si falta alguno (o falta `.env`, o falta
+un directorio `exports/`/`exports_factorial/`/`exports_hubspot/`), lo
+restaura por ti — ver `scripts/docker-bootstrap.sh`. Si `.env` se acaba de
+crear, edítalo con los secretos reales (`BC_CLIENT_SECRET`,
+`FACTORIAL_API_KEY`, `HUBSPOT_API_KEY`, `FABRIC_CLIENT_SECRET`, ...) antes
+de volver a lanzar `task docker:up`.
 
 Sin `task` (go-task), el equivalente manual es:
 
@@ -122,11 +139,21 @@ de la red.
 - **División de rangos** en ventanas de `chunk_days` días para evitar timeouts en la API
 - **Subida a Fabric OneLake** bajo `raw/factorial/`, independiente del pipeline de BC
 
+### HubSpot CRM
+- **Autenticación por Bearer token** (Private App access token) vía cabecera `Authorization`
+- **Paginación por cursor** automática (`paging.next.after`)
+- **Objetos configurables** en `hubspot_tables.yaml` — contactos, empresas y oportunidades (`deals`) por defecto
+- **Exportación atómica**, igual que BC/Factorial
+- **Reintentos automáticos** con backoff exponencial (5 intentos, retryable en 429/5xx)
+- **Subida a Fabric OneLake** bajo `raw/hubspot/`, independiente del pipeline de BC/Factorial
+- **Solo extracción completa por ahora** — sin modo incremental todavía (ver `overlap_days`/checkpoints de Factorial como referencia futura)
+
 ## 📋 Requisitos
 
 - Python 3.12+
 - Aplicación Azure AD con permisos de Business Central y/o Fabric OneLake
 - API Key de Factorial HR (para el pipeline de Factorial)
+- Private App access token de HubSpot con scopes de lectura de `crm.objects.contacts`, `crm.objects.companies` y `crm.objects.deals` (para el pipeline de HubSpot)
 
 ## ⚙️ Configuración Básica
 
@@ -143,39 +170,73 @@ FACTORIAL_API_KEY=tu-api-key-aqui
 VERSION_API_FACTORIAL=2026-07-01
 FACTORIAL_OVERLAP_DAYS=2      # opcional, días de solapamiento incremental global (default: 2)
 
+# HubSpot CRM
+HUBSPOT_API_KEY=pat-eu1-tu-token-aqui
+
 # Fabric OneLake (compartido por BC y Factorial)
 FABRIC_CLIENT_SECRET=tu-fabric-secret-aqui
 CONFIG_FILE=./config.json
+
+# Entorno de Business Central a usar -- ver "Cambiar de entorno de Business Central" más abajo
+BC_ENVIRONMENT=PRODUCTION
 
 # Notificaciones por email (opcional, ver sección "Notificaciones" más abajo)
 SMTP_USERNAME=tu-usuario-smtp
 SMTP_PASSWORD=tu-password-smtp
 ```
 
+### Cambiar de entorno de Business Central
+
+`BC_ENVIRONMENT` (en `.env`) es específico de Business Central — el nombre exacto del entorno tal cual aparece en la URL OData de BC (ej. `PRODUCTION`, `SANDBOX_CADE`). `tables.yaml` es un único fichero compartido por todos los entornos, y cada `url` lleva el placeholder literal `{ENVIRONMENT}` (las tablas son idénticas entre entornos, solo cambia ese segmento de la URL), sustituido por `BC_ENVIRONMENT` en tiempo de carga.
+
+```bash
+# .env
+BC_ENVIRONMENT=PRODUCTION   # o SANDBOX_CADE, el nombre exacto del entorno en BC
+```
+
+Cambiar de entorno es editar esa única línea — nada de tocar `config.json` ni las URLs de cada tabla a mano. Fabric/Factorial/HubSpot no tienen concepto de entorno y no leen esta variable; su workspace/lakehouse se configura directamente en `config.json` (ver más abajo).
+
 ### Configuración en `config.json`
 
 ```json
-"bc_upload": {
-  "tenant_id": "...",
-  "client_id": "...",
-  "workspace_name": "Sandbox",
-  "lakehouse_name": "Lakehouse",
-  "path_prefix": "raw",
-  "source_name": "business_central"
-},
 "factorial_upload": {
   "tenant_id": "...",
   "client_id": "...",
+  "path_prefix": "raw",
+  "source_name": "factorial",
+  "max_retries": 3,
   "workspace_name": "Sandbox",
   "lakehouse_name": "Lakehouse",
   "workspace_id": "...",
-  "lakehouse_id": "...",
+  "lakehouse_id": "..."
+},
+"business_central_upload": {
+  "tenant_id": "...",
+  "client_id": "...",
   "path_prefix": "raw",
-  "source_name": "factorial",
+  "source_name": "business_central",
   "overwrite": true,
-  "max_retries": 3
+  "max_retries": 3,
+  "enabled": true,
+  "workspace_name": "Sandbox",
+  "lakehouse_name": "Lakehouse",
+  "workspace_id": "...",
+  "lakehouse_id": "..."
+},
+"hubspot_upload": {
+  "tenant_id": "...",
+  "client_id": "...",
+  "path_prefix": "raw",
+  "source_name": "hubspot",
+  "max_retries": 3,
+  "workspace_name": "Sandbox",
+  "lakehouse_name": "Lakehouse",
+  "workspace_id": "...",
+  "lakehouse_id": "..."
 }
 ```
+
+Estas tres secciones no tienen concepto de entorno (a diferencia de Business Central) -- un único bloque de workspace/lakehouse por sección, sin importar `BC_ENVIRONMENT`. Se llama `business_central_upload` (no `fabric_upload`) para nombrarla igual que sus hermanas, por el origen de los datos, no por el destino (Fabric es el destino de las tres). Solo esta sección honra `overwrite`/`enabled`; `factorial_upload`/`hubspot_upload` los ignoran hoy (siempre sobrescriben, siempre activas cuando se invocan).
 
 ### Notificaciones por email
 
@@ -200,14 +261,15 @@ Las credenciales del servidor SMTP (si lo requiere) van en `.env` como `SMTP_USE
 
 ### Configuración de Tablas BC
 
+Cada tabla se declara en `tables.yaml` (un único fichero, compartido por todos los entornos) con su URL OData completa ya resuelta — no hay `base_api_url`/`api_path`, cada entrada debe traer la `url` entera tal como la expone Business Central. Las tablas son idénticas entre entornos salvo el segmento de entorno de la URL, así que ese segmento se escribe como el placeholder literal `{ENVIRONMENT}`, sustituido en tiempo de carga por el valor resuelto de `BC_ENVIRONMENT`:
+
 ```yaml
 # En tables.yaml
-base_api_url: https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/data/companies({company})
 tables:
-  - name: Customers
-    api_path: customers
-  - name: Vendors
-    api_path: vendors
+  - name: bc_customer
+    description: Customer API
+    url: https://api.businesscentral.dynamics.com/v2.0/{tenant}/{ENVIRONMENT}/ODataV4/Company('...')/API...
+    incremental: true
 ```
 
 ### Configuración de Tablas Factorial
@@ -237,6 +299,21 @@ tables:
 ```
 
 Para añadir un nuevo endpoint basta con añadir una entrada al YAML — sin modificar código.
+
+### Configuración de Tablas HubSpot
+
+Cada objeto CRM se declara en `hubspot_tables.yaml` con su `object_type` (el tipo de objeto de HubSpot: `contacts`,
+`companies`, `deals`, ...) y la lista de propiedades a extraer:
+
+```yaml
+tables:
+  - name: hubspot_contacts
+    object_type: contacts
+    fields: [hs_object_id, email, firstname, lastname, createdate, lastmodifieddate]
+```
+
+Por defecto se extraen `hubspot_contacts`, `hubspot_companies` y `hubspot_deals` (oportunidades). Para añadir otro
+objeto de HubSpot (tickets, líneas de producto, ...) basta con añadir una entrada al YAML — sin modificar código.
 
 > 📖 **Para configuración detallada**: Ver [Guía de Configuración](docs/configuracion.md)
 
@@ -329,6 +406,46 @@ task push:fabric:factorial -- --dry-run
 | `--dry-run` | No | Simula sin llamar la API |
 | `--verbose` | No | Logging a nivel DEBUG |
 
+### HubSpot CRM
+
+```bash
+# Extracción full de los tres objetos (contactos, empresas, oportunidades)
+task extract:hubspot
+
+# Extraer solo un objeto
+task extract:hubspot -- --tables hubspot_contacts
+
+# Extracción en paralelo (los 3 objetos a la vez)
+task extract:hubspot -- --parallel 3
+
+# Ver qué se extraería sin llamar a la API
+task extract:hubspot -- --dry-run --verbose
+
+# Solo subir los CSVs ya generados
+task push:fabric:hubspot
+
+# Subir sin sobreescribir ficheros existentes
+task push:fabric:hubspot -- --skip-existing
+
+# Extraer + subir en un único comando
+task sync:hubspot
+
+# Ver qué se subiría sin ejecutar nada
+task push:fabric:hubspot -- --dry-run
+```
+
+#### Parámetros CLI de extracción HubSpot
+
+| Parámetro | Obligatorio | Descripción |
+|---|---|---|
+| `--tables` | No | Filtrar objetos por nombre (`hubspot_contacts`, `hubspot_companies`, `hubspot_deals`) |
+| `--output-dir` | No | Sobreescribe el directorio de salida (`./exports_hubspot` por defecto) |
+| `--parallel` | No | Objetos a extraer en paralelo (default: 1) |
+| `--dry-run` | No | Simula sin llamar la API |
+| `--verbose` | No | Logging a nivel DEBUG |
+
+Solo extracción completa por ahora — no hay `--mode incremental` ni `--start-on`/`--end-on` todavía (ver sección "Ingesta incremental con checkpoints").
+
 ### Ingesta incremental con checkpoints
 
 Cada tabla puede activar incremental marcando `incremental: true` en su YAML correspondiente.
@@ -382,6 +499,15 @@ Las cargas a Fabric se ejecutan en un paso independiente para poder validar prim
 
 Los CSV de Factorial se suben a `raw/factorial/full/<tabla>.csv` y `raw/factorial/incremental/<run_ts>/<tabla>.csv`, separados del espacio de BC.
 
+### HubSpot CRM
+
+1. Completa en `.env`: `HUBSPOT_API_KEY` y `FABRIC_CLIENT_SECRET`
+2. Completa la sección `hubspot_upload` en `config.json` con `tenant_id`, `client_id`, `workspace_id`, `lakehouse_id`
+3. Ejecuta `task extract:hubspot -- ...` y revisa los CSV en `exports_hubspot/full/`
+4. Ejecuta `task push:fabric:hubspot` para subir (o usa `task sync:hubspot` para todo en uno)
+
+Los CSV de HubSpot se suben a `raw/hubspot/full/<tabla>.csv` (solo modo full por ahora), separados del espacio de BC/Factorial.
+
 Para evitar errores `ArtifactNotFound`, especifica `workspace_id` y `lakehouse_id` en `config.json` con los GUIDs del portal (`.../groups/<workspaceId>/lakehouses/<lakehouseId>`). El uploader crea las carpetas intermedias automáticamente y los reintentos manejan errores transitorios de red.
 
 ## 🔧 Solución de Problemas Básicos
@@ -413,8 +539,13 @@ Para evitar errores `ArtifactNotFound`, especifica `workspace_id` y `lakehouse_i
 
 ### La subida no encuentra ficheros
 
-- Ejecutar primero la extracción: `task extract:factorial -- ...`
-- Verificar que `exports_factorial/full/` contiene los CSVs
+- Ejecutar primero la extracción: `task extract:factorial -- ...` (o `task extract:hubspot` para HubSpot)
+- Verificar que `exports_factorial/full/` (o `exports_hubspot/full/`) contiene los CSVs
+
+### Error de autenticación en HubSpot (401)
+
+- Verificar `HUBSPOT_API_KEY` en `.env` — debe ser el token de una Private App de HubSpot (empieza por `pat-`), no una API Key legacy (`hapikey`)
+- Confirmar que la Private App tiene los scopes de lectura de `crm.objects.contacts`, `crm.objects.companies` y `crm.objects.deals`
 
 ### Error de configuración general
 
@@ -425,15 +556,19 @@ env | grep BC_
 # Verificar variables Factorial
 env | grep FACTORIAL_
 
+# Verificar variable HubSpot
+env | grep HUBSPOT_
+
 # Probar configuración sin llamar APIs
 task extract:bc -- --dry-run --verbose
 task extract:factorial -- --start-on 2025-01-01 --end-on 2025-01-07 --dry-run
+task extract:hubspot -- --dry-run --verbose
 ```
 
 ### Problemas de red
 
-- El sistema reintenta automáticamente (5 intentos con backoff exponencial)
-- Verificar conectividad a `api.businesscentral.dynamics.com` y `api.factorialhr.com`
+- El sistema reintenta automáticamente (5 intentos con backoff exponencial; en HubSpot también ante un 429 de rate limit)
+- Verificar conectividad a `api.businesscentral.dynamics.com`, `api.factorialhr.com` y `api.hubapi.com`
 
 > 🔍 **Para troubleshooting avanzado**: Ver [Guía de Desarrollo](docs/desarrollo.md)
 
@@ -443,6 +578,7 @@ task extract:factorial -- --start-on 2025-01-01 --end-on 2025-01-07 --dry-run
 src/
 ├── main.py                        # CLI y orquestación de Business Central
 ├── factorial_main.py              # CLI y orquestación de Factorial HR
+├── hubspot_main.py                # CLI y orquestación de HubSpot CRM
 ├── bc_client/
 │   ├── config.py                  # Configuración y validación BC
 │   ├── auth.py                    # OAuth con caché de tokens
@@ -454,13 +590,20 @@ src/
 │   ├── exporter.py                # Exportación atómica + merge incremental en master
 │   ├── checkpoints.py             # Gestión de checkpoints para modo incremental
 │   └── push.py                    # CLI de subida a Fabric OneLake
+├── hubspot_client/
+│   ├── config.py                  # Settings, TableConfig, carga de YAML
+│   ├── api.py                     # Cliente HTTP (Bearer) con paginación por cursor
+│   ├── exporter.py                # Exportación atómica (solo modo full por ahora)
+│   └── push.py                    # CLI de subida a Fabric OneLake
 └── fabric_upload/
     ├── config.py                  # FabricUploadSettings (compartido BC + Factorial)
     └── uploader.py                # FabricUploader — autenticación Azure y carga a OneLake
 
-tables.yaml                        # Endpoints de Business Central
+tables.yaml                        # Endpoints de Business Central (URL con placeholder {ENVIRONMENT})
 factorial_tables.yaml              # Endpoints de Factorial HR
-config.json                        # Configuración no secreta (IDs, rutas, opciones)
+hubspot_tables.yaml                # Objetos CRM de HubSpot (contactos, empresas, oportunidades)
+sync_mappings.yaml                 # Mapeos de sincronización entre tablas (campo↔campo, clave, fecha maestro)
+config.json                        # Configuración no secreta (IDs, rutas, opciones, workspaces por entorno)
 
 exports/                           # Salida de Business Central
 ├── full/                          # Snapshot completo
@@ -470,6 +613,9 @@ exports_factorial/                 # Salida de Factorial HR
 ├── full/                          # Master CSV (último estado)
 ├── incremental/                   # Runs incrementales por timestamp
 └── .checkpoints/                  # JSON con el último end_on por tabla
+
+exports_hubspot/                   # Salida de HubSpot CRM
+└── full/                          # Snapshot completo (solo modo full por ahora)
 
 tests/
 ├── unit/                          # Pruebas unitarias rápidas

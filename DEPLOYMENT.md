@@ -94,7 +94,8 @@ cd /opt/nexus-bdb
 ```
 
 Falta el `.env` con los secretos reales (`BC_CLIENT_SECRET`,
-`FACTORIAL_API_KEY`, `FABRIC_CLIENT_SECRET`, ...) -- **no está en git**.
+`FACTORIAL_API_KEY`, `FABRIC_CLIENT_SECRET`, ...) y con `BC_ENVIRONMENT`
+(qué entorno de Business Central usa este despliegue) -- **no está en git**.
 Cópialo desde un entorno que ya lo tenga configurado:
 
 ```bash

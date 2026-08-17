@@ -15,7 +15,7 @@ access and JSON parsing.
 import json
 import os
 from pathlib import Path
-from typing import Any, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 # --------------------------------------------------------------------------------------
 # Constants
@@ -24,6 +24,10 @@ from typing import Any, Tuple
 # DEFAULT_CONFIG_FILE is the fallback filename if no path is specified via
 # argument or environment variable.
 DEFAULT_CONFIG_FILE = "config.json"
+
+# DEFAULT_ENVIRONMENT is used when BC_ENVIRONMENT isn't set -- this repo's
+# real deployment runs against Production today.
+DEFAULT_ENVIRONMENT = "PRODUCTION"
 
 
 # --------------------------------------------------------------------------------------
@@ -91,3 +95,18 @@ def load_config_data(path: str | Path | None = None) -> Tuple[dict[str, Any], Pa
     # Return the data and the parent directory, which acts as the root for
     # resolving other relative paths in the config.
     return data, config_path.parent
+
+
+def resolve_environment(env: Optional[Dict[str, str]] = None) -> str:
+    """
+    Resolves BC_ENVIRONMENT, the Business Central environment switch.
+
+    This is BC-specific: it's the exact environment name Business Central
+    itself uses in its OData URLs (e.g. "PRODUCTION", "SANDBOX_CADE"),
+    substituted into the `{ENVIRONMENT}` placeholder in each tables.yaml URL
+    (see src/bc_client/config.py). Fabric/Factorial/HubSpot uploads don't
+    have a per-environment concept and don't read this value.
+    """
+    raw_env = env if env is not None else os.environ
+    value = (raw_env.get("BC_ENVIRONMENT") or DEFAULT_ENVIRONMENT).strip().upper()
+    return value or DEFAULT_ENVIRONMENT
