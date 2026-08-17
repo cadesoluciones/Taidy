@@ -24,6 +24,7 @@ test("Reader gets a simplified Inicio: reduced nav, launches their assigned work
 
   const workflowName = `Flujo Home E2E ${Date.now()}`;
   await page.goto("/flujos");
+  await page.getByRole("button", { name: "Editor" }).click();
   await page.getByRole("button", { name: "Añadir bloque al flujo" }).click();
   await page.getByLabel("Nombre del flujo").fill(workflowName);
   await page.getByRole("button", { name: "Guardar flujo" }).click();

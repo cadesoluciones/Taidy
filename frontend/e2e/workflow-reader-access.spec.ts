@@ -21,6 +21,7 @@ test("admin can grant a Reader access to a specific workflow and it persists", a
 
   // Create a workflow to restrict.
   await page.goto("/flujos");
+  await page.getByRole("button", { name: "Editor" }).click();
   await page.getByRole("button", { name: "Añadir bloque al flujo" }).click();
   const workflowName = `Flujo RRHH E2E ${Date.now()}`;
   await page.getByLabel("Nombre del flujo").fill(workflowName);
@@ -61,6 +62,7 @@ test("Reader can run a workflow they've been granted access to, but not one they
   await expect(page.getByText(/creado/)).toBeVisible();
 
   await page.goto("/flujos");
+  await page.getByRole("button", { name: "Editor" }).click();
   await page.getByRole("button", { name: "Añadir bloque al flujo" }).click();
   const workflowName = `Flujo Compras E2E ${Date.now()}`;
   await page.getByLabel("Nombre del flujo").fill(workflowName);

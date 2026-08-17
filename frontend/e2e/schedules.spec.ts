@@ -39,6 +39,7 @@ test("run_workflow is selectable as a schedulable action and offers saved workfl
 
   // Seed one saved workflow so the picker has something to show.
   await page.goto("/flujos");
+  await page.getByRole("button", { name: "Editor" }).click();
   await page.getByRole("button", { name: "Añadir bloque al flujo" }).click();
   await page.getByLabel("Nombre del flujo").fill("Flujo para programar");
   await page.getByRole("button", { name: "Guardar flujo" }).click();

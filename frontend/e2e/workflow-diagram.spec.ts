@@ -35,6 +35,7 @@ test("interactive diagram: add two blocks, drag-connect them, and the dependency
 }) => {
   await loginAsAdmin(page);
   await page.goto("/flujos");
+  await page.getByRole("button", { name: "Editor" }).click();
   const diagram = designerDiagram(page);
 
   await page.getByRole("button", { name: "Añadir bloque al flujo" }).click();
@@ -76,6 +77,7 @@ test("interactive diagram: add two blocks, drag-connect them, and the dependency
 test("clicking an edge removes the dependency", async ({ page }) => {
   await loginAsAdmin(page);
   await page.goto("/flujos");
+  await page.getByRole("button", { name: "Editor" }).click();
   const diagram = designerDiagram(page);
 
   await page.getByRole("button", { name: "Añadir bloque al flujo" }).click();
@@ -97,6 +99,7 @@ test("clicking an edge removes the dependency", async ({ page }) => {
 test("removing a block also drops it from other blocks' dependencies", async ({ page }) => {
   await loginAsAdmin(page);
   await page.goto("/flujos");
+  await page.getByRole("button", { name: "Editor" }).click();
   const diagram = designerDiagram(page);
 
   await page.getByRole("button", { name: "Añadir bloque al flujo" }).click();

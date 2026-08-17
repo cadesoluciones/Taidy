@@ -8,6 +8,7 @@ test("admin can design a workflow, then edit its name and steps", async ({ page 
   await expect(page).toHaveURL("http://127.0.0.1:5173/");
 
   await page.goto("/flujos");
+  await page.getByRole("button", { name: "Editor" }).click();
   await page.getByRole("button", { name: "Añadir bloque al flujo" }).click();
   await expect(page.getByLabel("Etiqueta del bloque seleccionado")).toHaveValue("Bloque 1");
   await page.getByLabel("Etiqueta del bloque seleccionado").fill("Paso inicial");

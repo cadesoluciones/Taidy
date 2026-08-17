@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { ROLE_ADMIN, ROLE_OPERATOR, ROLE_READER } from "../api/auth";
 import { ApiError } from "../api/client";
+import { fetchPipelines } from "../api/meta";
 import { fetchUsers } from "../api/users";
 import {
   createWorkflow,
@@ -53,6 +54,10 @@ export function WorkflowsPage() {
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [notifyByWorkflow, setNotifyByWorkflow] = useState<Record<string, boolean>>({});
   const [readerUsernames, setReaderUsernames] = useState<string[]>([]);
+  const [pipelines, setPipelines] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<"saved" | "editor">("saved");
+  const [newStepAction, setNewStepAction] = useState<string>("extract_bc");
+  const [newStepPipeline, setNewStepPipeline] = useState<string>("");
 
   const { data: runsData, refetch: refetchRuns } = usePolling(() => fetchWorkflowRuns(), 3000);
   const runs = runsData?.items ?? [];
@@ -67,6 +72,18 @@ export function WorkflowsPage() {
   }, []);
 
   useEffect(() => {
+    fetchPipelines()
+      .then((res) => setPipelines(res.items))
+      .catch(() => setPipelines([]));
+  }, []);
+
+  useEffect(() => {
+    if (newStepAction === "run_pipeline" && !newStepPipeline && pipelines.length > 0) {
+      setNewStepPipeline(pipelines[0] ?? "");
+    }
+  }, [pipelines, newStepAction, newStepPipeline]);
+
+  useEffect(() => {
     if (!isAdmin) return;
     fetchUsers()
       .then((res) => setReaderUsernames(res.items.filter((u) => u.role === ROLE_READER).map((u) => u.username)))
@@ -79,12 +96,14 @@ export function WorkflowsPage() {
   }
 
   function addStep() {
+    if (newStepAction === "run_pipeline" && !newStepPipeline) return;
     setDesignerError(null);
     const id = `step_${Math.random().toString(36).slice(2, 10)}`;
     const label = `Bloque ${draftSteps.length + 1}`;
+    const params = newStepAction === "run_pipeline" ? { pipeline: newStepPipeline } : {};
     setDraftSteps((prev) => [
       ...prev,
-      { id, label, action: "extract_bc", params: {}, depends_on: [], trigger_rule: "all_success" },
+      { id, label, action: newStepAction, params, depends_on: [], trigger_rule: "all_success" },
     ]);
     setSelectedStepId(id);
   }
@@ -149,6 +168,11 @@ export function WorkflowsPage() {
   async function saveWorkflow(e: React.FormEvent) {
     e.preventDefault();
     setDesignerError(null);
+    const missingPipeline = draftSteps.find((s) => s.action === "run_pipeline" && !s.params.pipeline);
+    if (missingPipeline) {
+      setDesignerError(`El bloque "${missingPipeline.label}" necesita que elijas qué pipeline lanzar.`);
+      return;
+    }
     try {
       if (editingWorkflowId) {
         await updateWorkflow(editingWorkflowId, workflowName, draftSteps);
@@ -159,6 +183,7 @@ export function WorkflowsPage() {
       setWorkflowName("");
       setEditingWorkflowId(null);
       setSelectedStepId(null);
+      setActiveTab("saved");
       await reloadWorkflows();
     } catch (err) {
       setDesignerError(err instanceof ApiError ? err.message : "No se pudo guardar el flujo.");
@@ -171,6 +196,7 @@ export function WorkflowsPage() {
     setWorkflowName(wf.name);
     setDraftSteps(wf.steps);
     setSelectedStepId(null);
+    setActiveTab("editor");
   }
 
   function cancelEdit() {
@@ -178,6 +204,7 @@ export function WorkflowsPage() {
     setWorkflowName("");
     setDraftSteps([]);
     setSelectedStepId(null);
+    setActiveTab("saved");
   }
 
   function discardDraft() {
@@ -237,14 +264,80 @@ export function WorkflowsPage() {
         lanza.
       </p>
 
-      {isAdmin ? (
+      {isAdmin && (
+        <div className={styles.tabBar}>
+          <button
+            type="button"
+            className={activeTab === "saved" ? styles.tabActive : styles.tab}
+            onClick={() => setActiveTab("saved")}
+          >
+            Flujos guardados
+          </button>
+          <button
+            type="button"
+            className={activeTab === "editor" ? styles.tabActive : styles.tab}
+            onClick={() => setActiveTab("editor")}
+          >
+            Editor
+          </button>
+        </div>
+      )}
+
+      {isAdmin && activeTab === "editor" && (
         <>
           <h2>{editingWorkflowId ? "Editar flujo guardado" : "Diseñar un flujo nuevo"}</h2>
           {designerError && <div className={formStyles.errorBanner}>{designerError}</div>}
 
-          <button type="button" className={formStyles.submit} onClick={addStep} style={{ marginBottom: 12 }}>
-            Añadir bloque al flujo
-          </button>
+          <div className={formStyles.card} style={{ marginBottom: 12 }}>
+            <div className={formStyles.field}>
+              <label htmlFor="new_step_action">Tipo de bloque a añadir</label>
+              <select
+                id="new_step_action"
+                value={newStepAction}
+                onChange={(e) => {
+                  const action = e.target.value;
+                  setNewStepAction(action);
+                  setNewStepPipeline(action === "run_pipeline" ? (pipelines[0] ?? "") : "");
+                }}
+              >
+                {Object.entries(ACTION_LABELS).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {newStepAction === "run_pipeline" && (
+              <div className={formStyles.field}>
+                <label htmlFor="new_step_pipeline">Pipeline</label>
+                <select
+                  id="new_step_pipeline"
+                  value={newStepPipeline}
+                  onChange={(e) => setNewStepPipeline(e.target.value)}
+                >
+                  <option value="">Selecciona un pipeline…</option>
+                  {pipelines.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+                {pipelines.length === 0 && (
+                  <p className={formStyles.hint}>
+                    No hay pipelines configurados en <code>config.json</code>.
+                  </p>
+                )}
+              </div>
+            )}
+            <button
+              type="button"
+              className={formStyles.submit}
+              onClick={addStep}
+              disabled={newStepAction === "run_pipeline" && !newStepPipeline}
+            >
+              Añadir bloque al flujo
+            </button>
+          </div>
 
           {draftSteps.length > 0 && (
             <>
@@ -274,7 +367,7 @@ export function WorkflowsPage() {
                     <select
                       id="edit_step_action"
                       value={selectedStep.action}
-                      onChange={(e) => updateStep(selectedStep.id, { action: e.target.value })}
+                      onChange={(e) => updateStep(selectedStep.id, { action: e.target.value, params: {} })}
                     >
                       {Object.entries(ACTION_LABELS).map(([key, label]) => (
                         <option key={key} value={key}>
@@ -283,6 +376,28 @@ export function WorkflowsPage() {
                       ))}
                     </select>
                   </div>
+                  {selectedStep.action === "run_pipeline" && (
+                    <div className={formStyles.field}>
+                      <label htmlFor="edit_step_pipeline">Pipeline</label>
+                      <select
+                        id="edit_step_pipeline"
+                        value={(selectedStep.params.pipeline as string) ?? ""}
+                        onChange={(e) => updateStep(selectedStep.id, { params: { pipeline: e.target.value } })}
+                      >
+                        <option value="">Selecciona un pipeline…</option>
+                        {pipelines.map((p) => (
+                          <option key={p} value={p}>
+                            {p}
+                          </option>
+                        ))}
+                      </select>
+                      {pipelines.length === 0 && (
+                        <p className={formStyles.hint}>
+                          No hay pipelines configurados en <code>config.json</code>.
+                        </p>
+                      )}
+                    </div>
+                  )}
                   {selectedStep.depends_on.length > 0 && (
                     <div className={formStyles.field}>
                       <label htmlFor="edit_step_trigger_rule">¿Cuándo lanzar este bloque?</label>
@@ -329,105 +444,109 @@ export function WorkflowsPage() {
             </>
           )}
         </>
-      ) : (
-        <p>Diseñar o borrar flujos requiere el rol App.Admin. Puedes consultarlos y lanzarlos abajo.</p>
       )}
 
-      <h2>Flujos guardados</h2>
-      {launchError && <div className={formStyles.errorBanner}>{launchError}</div>}
-      {workflows.length === 0 ? (
-        <p>Todavía no hay flujos guardados.</p>
-      ) : (
-        workflows.map((wf) => (
-          <div className={styles.workflowCard} key={wf.id} data-testid="workflow-card">
-            <div className={styles.workflowHead}>
-              <strong>{wf.name}</strong>
-              <span className={styles.stepMeta}>{wf.steps.length} bloque(s)</span>
-              {canOperate && (
-                <>
-                  <NotifyCheckbox
-                    checked={notifyByWorkflow[wf.id] ?? false}
-                    onChange={(checked) => setNotifyByWorkflow((prev) => ({ ...prev, [wf.id]: checked }))}
-                  />
-                  <button type="button" className={styles.btnPrimary} onClick={() => void launchWorkflow(wf.id)}>
-                    Lanzar flujo
+      {(!isAdmin || activeTab === "saved") && (
+        <>
+          {!isAdmin && <p>Diseñar o borrar flujos requiere el rol App.Admin. Puedes consultarlos y lanzarlos abajo.</p>}
+
+            <h2>Flujos guardados</h2>
+        {launchError && <div className={formStyles.errorBanner}>{launchError}</div>}
+        {workflows.length === 0 ? (
+          <p>Todavía no hay flujos guardados.</p>
+        ) : (
+          workflows.map((wf) => (
+            <div className={styles.workflowCard} key={wf.id} data-testid="workflow-card">
+              <div className={styles.workflowHead}>
+                <strong>{wf.name}</strong>
+                <span className={styles.stepMeta}>{wf.steps.length} bloque(s)</span>
+                {canOperate && (
+                  <>
+                    <NotifyCheckbox
+                      checked={notifyByWorkflow[wf.id] ?? false}
+                      onChange={(checked) => setNotifyByWorkflow((prev) => ({ ...prev, [wf.id]: checked }))}
+                    />
+                    <button type="button" className={styles.btnPrimary} onClick={() => void launchWorkflow(wf.id)}>
+                      Lanzar flujo
+                    </button>
+                  </>
+                )}
+                {isAdmin && (
+                  <button type="button" className={styles.btn} onClick={() => editWorkflow(wf)}>
+                    Editar flujo
                   </button>
-                </>
-              )}
+                )}
+                {isAdmin && (
+                  <button type="button" className={styles.btnDanger} onClick={() => setPendingDeleteWorkflow(wf)}>
+                    Borrar flujo
+                  </button>
+                )}
+              </div>
+              <WorkflowDiagram steps={wf.steps} actionLabels={ACTION_LABELS} readOnly height={200} />
               {isAdmin && (
-                <button type="button" className={styles.btn} onClick={() => editWorkflow(wf)}>
-                  Editar flujo
-                </button>
-              )}
-              {isAdmin && (
-                <button type="button" className={styles.btnDanger} onClick={() => setPendingDeleteWorkflow(wf)}>
-                  Borrar flujo
-                </button>
+                <div className={styles.readerAccess}>
+                  <label htmlFor={`reader-access-${wf.id}`}>
+                    Acceso de lectores (App.Reader) — solo estos usuarios pueden lanzar y seguir este flujo desde su
+                    Inicio
+                  </label>
+                  <TagMultiSelect
+                    id={`reader-access-${wf.id}`}
+                    options={readerUsernames}
+                    selected={wf.reader_allowed_users}
+                    onChange={(usernames) => void handleSetReaderAccess(wf.id, usernames)}
+                    placeholder="+ Dar acceso a un lector…"
+                    emptyHint="Ningún lector tiene acceso"
+                  />
+                </div>
               )}
             </div>
-            <WorkflowDiagram steps={wf.steps} actionLabels={ACTION_LABELS} readOnly height={200} />
-            {isAdmin && (
-              <div className={styles.readerAccess}>
-                <label htmlFor={`reader-access-${wf.id}`}>
-                  Acceso de lectores (App.Reader) — solo estos usuarios pueden lanzar y seguir este flujo desde su
-                  Inicio
-                </label>
-                <TagMultiSelect
-                  id={`reader-access-${wf.id}`}
-                  options={readerUsernames}
-                  selected={wf.reader_allowed_users}
-                  onChange={(usernames) => void handleSetReaderAccess(wf.id, usernames)}
-                  placeholder="+ Dar acceso a un lector…"
-                  emptyHint="Ningún lector tiene acceso"
+          ))
+        )}
+  
+        <h2>Flujos en curso / recientes</h2>
+        {runs.length === 0 ? (
+          <p>No hay ejecuciones de flujos en esta sesión del servidor.</p>
+        ) : (
+          runs.map((run) => {
+            const owns = user?.role === ROLE_ADMIN || run.triggered_by === user?.username;
+            const canStop = run.status === "running" && owns;
+            const canRetry = run.status === "error" && owns && canOperate;
+            return (
+              <div className={styles.workflowCard} key={run.id}>
+                <div className={styles.workflowHead}>
+                  <strong>{run.workflow_name}</strong>
+                  <span className={styles.stepMeta}>
+                    {run.triggered_by} · {run.duration_seconds.toFixed(0)}s
+                  </span>
+                  <StatusBadge status={run.status} />
+                  {run.status === "running" && (
+                    <button
+                      type="button"
+                      className={styles.btnDanger}
+                      disabled={!canStop}
+                      onClick={() => setPendingStopRun(run)}
+                    >
+                      Detener flujo
+                    </button>
+                  )}
+                  {run.status === "error" && canRetry && (
+                    <button type="button" className={styles.btn} onClick={() => void handleRetry(run)}>
+                      Reintentar pasos fallidos
+                    </button>
+                  )}
+                </div>
+                <WorkflowDiagram
+                  steps={run.steps}
+                  actionLabels={ACTION_LABELS}
+                  stepStatuses={Object.fromEntries(run.steps.map((s) => [s.id, s.status]))}
+                  readOnly
+                  height={200}
                 />
               </div>
-            )}
-          </div>
-        ))
-      )}
-
-      <h2>Flujos en curso / recientes</h2>
-      {runs.length === 0 ? (
-        <p>No hay ejecuciones de flujos en esta sesión del servidor.</p>
-      ) : (
-        runs.map((run) => {
-          const owns = user?.role === ROLE_ADMIN || run.triggered_by === user?.username;
-          const canStop = run.status === "running" && owns;
-          const canRetry = run.status === "error" && owns && canOperate;
-          return (
-            <div className={styles.workflowCard} key={run.id}>
-              <div className={styles.workflowHead}>
-                <strong>{run.workflow_name}</strong>
-                <span className={styles.stepMeta}>
-                  {run.triggered_by} · {run.duration_seconds.toFixed(0)}s
-                </span>
-                <StatusBadge status={run.status} />
-                {run.status === "running" && (
-                  <button
-                    type="button"
-                    className={styles.btnDanger}
-                    disabled={!canStop}
-                    onClick={() => setPendingStopRun(run)}
-                  >
-                    Detener flujo
-                  </button>
-                )}
-                {run.status === "error" && canRetry && (
-                  <button type="button" className={styles.btn} onClick={() => void handleRetry(run)}>
-                    Reintentar pasos fallidos
-                  </button>
-                )}
-              </div>
-              <WorkflowDiagram
-                steps={run.steps}
-                actionLabels={ACTION_LABELS}
-                stepStatuses={Object.fromEntries(run.steps.map((s) => [s.id, s.status]))}
-                readOnly
-                height={200}
-              />
-            </div>
-          );
-        })
+            );
+          })
+        )}
+        </>
       )}
 
       <ConfirmDialog
