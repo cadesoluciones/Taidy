@@ -179,8 +179,13 @@ test("sidebar groups Business Central and Factorial actions into separate sectio
   await expect(nav.getByText("Factorial")).toBeVisible();
   await expect(nav.getByText("Fabric")).toBeVisible();
 
+  // Multi-item sections start collapsed (see NavShell's collapsible-sidebar
+  // groups) unless the current page lives inside one -- Home doesn't, so
+  // both need an explicit expand before their links become visible.
+  await nav.getByRole("button", { name: /Business Central/ }).click();
   const bcSection = nav.getByText("Business Central").locator("..");
   await expect(bcSection.getByRole("link", { name: "Extraer" })).toBeVisible();
 
+  await nav.getByRole("button", { name: /Administración/ }).click();
   await expect(nav.getByRole("link", { name: "Conexiones API" })).toBeVisible();
 });

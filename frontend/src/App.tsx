@@ -24,7 +24,13 @@ import { BcUploadPage } from "./pages/ejecutar/BcUploadPage";
 import { FactorialExtractPage } from "./pages/ejecutar/FactorialExtractPage";
 import { FactorialSyncPage } from "./pages/ejecutar/FactorialSyncPage";
 import { FactorialUploadPage } from "./pages/ejecutar/FactorialUploadPage";
+import { HubspotExtractPage } from "./pages/ejecutar/HubspotExtractPage";
+import { HubspotSyncPage } from "./pages/ejecutar/HubspotSyncPage";
+import { HubspotUploadPage } from "./pages/ejecutar/HubspotUploadPage";
 import { PipelinesPage } from "./pages/ejecutar/PipelinesPage";
+import { CompararPage } from "./pages/sincronizacion/CompararPage";
+import { MapeosPage } from "./pages/sincronizacion/MapeosPage";
+import { SecretsPage } from "./pages/administracion/SecretsPage";
 
 export function App() {
   return (
@@ -50,18 +56,24 @@ export function App() {
                 <Route path="/ejecutar/factorial-extraer" element={<FactorialExtractPage />} />
                 <Route path="/ejecutar/factorial-subir" element={<FactorialUploadPage />} />
                 <Route path="/ejecutar/factorial-sync" element={<FactorialSyncPage />} />
+                <Route path="/ejecutar/hubspot-extraer" element={<HubspotExtractPage />} />
+                <Route path="/ejecutar/hubspot-subir" element={<HubspotUploadPage />} />
+                <Route path="/ejecutar/hubspot-sync" element={<HubspotSyncPage />} />
                 <Route path="/ejecutar/pipelines" element={<PipelinesPage />} />
                 <Route path="/flujos" element={<WorkflowsPage />} />
                 <Route path="/catalogo-datos" element={<CatalogoDatosPage />} />
+                <Route path="/sincronizacion/comparar" element={<CompararPage />} />
                 <Route path="/programacion" element={<SchedulesPage />} />
                 <Route path="/actividad/tareas-en-curso" element={<RunningTasksPage />} />
                 <Route path="/actividad/historial" element={<HistoryPage />} />
               </Route>
               <Route element={<RequireAdmin />}>
+                <Route path="/sincronizacion/mapeos" element={<MapeosPage />} />
                 <Route path="/administracion/usuarios" element={<UsersPage />} />
                 <Route path="/administracion/auditoria" element={<AuditPage />} />
                 <Route path="/administracion/conexiones-api" element={<ConexionesApiPage />} />
                 <Route path="/administracion/configuracion" element={<ConfiguracionPage />} />
+                <Route path="/administracion/claves-de-servicio" element={<SecretsPage />} />
               </Route>
               <Route path="/cuenta" element={<AccountPage />} />
             </Route>

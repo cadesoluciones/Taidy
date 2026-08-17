@@ -22,6 +22,9 @@ test.describe("Responsive navigation (narrow viewport)", () => {
     await page.getByRole("button", { name: "Abrir menú" }).click();
     await expect(nav).toBeInViewport();
 
+    // "Actividad" starts collapsed (Home isn't one of its pages) -- expand
+    // it before its "Historial" link becomes clickable.
+    await nav.getByRole("button", { name: /Actividad/ }).click();
     await nav.getByRole("link", { name: "Historial" }).click();
     await expect(page).toHaveURL(/\/actividad\/historial$/);
     // Navigating closes the drawer automatically rather than leaving it
