@@ -124,6 +124,43 @@ export function syncFactorial(input: SyncFactorialInput): Promise<Task> {
   return apiPost<Task>("/tasks/sync-factorial", input);
 }
 
+export interface ExtractHubspotInput {
+  tables?: string[] | null;
+  output_dir?: string;
+  parallel?: number;
+  dry_run?: boolean;
+  verbose?: boolean;
+  notify?: boolean;
+}
+export function extractHubspot(input: ExtractHubspotInput): Promise<Task> {
+  return apiPost<Task>("/tasks/extract-hubspot", input);
+}
+
+export interface UploadHubspotInput {
+  output_dir?: string;
+  tables?: string[] | null;
+  dry_run?: boolean;
+  skip_existing?: boolean;
+  verbose?: boolean;
+  notify?: boolean;
+}
+export function uploadHubspot(input: UploadHubspotInput): Promise<Task> {
+  return apiPost<Task>("/tasks/upload-hubspot", input);
+}
+
+export interface SyncHubspotInput {
+  tables?: string[] | null;
+  output_dir?: string;
+  parallel?: number;
+  dry_run?: boolean;
+  skip_existing?: boolean;
+  verbose?: boolean;
+  notify?: boolean;
+}
+export function syncHubspot(input: SyncHubspotInput): Promise<Task> {
+  return apiPost<Task>("/tasks/sync-hubspot", input);
+}
+
 export interface RunPipelineInput {
   pipeline: string;
   wait?: boolean;

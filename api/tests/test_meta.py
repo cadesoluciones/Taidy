@@ -176,3 +176,94 @@ def test_operator_cannot_delete_factorial_table(isolated_state, client):
     _login(client, "operator1", "OperatorPass2026!")
     resp = client.delete("/meta/factorial-tables/factorial_keep")
     assert resp.status_code == 403
+
+
+def test_admin_can_create_list_and_delete_hubspot_table(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    created = client.post(
+        "/meta/hubspot-tables",
+        json={
+            "name": "hubspot_tickets",
+            "object_type": "tickets",
+            "fields": ["hs_object_id", "subject"],
+            "description": "desc",
+        },
+    )
+    assert created.status_code == 200
+    assert created.json() == {
+        "name": "hubspot_tickets",
+        "description": "desc",
+        "object_type": "tickets",
+        "fields": ["hs_object_id", "subject"],
+    }
+
+    listed = client.get("/meta/hubspot-tables/full").json()["items"]
+    assert [t["name"] for t in listed] == ["hubspot_tickets"]
+    assert client.get("/meta/hubspot-tables").json()["items"] == ["hubspot_tickets"]
+
+    assert client.delete("/meta/hubspot-tables/hubspot_tickets").status_code == 204
+    assert client.get("/meta/hubspot-tables/full").json()["items"] == []
+
+
+def test_admin_can_update_hubspot_table(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    client.post(
+        "/meta/hubspot-tables",
+        json={"name": "hubspot_edit", "object_type": "contacts", "fields": ["hs_object_id"]},
+    )
+
+    updated = client.patch(
+        "/meta/hubspot-tables/hubspot_edit",
+        json={"object_type": "companies", "fields": ["hs_object_id", "name"], "description": "desc"},
+    )
+    assert updated.status_code == 200
+    body = updated.json()
+    assert body["object_type"] == "companies"
+    assert body["fields"] == ["hs_object_id", "name"]
+    assert body["description"] == "desc"
+
+
+def test_update_hubspot_table_rejects_unknown_name(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    resp = client.patch(
+        "/meta/hubspot-tables/does-not-exist", json={"object_type": "deals", "fields": ["hs_object_id"]}
+    )
+    assert resp.status_code == 400
+
+
+def test_create_hubspot_table_requires_at_least_one_field(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    resp = client.post(
+        "/meta/hubspot-tables",
+        json={"name": "hubspot_x", "object_type": "deals", "fields": []},
+    )
+    assert resp.status_code == 400
+
+
+def test_create_hubspot_table_rejects_duplicate_name(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    client.post("/meta/hubspot-tables", json={"name": "hubspot_dup", "object_type": "deals", "fields": ["id"]})
+    resp = client.post("/meta/hubspot-tables", json={"name": "hubspot_dup", "object_type": "deals", "fields": ["id"]})
+    assert resp.status_code == 400
+
+
+def test_operator_cannot_create_or_delete_hubspot_table(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    client.post(
+        "/meta/hubspot-tables",
+        json={"name": "hubspot_keep", "object_type": "deals", "fields": ["id"]},
+    )
+
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+    assert client.post(
+        "/meta/hubspot-tables", json={"name": "hubspot_x", "object_type": "deals", "fields": ["id"]}
+    ).status_code == 403
+    assert client.delete("/meta/hubspot-tables/hubspot_keep").status_code == 403

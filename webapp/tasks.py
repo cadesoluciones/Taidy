@@ -38,6 +38,8 @@ MODULE_FOR_ACTION = {
     "upload_bc": "src.fabric_upload.cli",
     "extract_factorial": "src.factorial_main",
     "upload_factorial": "src.factorial_client.push",
+    "extract_hubspot": "src.hubspot_main",
+    "upload_hubspot": "src.hubspot_client.push",
     "run_pipeline": "src.fabric_pipelines.cli",
 }
 
@@ -48,6 +50,9 @@ ACTION_LABELS = {
     "extract_factorial": "Factorial · Extraer",
     "upload_factorial": "Factorial · Subir",
     "sync_factorial": "Factorial · Sync (extraer + subir)",
+    "extract_hubspot": "HubSpot · Extraer",
+    "upload_hubspot": "HubSpot · Subir",
+    "sync_hubspot": "HubSpot · Sync (extraer + subir)",
     "run_pipeline": "Fabric · Ejecutar pipeline",
 }
 
@@ -59,6 +64,9 @@ _CONFLICT_GROUPS = {
     "extract_factorial": {"extract_factorial", "sync_factorial"},
     "upload_factorial": {"upload_factorial", "sync_factorial"},
     "sync_factorial": {"extract_factorial", "upload_factorial", "sync_factorial"},
+    "extract_hubspot": {"extract_hubspot", "sync_hubspot"},
+    "upload_hubspot": {"upload_hubspot", "sync_hubspot"},
+    "sync_hubspot": {"extract_hubspot", "upload_hubspot", "sync_hubspot"},
 }
 
 _STOP_GRACE_SECONDS = 5
@@ -126,11 +134,17 @@ class Task:
             return adapter.parse_bc_extract_tables(self.expected_tables, log_text, finished=finished)
         if self.action == "extract_factorial":
             return adapter.parse_factorial_extract_tables(self.expected_tables, log_text, finished=finished)
-        if self.action in ("upload_bc", "upload_factorial"):
+        if self.action == "extract_hubspot":
+            return adapter.parse_hubspot_extract_tables(self.expected_tables, log_text, finished=finished)
+        if self.action in ("upload_bc", "upload_factorial", "upload_hubspot"):
             return adapter.parse_upload_files(log_text)
-        if self.action in ("sync_bc", "sync_factorial"):
-            parser = adapter.parse_bc_extract_tables if self.action == "sync_bc" else adapter.parse_factorial_extract_tables
-            extract_statuses = parser(self.expected_tables, log_text, finished=finished)
+        if self.action in ("sync_bc", "sync_factorial", "sync_hubspot"):
+            parsers = {
+                "sync_bc": adapter.parse_bc_extract_tables,
+                "sync_factorial": adapter.parse_factorial_extract_tables,
+                "sync_hubspot": adapter.parse_hubspot_extract_tables,
+            }
+            extract_statuses = parsers[self.action](self.expected_tables, log_text, finished=finished)
             upload_statuses = adapter.parse_upload_files(log_text)
             return adapter.merge_sync_statuses(extract_statuses, upload_statuses)
         return []
@@ -433,6 +447,43 @@ def launch(action: str, params: dict, triggered_by: str) -> Task:
     if action == "upload_factorial":
         argv = adapter.build_upload_factorial_argv(**params)
         return start_task(action=action, argv=argv, triggered_by=triggered_by, notify=notify)
+
+    if action == "extract_hubspot":
+        argv = adapter.build_extract_hubspot_argv(**params)
+        expected = list(tables) if tables else adapter.list_hubspot_tables()
+        return start_task(action=action, argv=argv, triggered_by=triggered_by, expected_tables=expected, notify=notify)
+
+    if action == "upload_hubspot":
+        argv = adapter.build_upload_hubspot_argv(**params)
+        return start_task(action=action, argv=argv, triggered_by=triggered_by, notify=notify)
+
+    if action == "sync_hubspot":
+        output_dir = params.get("output_dir") or "./exports_hubspot"
+        extract_argv = adapter.build_extract_hubspot_argv(
+            tables=tables,
+            output_dir=output_dir,
+            parallel=params.get("parallel", 1),
+            dry_run=params.get("dry_run", False),
+            verbose=params.get("verbose", False),
+        )
+        upload_argv = adapter.build_upload_hubspot_argv(
+            output_dir=output_dir,
+            tables=tables,
+            dry_run=params.get("dry_run", False),
+            skip_existing=params.get("skip_existing", False),
+            verbose=params.get("verbose", False),
+        )
+        expected = list(tables) if tables else adapter.list_hubspot_tables()
+        return start_sync_task(
+            action=action,
+            steps=[
+                (MODULE_FOR_ACTION["extract_hubspot"], extract_argv, "extraer"),
+                (MODULE_FOR_ACTION["upload_hubspot"], upload_argv, "subir"),
+            ],
+            triggered_by=triggered_by,
+            expected_tables=expected,
+            notify=notify,
+        )
 
     if action == "sync_bc":
         output_dir = params.get("output_dir") or "./exports"

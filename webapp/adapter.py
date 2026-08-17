@@ -173,6 +173,44 @@ def build_upload_factorial_argv(
 
 
 # --------------------------------------------------------------------------------------
+# argv builders — HubSpot CRM
+# --------------------------------------------------------------------------------------
+
+
+def build_extract_hubspot_argv(
+    *,
+    tables: Optional[Sequence[str]] = None,
+    output_dir: str = "",
+    parallel: int = 1,
+    dry_run: bool = False,
+    verbose: bool = False,
+) -> List[str]:
+    argv: List[str] = []
+    _opt_list(argv, "--tables", tables)
+    _opt(argv, "--output-dir", output_dir)
+    argv.extend(["--parallel", str(parallel)])
+    _flag(argv, "--dry-run", dry_run)
+    _flag(argv, "--verbose", verbose)
+    return argv
+
+
+def build_upload_hubspot_argv(
+    *,
+    output_dir: str = "./exports_hubspot",
+    tables: Optional[Sequence[str]] = None,
+    dry_run: bool = False,
+    skip_existing: bool = False,
+    verbose: bool = False,
+) -> List[str]:
+    argv: List[str] = ["--output-dir", output_dir]
+    _opt_list(argv, "--tables", tables)
+    _flag(argv, "--dry-run", dry_run)
+    _flag(argv, "--skip-existing", skip_existing)
+    _flag(argv, "--verbose", verbose)
+    return argv
+
+
+# --------------------------------------------------------------------------------------
 # argv builders — Fabric Data Factory pipelines
 # --------------------------------------------------------------------------------------
 
@@ -276,6 +314,29 @@ def parse_factorial_extract_tables(expected: Sequence[str], log: str, *, finishe
     return statuses
 
 
+def parse_hubspot_extract_tables(expected: Sequence[str], log: str, *, finished: bool = True) -> List[TableStatus]:
+    statuses: List[TableStatus] = []
+    for name in expected:
+        if f"Would write '{name}'" in log:
+            statuses.append(TableStatus(name=name, status=_STATUS_DRY_RUN, detail="simulación"))
+            continue
+        outcome = _export_table_outcome(name, log)
+        if outcome:
+            statuses.append(outcome)
+            continue
+        if f"Fetching '{name}'" in log:
+            # Same rationale as parse_bc_extract_tables above.
+            if finished:
+                statuses.append(
+                    TableStatus(name=name, status=_STATUS_ERROR, detail="empezó pero no se confirmó su finalización")
+                )
+            else:
+                statuses.append(TableStatus(name=name, status=_STATUS_IN_PROGRESS, detail="obteniendo datos…"))
+            continue
+        statuses.append(TableStatus(name=name, status=_STATUS_UNKNOWN, detail="no llegó a procesarse"))
+    return statuses
+
+
 _UPLOAD_ATTEMPT_RE = re.compile(r"Uploading '([^']+)' to Fabric OneLake\.\.\.")
 _UPLOAD_DRYRUN_RE = re.compile(r"\[dry-run\] Would upload: (\S+)")
 
@@ -354,6 +415,10 @@ def list_bc_tables() -> List[str]:
 
 def list_factorial_tables() -> List[str]:
     return _list_table_names(table_configs._FACTORIAL_TABLES_PATH)
+
+
+def list_hubspot_tables() -> List[str]:
+    return _list_table_names(table_configs._HUBSPOT_TABLES_PATH)
 
 
 def _list_table_names(path: Path) -> List[str]:

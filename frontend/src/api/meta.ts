@@ -8,8 +8,44 @@ export function fetchFactorialTables(): Promise<{ items: string[] }> {
   return apiGet<{ items: string[] }>("/meta/factorial-tables");
 }
 
+export function fetchHubspotTables(): Promise<{ items: string[] }> {
+  return apiGet<{ items: string[] }>("/meta/hubspot-tables");
+}
+
 export function fetchPipelines(): Promise<{ items: string[] }> {
   return apiGet<{ items: string[] }>("/meta/pipelines");
+}
+
+export interface HubspotTableConfig {
+  name: string;
+  description: string;
+  object_type: string;
+  fields: string[];
+}
+
+export interface CreateHubspotTableInput {
+  name: string;
+  object_type: string;
+  fields: string[];
+  description?: string;
+}
+
+export function fetchHubspotTablesFull(): Promise<{ items: HubspotTableConfig[] }> {
+  return apiGet<{ items: HubspotTableConfig[] }>("/meta/hubspot-tables/full");
+}
+
+export function createHubspotTable(input: CreateHubspotTableInput): Promise<HubspotTableConfig> {
+  return apiPost<HubspotTableConfig>("/meta/hubspot-tables", input);
+}
+
+export type UpdateHubspotTableInput = Omit<CreateHubspotTableInput, "name">;
+
+export function updateHubspotTable(name: string, input: UpdateHubspotTableInput): Promise<HubspotTableConfig> {
+  return apiPatch<HubspotTableConfig>(`/meta/hubspot-tables/${encodeURIComponent(name)}`, input);
+}
+
+export function deleteHubspotTable(name: string): Promise<void> {
+  return apiDelete<void>(`/meta/hubspot-tables/${encodeURIComponent(name)}`);
 }
 
 export interface BcTableConfig {
@@ -42,6 +78,13 @@ export function updateBcTable(name: string, input: UpdateBcTableInput): Promise<
 
 export function deleteBcTable(name: string): Promise<void> {
   return apiDelete<void>(`/meta/bc-tables/${encodeURIComponent(name)}`);
+}
+
+/** BC never declares a field list in tables.yaml (unlike Factorial/HubSpot) --
+ * this reads the header row of the table's last real extraction instead, so
+ * the sync-mapping UI has *something* to drag from. Empty if never extracted. */
+export function fetchBcTableFields(name: string): Promise<{ items: string[] }> {
+  return apiGet<{ items: string[] }>(`/meta/bc-tables/${encodeURIComponent(name)}/fields`);
 }
 
 export interface FactorialTableConfig {

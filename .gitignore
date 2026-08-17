@@ -94,6 +94,7 @@ config.json
 
 # Exportaciones
 exports_factorial/
+exports_hubspot/
 
 -----------
 

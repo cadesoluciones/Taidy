@@ -10,6 +10,9 @@ export const ACTION_LABELS: Record<string, string> = {
   extract_factorial: "Factorial · Extraer",
   upload_factorial: "Factorial · Subir",
   sync_factorial: "Factorial · Sync (extraer + subir)",
+  extract_hubspot: "HubSpot · Extraer",
+  upload_hubspot: "HubSpot · Subir",
+  sync_hubspot: "HubSpot · Sync (extraer + subir)",
   run_pipeline: "Fabric · Ejecutar pipeline",
   run_workflow: "Flujo (varios bloques)",
 };

@@ -20,12 +20,16 @@ from ..schemas.meta import (
     BcTableOut,
     CreateBcTableRequest,
     CreateFactorialTableRequest,
+    CreateHubspotTableRequest,
     FactorialTableListOut,
     FactorialTableOut,
+    HubspotTableListOut,
+    HubspotTableOut,
     PipelineListOut,
     TableListOut,
     UpdateBcTableRequest,
     UpdateFactorialTableRequest,
+    UpdateHubspotTableRequest,
 )
 
 router = APIRouter(prefix="/meta", tags=["meta"], dependencies=[Depends(get_current_user)])
@@ -39,6 +43,11 @@ def bc_tables() -> TableListOut:
 @router.get("/factorial-tables", response_model=TableListOut)
 def factorial_tables() -> TableListOut:
     return TableListOut(items=adapter.list_factorial_tables())
+
+
+@router.get("/hubspot-tables", response_model=TableListOut)
+def hubspot_tables() -> TableListOut:
+    return TableListOut(items=adapter.list_hubspot_tables())
 
 
 @router.get("/pipelines", response_model=PipelineListOut)
@@ -78,6 +87,11 @@ def update_bc_table(name: str, payload: UpdateBcTableRequest) -> BcTableOut:
 )
 def delete_bc_table(name: str) -> None:
     table_configs.delete_bc_table(name)
+
+
+@router.get("/bc-tables/{name}/fields", response_model=TableListOut)
+def bc_table_fields(name: str) -> TableListOut:
+    return TableListOut(items=table_configs.bc_table_fields(name))
 
 
 @router.get("/factorial-tables/full", response_model=FactorialTableListOut)
@@ -134,3 +148,41 @@ def update_factorial_table(name: str, payload: UpdateFactorialTableRequest) -> F
 )
 def delete_factorial_table(name: str) -> None:
     table_configs.delete_factorial_table(name)
+
+
+@router.get("/hubspot-tables/full", response_model=HubspotTableListOut)
+def hubspot_tables_full() -> HubspotTableListOut:
+    return HubspotTableListOut(items=[HubspotTableOut(**t) for t in table_configs.list_hubspot_tables_full()])
+
+
+@router.post("/hubspot-tables", response_model=HubspotTableOut, dependencies=[Depends(require_role(ROLE_ADMIN))])
+def create_hubspot_table(payload: CreateHubspotTableRequest) -> HubspotTableOut:
+    try:
+        entry = table_configs.add_hubspot_table(
+            payload.name, payload.object_type, payload.fields, description=payload.description
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return HubspotTableOut(**entry)
+
+
+@router.patch(
+    "/hubspot-tables/{name}", response_model=HubspotTableOut, dependencies=[Depends(require_role(ROLE_ADMIN))]
+)
+def update_hubspot_table(name: str, payload: UpdateHubspotTableRequest) -> HubspotTableOut:
+    try:
+        entry = table_configs.update_hubspot_table(
+            name, payload.object_type, payload.fields, description=payload.description
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return HubspotTableOut(**entry)
+
+
+@router.delete(
+    "/hubspot-tables/{name}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_role(ROLE_ADMIN))],
+)
+def delete_hubspot_table(name: str) -> None:
+    table_configs.delete_hubspot_table(name)

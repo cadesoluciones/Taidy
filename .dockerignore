@@ -6,6 +6,7 @@
 config.json
 tables.yaml
 factorial_tables.yaml
+hubspot_tables.yaml
 
 # Persisted state -- lives in a mounted volume, never in the image itself.
 webapp/users.db
@@ -17,6 +18,7 @@ webapp/app_settings.json
 api/sessions.json
 exports/
 exports_factorial/
+exports_hubspot/
 
 # Python
 **/__pycache__/

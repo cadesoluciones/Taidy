@@ -75,3 +75,27 @@ class UpdateFactorialTableRequest(BaseModel):
     incremental: bool = False
     overlap_days: Optional[int] = None
     chunk_days: Optional[int] = None
+
+
+class HubspotTableOut(BaseModel):
+    name: str
+    description: str = ""
+    object_type: str
+    fields: List[str]
+
+
+class HubspotTableListOut(BaseModel):
+    items: List[HubspotTableOut]
+
+
+class CreateHubspotTableRequest(BaseModel):
+    name: str
+    object_type: str
+    fields: List[str]
+    description: str = ""
+
+
+class UpdateHubspotTableRequest(BaseModel):
+    object_type: str
+    fields: List[str]
+    description: str = ""

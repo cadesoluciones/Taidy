@@ -77,6 +77,34 @@ class SyncFactorialRequest(BaseModel):
     notify: bool = False
 
 
+class ExtractHubspotRequest(BaseModel):
+    tables: Optional[List[str]] = None
+    output_dir: str = ""
+    parallel: int = 1
+    dry_run: bool = False
+    verbose: bool = False
+    notify: bool = False
+
+
+class UploadHubspotRequest(BaseModel):
+    output_dir: str = "./exports_hubspot"
+    tables: Optional[List[str]] = None
+    dry_run: bool = False
+    skip_existing: bool = False
+    verbose: bool = False
+    notify: bool = False
+
+
+class SyncHubspotRequest(BaseModel):
+    tables: Optional[List[str]] = None
+    output_dir: str = "./exports_hubspot"
+    parallel: int = 1
+    dry_run: bool = False
+    skip_existing: bool = False
+    verbose: bool = False
+    notify: bool = False
+
+
 class RunPipelineRequest(BaseModel):
     pipeline: str
     wait: bool = True

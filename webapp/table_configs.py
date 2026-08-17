@@ -4,14 +4,17 @@ CRUD over `tables.yaml` (Business Central) and `factorial_tables.yaml`
 (Factorial HR) -- the exact same data files `src/bc_client/config.py` and
 `src/factorial_client/config.py` already read for real extraction runs.
 
-This module only edits the YAML *data files*; it never touches src/**'s
-parsing/validation logic. Adding a table here just means a new list entry
-becomes available the next time someone extracts or lists tables -- the
-same as if a person had hand-edited the YAML file.
+BC's URLs may contain the literal placeholder `{ENVIRONMENT}` (substituted
+with BC_ENVIRONMENT at extraction time, see src/bc_client/config.py) --
+this module doesn't touch that substitution, it only edits the YAML *data
+files* as plain dicts, same as if a person had hand-edited the file. Adding
+a table here just means a new list entry becomes available the next time
+someone extracts or lists tables.
 """
 
 from __future__ import annotations
 
+import csv
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -22,8 +25,11 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from src.config_loader import load_config_data  # noqa: E402
+
 _BC_TABLES_PATH = _PROJECT_ROOT / "tables.yaml"
 _FACTORIAL_TABLES_PATH = _PROJECT_ROOT / "factorial_tables.yaml"
+_HUBSPOT_TABLES_PATH = _PROJECT_ROOT / "hubspot_tables.yaml"
 
 
 def _read(path: Path) -> List[dict]:
@@ -90,6 +96,37 @@ def delete_bc_table(name: str) -> None:
     tables = _read(_BC_TABLES_PATH)
     remaining = [t for t in tables if t.get("name") != name]
     _write(_BC_TABLES_PATH, remaining)
+
+
+def bc_table_fields(name: str) -> List[str]:
+    """Best-effort: reads the header row of the table's last full extraction.
+
+    Unlike Factorial/HubSpot, tables.yaml never declares a field list for a
+    BC table (the URL is a whole API page whose columns are only known once
+    it's actually been called) -- the sync-mapping UI needs *some* list of
+    available fields to map from, and the CSV a real extraction already
+    wrote is the cheapest source of truth, no live BC call required. Returns
+    an empty list if the table hasn't been extracted yet.
+    """
+    try:
+        data, root = load_config_data()
+    except Exception:
+        return []
+    section = data.get("business_central")
+    if not isinstance(section, dict):
+        return []
+
+    output_dir = Path(section.get("output_dir", "./exports"))
+    if not output_dir.is_absolute():
+        output_dir = (root / output_dir).resolve()
+
+    csv_path = output_dir / "full" / f"{name}.csv"
+    if not csv_path.is_file():
+        return []
+
+    with csv_path.open(encoding="utf-8", newline="") as f:
+        header = next(csv.reader(f), [])
+    return header
 
 
 # --------------------------------------------------------------------------------------
@@ -190,3 +227,75 @@ def delete_factorial_table(name: str) -> None:
     tables = _read(_FACTORIAL_TABLES_PATH)
     remaining = [t for t in tables if t.get("name") != name]
     _write(_FACTORIAL_TABLES_PATH, remaining)
+
+
+# --------------------------------------------------------------------------------------
+# HubSpot CRM (hubspot_tables.yaml: name, description, object_type, fields)
+# --------------------------------------------------------------------------------------
+
+
+def list_hubspot_tables_full() -> List[dict]:
+    return _read(_HUBSPOT_TABLES_PATH)
+
+
+def add_hubspot_table(
+    name: str,
+    object_type: str,
+    fields: List[str],
+    *,
+    description: str = "",
+) -> dict:
+    name = name.strip()
+    object_type = object_type.strip()
+    clean_fields = [f.strip() for f in fields if f.strip()]
+    if not name:
+        raise ValueError("El objeto necesita un nombre.")
+    if not object_type:
+        raise ValueError("El objeto necesita un tipo de objeto de HubSpot (ej. contacts, companies, deals).")
+    if not clean_fields:
+        raise ValueError("Indica al menos una propiedad a extraer.")
+
+    tables = _read(_HUBSPOT_TABLES_PATH)
+    if any(t.get("name") == name for t in tables):
+        raise ValueError(f"Ya existe un objeto de HubSpot llamado '{name}'.")
+
+    entry: Dict[str, Any] = {
+        "name": name,
+        "description": description.strip(),
+        "object_type": object_type,
+        "fields": clean_fields,
+    }
+    tables.append(entry)
+    _write(_HUBSPOT_TABLES_PATH, tables)
+    return entry
+
+
+def update_hubspot_table(
+    name: str,
+    object_type: str,
+    fields: List[str],
+    *,
+    description: str = "",
+) -> dict:
+    object_type = object_type.strip()
+    clean_fields = [f.strip() for f in fields if f.strip()]
+    if not object_type:
+        raise ValueError("El objeto necesita un tipo de objeto de HubSpot (ej. contacts, companies, deals).")
+    if not clean_fields:
+        raise ValueError("Indica al menos una propiedad a extraer.")
+
+    tables = _read(_HUBSPOT_TABLES_PATH)
+    for t in tables:
+        if t.get("name") == name:
+            t["object_type"] = object_type
+            t["description"] = description.strip()
+            t["fields"] = clean_fields
+            _write(_HUBSPOT_TABLES_PATH, tables)
+            return t
+    raise ValueError(f"No existe un objeto de HubSpot llamado '{name}'.")
+
+
+def delete_hubspot_table(name: str) -> None:
+    tables = _read(_HUBSPOT_TABLES_PATH)
+    remaining = [t for t in tables if t.get("name") != name]
+    _write(_HUBSPOT_TABLES_PATH, remaining)

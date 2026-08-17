@@ -21,14 +21,17 @@ from ..dependencies import CurrentUser, get_current_user
 from ..schemas.tasks import (
     ExtractBcRequest,
     ExtractFactorialRequest,
+    ExtractHubspotRequest,
     RunPipelineRequest,
     SyncBcRequest,
     SyncFactorialRequest,
+    SyncHubspotRequest,
     TableStatusOut,
     TaskListOut,
     TaskOut,
     UploadBcRequest,
     UploadFactorialRequest,
+    UploadHubspotRequest,
 )
 
 router = APIRouter(prefix="/tasks", tags=["tasks"], dependencies=[Depends(get_current_user)])
@@ -137,6 +140,21 @@ def sync_factorial(payload: SyncFactorialRequest, current: CurrentUser = Depends
     params["start_on"] = payload.start_on.isoformat()
     params["end_on"] = payload.end_on.isoformat()
     return _launch("sync_factorial", params, current)
+
+
+@router.post("/extract-hubspot", response_model=TaskOut)
+def extract_hubspot(payload: ExtractHubspotRequest, current: CurrentUser = Depends(get_current_user)) -> TaskOut:
+    return _launch("extract_hubspot", payload.model_dump(), current)
+
+
+@router.post("/upload-hubspot", response_model=TaskOut)
+def upload_hubspot(payload: UploadHubspotRequest, current: CurrentUser = Depends(get_current_user)) -> TaskOut:
+    return _launch("upload_hubspot", payload.model_dump(), current)
+
+
+@router.post("/sync-hubspot", response_model=TaskOut)
+def sync_hubspot(payload: SyncHubspotRequest, current: CurrentUser = Depends(get_current_user)) -> TaskOut:
+    return _launch("sync_hubspot", payload.model_dump(), current)
 
 
 @router.post("/run-pipeline", response_model=TaskOut)
