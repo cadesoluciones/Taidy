@@ -18,6 +18,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -26,6 +27,15 @@ from fastapi.staticfiles import StaticFiles
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
+
+# Every CLI entry point (extract_bc, ...) loads .env itself before reading
+# any secret; the API server never did, so anything read at import time
+# (e.g. src/bc_client/config.py resolving BC_ENVIRONMENT) or in-process
+# without going through a subprocess (e.g. src/sync_engine/compare.py) saw
+# an empty environment unless the shell happened to export these vars
+# itself. Loading it once here, before anything else imports, closes that
+# gap for the whole process.
+load_dotenv()
 
 # Present only in a built image (Dockerfile runs `npm run build` into this
 # exact path before the backend stage starts) -- absent in local dev, where
@@ -42,6 +52,8 @@ from .routers import (  # noqa: E402
     meta as meta_router,
     pipelines as pipelines_router,
     schedules as schedules_router,
+    secrets as secrets_router,
+    sync as sync_router,
     tasks as tasks_router,
     users as users_router,
     workflows as workflows_router,
@@ -110,6 +122,8 @@ def create_app() -> FastAPI:
     app.include_router(tasks_router.router)
     app.include_router(meta_router.router)
     app.include_router(pipelines_router.router)
+    app.include_router(sync_router.router)
+    app.include_router(secrets_router.router)
 
     @app.get("/health")
     def health() -> dict:
