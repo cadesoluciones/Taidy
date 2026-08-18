@@ -23,6 +23,7 @@ from ..schemas.tasks import (
     ExtractFactorialRequest,
     ExtractHubspotRequest,
     RunPipelineRequest,
+    SyncApplyRequest,
     SyncBcRequest,
     SyncFactorialRequest,
     SyncHubspotRequest,
@@ -160,6 +161,11 @@ def sync_hubspot(payload: SyncHubspotRequest, current: CurrentUser = Depends(get
 @router.post("/run-pipeline", response_model=TaskOut)
 def run_pipeline(payload: RunPipelineRequest, current: CurrentUser = Depends(get_current_user)) -> TaskOut:
     return _launch("run_pipeline", payload.model_dump(), current)
+
+
+@router.post("/sync-apply", response_model=TaskOut)
+def sync_apply(payload: SyncApplyRequest, current: CurrentUser = Depends(get_current_user)) -> TaskOut:
+    return _launch("sync_apply", payload.model_dump(), current)
 
 
 @router.get("", response_model=TaskListOut)

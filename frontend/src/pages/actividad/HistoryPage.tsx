@@ -141,6 +141,31 @@ export function HistoryPage() {
             description: (
               <>
                 {entry.message}
+                {entry.details && entry.details.length > 0 && (
+                  <details className={styles.logDetails}>
+                    <summary>Ver desglose por registro ({entry.details.length})</summary>
+                    <table className={styles.detailsTable}>
+                      <thead>
+                        <tr>
+                          <th>Clave</th>
+                          <th>Tipo</th>
+                          <th>Resultado</th>
+                          <th>Detalle</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {entry.details.map((d, di) => (
+                          <tr key={`${d.kind}-${d.key}-${di}`}>
+                            <td>{d.key}</td>
+                            <td>{d.kind}</td>
+                            <td>{d.outcome}</td>
+                            <td>{d.detail}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </details>
+                )}
                 {entry.log && (
                   <details className={styles.logDetails}>
                     <summary>Ver log</summary>

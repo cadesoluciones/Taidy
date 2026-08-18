@@ -23,7 +23,7 @@ import sys
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import yaml
 
@@ -231,6 +231,27 @@ def build_run_pipeline_argv(
 
 
 # --------------------------------------------------------------------------------------
+# argv builder — Sincronización (src/sync_engine/cli.py)
+# --------------------------------------------------------------------------------------
+
+
+def build_sync_apply_argv(
+    *,
+    mapping: str,
+    direction: str,
+    keys: Optional[Sequence[str]] = None,
+    confirm_large_batch: bool = False,
+    verbose: bool = False,
+) -> List[str]:
+    argv: List[str] = ["--mapping", mapping, "--direction", direction]
+    for key in keys or []:
+        argv.extend(["--key", key])
+    _flag(argv, "--confirm-large-batch", confirm_large_batch)
+    _flag(argv, "--verbose", verbose)
+    return argv
+
+
+# --------------------------------------------------------------------------------------
 # Per-table/per-file status, reconstructed from the captured log text.
 #
 # The backend doesn't return structured per-table results (run_exports/run_extract
@@ -357,6 +378,39 @@ def parse_upload_files(log: str) -> List[TableStatus]:
     for name in dict.fromkeys(_UPLOAD_DRYRUN_RE.findall(log)):
         statuses.append(TableStatus(name=name, status=_STATUS_DRY_RUN, detail="simulación"))
     return statuses
+
+
+@dataclass
+class SyncApplyRecordStatus:
+    """Per-record outcome for a sync_apply run, reconstructed from
+    src/sync_engine/cli.py's fixed log line format."""
+
+    key: str
+    kind: str
+    outcome: str  # created | updated | skipped | failed
+    detail: str = ""
+
+
+_SYNC_APPLY_RECORD_RE = re.compile(r"^\[(?P<kind>\w+)\] key='(?P<key>[^']*)' -> (?P<outcome>\w+)(?::\s(?P<detail>.*))?$")
+
+
+def parse_sync_apply_records(log: str) -> List[SyncApplyRecordStatus]:
+    """One entry per record, from src/sync_engine/cli.py's
+    "[kind] key=%r -> outcome[: detail]" lines. If the same (kind, key) pair
+    appears more than once, the last occurrence wins."""
+    by_key: Dict[Tuple[str, str], SyncApplyRecordStatus] = {}
+    for line in log.splitlines():
+        match = _SYNC_APPLY_RECORD_RE.match(line.strip())
+        if not match:
+            continue
+        status = SyncApplyRecordStatus(
+            key=match.group("key"),
+            kind=match.group("kind"),
+            outcome=match.group("outcome"),
+            detail=match.group("detail") or "",
+        )
+        by_key[(status.kind, status.key)] = status
+    return list(by_key.values())
 
 
 def merge_sync_statuses(

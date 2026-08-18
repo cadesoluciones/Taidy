@@ -171,3 +171,19 @@ export interface RunPipelineInput {
 export function runPipeline(input: RunPipelineInput): Promise<Task> {
   return apiPost<Task>("/tasks/run-pipeline", input);
 }
+
+export type SyncApplyDirection = "to_target" | "to_source" | "both";
+
+export interface SyncApplyInput {
+  mapping: string;
+  direction: SyncApplyDirection;
+  // Matching-key values (e.g. emails) to restrict this run to -- omit/undefined
+  // means every pending action.
+  keys?: string[];
+  confirm_large_batch?: boolean;
+  verbose?: boolean;
+  notify?: boolean;
+}
+export function syncApply(input: SyncApplyInput): Promise<Task> {
+  return apiPost<Task>("/tasks/sync-apply", input);
+}

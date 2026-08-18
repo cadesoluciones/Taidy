@@ -41,6 +41,7 @@ MODULE_FOR_ACTION = {
     "extract_hubspot": "src.hubspot_main",
     "upload_hubspot": "src.hubspot_client.push",
     "run_pipeline": "src.fabric_pipelines.cli",
+    "sync_apply": "src.sync_engine.cli",
 }
 
 ACTION_LABELS = {
@@ -54,6 +55,7 @@ ACTION_LABELS = {
     "upload_hubspot": "HubSpot · Subir",
     "sync_hubspot": "HubSpot · Sync (extraer + subir)",
     "run_pipeline": "Fabric · Ejecutar pipeline",
+    "sync_apply": "Sincronización · Aplicar",
 }
 
 # Actions that touch the same CSV/checkpoint files and must not run concurrently.
@@ -74,15 +76,16 @@ _MAX_FINISHED_IN_MEMORY = 50
 
 
 def task_action_label(task: "Task") -> str:
-    """ACTION_LABELS' generic label is ambiguous for run_pipeline -- several
-    different pipelines all show up as just "Fabric · Ejecutar pipeline"
-    otherwise. resource_key already carries the pipeline name (see launch()'s
-    f"run_pipeline:{pipeline}"), so pull it back out instead of threading a
-    separate field through Task/TaskOut."""
+    """ACTION_LABELS' generic label is ambiguous for run_pipeline/sync_apply --
+    several different pipelines or mappings all show up as just "Fabric ·
+    Ejecutar pipeline" / "Sincronización · Aplicar" otherwise. resource_key
+    already carries the pipeline/mapping name (see launch()'s
+    f"run_pipeline:{pipeline}" / f"sync_apply:{mapping}"), so pull it back
+    out instead of threading a separate field through Task/TaskOut."""
     label = ACTION_LABELS.get(task.action, task.action)
-    if task.action == "run_pipeline" and ":" in task.resource_key:
-        pipeline = task.resource_key.split(":", 1)[1]
-        return f"{label} ({pipeline})"
+    if task.action in ("run_pipeline", "sync_apply") and ":" in task.resource_key:
+        name = task.resource_key.split(":", 1)[1]
+        return f"{label} ({name})"
     return label
 
 
@@ -147,6 +150,10 @@ class Task:
             extract_statuses = parsers[self.action](self.expected_tables, log_text, finished=finished)
             upload_statuses = adapter.parse_upload_files(log_text)
             return adapter.merge_sync_statuses(extract_statuses, upload_statuses)
+        # sync_apply has no per-table breakdown (TableStatus doesn't fit its
+        # per-record shape) -- like run_pipeline, live progress during the
+        # run is log_tail(); the structured per-record breakdown is recorded
+        # into Historial's `details` field at the end (see _finalize()).
         return []
 
 
@@ -179,10 +186,11 @@ def _register(task: Task) -> None:
 
 def conflicting_task_running(action: str, resource_key: Optional[str] = None) -> Optional[Task]:
     """Two tasks conflict if they'd touch the same files (grouped by action) — except
-    run_pipeline, where only the SAME pipeline (by resource_key) conflicts with itself;
-    two different pipelines don't touch anything of each other's and may run together.
+    run_pipeline and sync_apply, where only the SAME resource (pipeline name,
+    mapping name) conflicts with itself; two different pipelines/mappings
+    don't touch anything of each other's and may run together.
     """
-    if action == "run_pipeline":
+    if action in ("run_pipeline", "sync_apply"):
         key = resource_key or action
         with _REGISTRY_LOCK:
             for t in _REGISTRY.values():
@@ -243,6 +251,9 @@ def _finalize(task: Task, return_code: int) -> None:
         message = "Detenida por el usuario."
     else:
         message = f"Terminó con código de salida {return_code}. Revisa el log."
+    details = None
+    if task.action == "sync_apply":
+        details = [vars(r) for r in adapter.parse_sync_apply_records(task.log())]
     history.record_run(
         action=task.action,
         source=task.triggered_by,
@@ -251,6 +262,7 @@ def _finalize(task: Task, return_code: int) -> None:
         message=message,
         log=task.log(),
         duration_seconds=task.duration_seconds(),
+        details=details,
     )
     if task.notify:
         notifications.notify_task_finished(
@@ -436,6 +448,20 @@ def launch(action: str, params: dict, triggered_by: str) -> Task:
             argv=argv,
             triggered_by=triggered_by,
             resource_key=f"run_pipeline:{params['pipeline']}",
+            notify=notify,
+        )
+
+    if action == "sync_apply":
+        if not params.get("mapping"):
+            raise ValueError("Indica qué mapeo aplicar.")
+        if not params.get("direction"):
+            raise ValueError("Indica la dirección de sincronización.")
+        argv = adapter.build_sync_apply_argv(**params)
+        return start_task(
+            action=action,
+            argv=argv,
+            triggered_by=triggered_by,
+            resource_key=f"sync_apply:{params['mapping']}",
             notify=notify,
         )
 

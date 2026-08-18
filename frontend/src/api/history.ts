@@ -1,5 +1,12 @@
 import { apiGet, apiUrl, buildQuery } from "./client";
 
+export interface SyncApplyRecordDetail {
+  key: string;
+  kind: string;
+  outcome: "created" | "updated" | "skipped" | "failed";
+  detail: string;
+}
+
 export interface HistoryEntry {
   action: string;
   source: string;
@@ -9,6 +16,9 @@ export interface HistoryEntry {
   duration_seconds: number | null;
   finished_at: string;
   log: string;
+  // Only present for actions with a per-record breakdown (currently
+  // sync_apply) -- absent/null for every other action's entries.
+  details: SyncApplyRecordDetail[] | null;
 }
 
 export interface HistoryPage {

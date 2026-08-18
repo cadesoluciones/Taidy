@@ -12,7 +12,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from webapp.state_dir import state_path
 
@@ -46,6 +46,7 @@ def record_run(
     message: str,
     log: str,
     duration_seconds: Optional[float] = None,
+    details: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
     entry = {
         "id": uuid.uuid4().hex,
@@ -57,6 +58,7 @@ def record_run(
         "duration_seconds": round(duration_seconds, 1) if duration_seconds is not None else None,
         "finished_at": datetime.now(timezone.utc).isoformat(),
         "log": log[-_MAX_LOG_CHARS:],
+        "details": details,
     }
     with _LOCK:
         data = _read()

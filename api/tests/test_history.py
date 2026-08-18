@@ -29,6 +29,28 @@ def test_history_filters_by_result(isolated_state, client):
     assert body["items"][0]["action"] == "sync_factorial"
 
 
+def test_history_entry_carries_the_per_record_details_when_present(isolated_state, client):
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+
+    history.record_run(action="extract_bc", source="admin", status="ok", ok=True, message="sin desglose", log="")
+    history.record_run(
+        action="sync_apply",
+        source="admin",
+        status="ok",
+        ok=True,
+        message="con desglose",
+        log="",
+        details=[{"key": "a@x.com", "kind": "create_target", "outcome": "created", "detail": ""}],
+    )
+
+    items = {i["message"]: i for i in client.get("/history").json()["items"]}
+    assert items["sin desglose"]["details"] is None
+    assert items["con desglose"]["details"] == [
+        {"key": "a@x.com", "kind": "create_target", "outcome": "created", "detail": ""}
+    ]
+
+
 def test_history_pagination(isolated_state, client):
     make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
     _login(client, "reader1", "ReaderPass2026!")

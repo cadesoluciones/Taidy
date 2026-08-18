@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
@@ -15,6 +15,9 @@ class HistoryEntryOut(BaseModel):
     duration_seconds: Optional[float] = None
     finished_at: str
     log: str
+    # Only populated for actions with a per-record breakdown (currently
+    # sync_apply) -- absent/None for every other action's entries.
+    details: Optional[List[Dict[str, Any]]] = None
 
 
 class HistoryPageOut(BaseModel):

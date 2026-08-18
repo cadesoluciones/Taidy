@@ -79,6 +79,42 @@ def test_run_pipeline_action_label_names_the_pipeline(isolated_state, client, fa
     assert "fake output" in detail["log_tail"]
 
 
+def test_sync_apply_action_label_names_the_mapping(isolated_state, client, fake_subprocess):
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.post("/tasks/sync-apply", json={"mapping": "bc_contact_a_hubspot", "direction": "both"})
+    assert resp.status_code == 200
+    assert resp.json()["action_label"] == "Sincronización · Aplicar (bc_contact_a_hubspot)"
+
+    task_id = resp.json()["id"]
+    _wait_until_finished(task_id)
+    detail = client.get(f"/tasks/{task_id}").json()
+    assert detail["table_statuses"] == []
+    assert "fake output" in detail["log_tail"]
+
+
+def test_sync_apply_requires_mapping_and_direction(isolated_state, client, fake_subprocess):
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    # Matches the existing convention for launch()-level ValueErrors (e.g.
+    # run_pipeline's "Indica qué pipeline lanzar.") -- _launch() maps them
+    # to 409, not 400.
+    resp = client.post("/tasks/sync-apply", json={"mapping": "", "direction": "both"})
+    assert resp.status_code == 409
+
+
+def test_two_sync_apply_runs_on_different_mappings_do_not_conflict(isolated_state, client, fake_subprocess):
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    first = client.post("/tasks/sync-apply", json={"mapping": "m1", "direction": "both"})
+    second = client.post("/tasks/sync-apply", json={"mapping": "m2", "direction": "both"})
+    assert first.status_code == 200
+    assert second.status_code == 200
+
+
 def test_task_list_filters_by_action(isolated_state, client, fake_subprocess):
     make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
     _login(client, "operator1", "OperatorPass2026!")

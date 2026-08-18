@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -109,6 +109,17 @@ class RunPipelineRequest(BaseModel):
     pipeline: str
     wait: bool = True
     poll_seconds: int = 15
+    verbose: bool = False
+    notify: bool = False
+
+
+class SyncApplyRequest(BaseModel):
+    mapping: str
+    direction: Literal["to_target", "to_source", "both"]
+    # Matching-key values (e.g. emails) to restrict this run to -- None/absent
+    # means every pending action, an empty list means nothing to do.
+    keys: Optional[List[str]] = None
+    confirm_large_batch: bool = False
     verbose: bool = False
     notify: bool = False
 
