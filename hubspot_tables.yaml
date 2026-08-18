@@ -1,41 +1,41 @@
 tables:
-  - name: hubspot_contacts
-    description: HubSpot CRM contacts
-    object_type: contacts
-    fields:
-      - hs_object_id
-      - email
-      - firstname
-      - lastname
-      - phone
-      - jobtitle
-      - lifecyclestage
-      - createdate
-      - lastmodifieddate
-
-  - name: hubspot_companies
-    description: HubSpot CRM companies
-    object_type: companies
-    fields:
-      - hs_object_id
-      - name
-      - domain
-      - industry
-      - phone
-      - city
-      - country
-      - createdate
-      - hs_lastmodifieddate
-
-  - name: hubspot_deals
-    description: HubSpot CRM deals (oportunidades)
-    object_type: deals
-    fields:
-      - hs_object_id
-      - dealname
-      - amount
-      - dealstage
-      - pipeline
-      - closedate
-      - createdate
-      - hs_lastmodifieddate
+- name: hubspot_contacts
+  description: HubSpot CRM contacts
+  object_type: contacts
+  fields:
+  - hs_object_id
+  - email
+  - firstname
+  - lastname
+  - phone
+  - jobtitle
+  - lifecyclestage
+  - createdate
+  - lastmodifieddate
+  - id_businesscentral
+- name: hubspot_companies
+  description: HubSpot CRM companies
+  object_type: companies
+  fields:
+  - hs_object_id
+  - name
+  - domain
+  - industry
+  - phone
+  - city
+  - country
+  - createdate
+  - hs_lastmodifieddate
+  - id_businesscentral
+- name: hubspot_deals
+  description: HubSpot CRM deals (oportunidades)
+  object_type: deals
+  fields:
+  - hs_object_id
+  - dealname
+  - amount
+  - dealstage
+  - pipeline
+  - closedate
+  - createdate
+  - hs_lastmodifieddate

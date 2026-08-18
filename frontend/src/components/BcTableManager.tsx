@@ -28,7 +28,10 @@ export function BcTableManager() {
     remove: deleteBcTable,
     emptyForm: EMPTY_FORM,
     itemToForm: (t) => ({ name: t.name, url: t.url, description: t.description, incremental: t.incremental }),
-    formToInput: (f) => ({ input: { url: f.url, description: f.description, incremental: f.incremental } }),
+    formToInput: (f) => {
+      if (!f.name.trim()) return { error: "La tabla necesita un nombre." };
+      return { input: { name: f.name.trim(), url: f.url, description: f.description, incremental: f.incremental } };
+    },
   });
 
   return (
@@ -62,9 +65,13 @@ export function BcTableManager() {
               id="new_bc_table_name"
               type="text"
               value={mgr.form.name}
-              disabled={!!mgr.editingName}
               onChange={(e) => mgr.setForm((f) => ({ ...f, name: e.target.value }))}
             />
+            {mgr.editingName && (
+              <p className={formStyles.hint}>
+                Cambiar el nombre no actualiza tareas programadas que ya la seleccionen por su nombre anterior.
+              </p>
+            )}
           </div>
           <div className={formStyles.field}>
             <label htmlFor="new_bc_table_url">URL de OData</label>

@@ -3,12 +3,15 @@ import { Pencil, Plus, Trash2, X } from "lucide-react";
 import {
   createFactorialTable,
   deleteFactorialTable,
+  fetchFactorialAvailableFields,
   fetchFactorialTablesFull,
   updateFactorialTable,
   type FactorialTableConfig,
   type UpdateFactorialTableInput,
 } from "../api/meta";
 import { useTableManager } from "../hooks/useTableManager";
+import { appendField } from "../utils/fields";
+import { AvailablePropertiesPicker } from "./AvailablePropertiesPicker";
 import { ConfirmDialog } from "./ConfirmDialog";
 import formStyles from "./Form.module.css";
 import styles from "./TableManager.module.css";
@@ -65,11 +68,15 @@ export function FactorialTableManager() {
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean);
+      if (!f.name.trim()) {
+        return { error: "La tabla necesita un nombre." };
+      }
       if (fields.length === 0) {
         return { error: "Indica al menos un campo que devuelve la API (separados por comas)." };
       }
       return {
         input: {
+          name: f.name.trim(),
           path: f.path,
           fields,
           description: f.description,
@@ -114,9 +121,13 @@ export function FactorialTableManager() {
               id="new_fac_table_name"
               type="text"
               value={mgr.form.name}
-              disabled={!!mgr.editingName}
               onChange={(e) => mgr.setForm((f) => ({ ...f, name: e.target.value }))}
             />
+            {mgr.editingName && (
+              <p className={formStyles.hint}>
+                Cambiar el nombre no actualiza tareas programadas que ya la seleccionen por su nombre anterior.
+              </p>
+            )}
           </div>
           <div className={formStyles.field}>
             <label htmlFor="new_fac_table_path">Ruta de la API (ej. resources/employees/employees)</label>
@@ -136,6 +147,16 @@ export function FactorialTableManager() {
               onChange={(e) => mgr.setForm((f) => ({ ...f, fieldsRaw: e.target.value }))}
               placeholder="id, email, active"
             />
+            <AvailablePropertiesPicker
+              disabled={!mgr.form.path.trim()}
+              disabledHint="Escribe primero la ruta de la API de Factorial."
+              fetchProperties={() => fetchFactorialAvailableFields(mgr.form.path.trim(), mgr.form.dateRange)}
+              onPick={(name) => mgr.setForm((f) => ({ ...f, fieldsRaw: appendField(f.fieldsRaw, name) }))}
+            />
+            <p className={formStyles.hint}>
+              Factorial no tiene un catálogo de campos -- esto muestra los campos vistos en una muestra reciente de
+              datos reales, así que puede no incluir campos poco comunes.
+            </p>
           </div>
           <div className={formStyles.field}>
             <label htmlFor="new_fac_table_desc">Descripción (opcional)</label>

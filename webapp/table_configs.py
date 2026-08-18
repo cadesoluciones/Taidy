@@ -76,14 +76,23 @@ def add_bc_table(name: str, url: str, *, description: str = "", incremental: boo
     return entry
 
 
-def update_bc_table(name: str, url: str, *, description: str = "", incremental: bool = False) -> dict:
+def update_bc_table(
+    name: str, url: str, *, description: str = "", incremental: bool = False, new_name: Optional[str] = None
+) -> dict:
     url = url.strip()
     if not url:
         raise ValueError("La tabla necesita una URL de OData.")
+    final_name = (new_name or name).strip()
+    if not final_name:
+        raise ValueError("La tabla necesita un nombre.")
 
     tables = _read(_BC_TABLES_PATH)
+    if final_name != name and any(t.get("name") == final_name for t in tables):
+        raise ValueError(f"Ya existe una tabla de Business Central llamada '{final_name}'.")
+
     for t in tables:
         if t.get("name") == name:
+            t["name"] = final_name
             t["url"] = url
             t["description"] = description.strip()
             t["incremental"] = bool(incremental)
@@ -195,17 +204,25 @@ def update_factorial_table(
     incremental: bool = False,
     overlap_days: Optional[int] = None,
     chunk_days: Optional[int] = None,
+    new_name: Optional[str] = None,
 ) -> dict:
     path = path.strip()
     clean_fields = [f.strip() for f in fields if f.strip()]
+    final_name = (new_name or name).strip()
+    if not final_name:
+        raise ValueError("La tabla necesita un nombre.")
     if not path:
         raise ValueError("La tabla necesita una ruta de la API de Factorial.")
     if not clean_fields:
         raise ValueError("Indica al menos un campo que devuelve la API.")
 
     tables = _read(_FACTORIAL_TABLES_PATH)
+    if final_name != name and any(t.get("name") == final_name for t in tables):
+        raise ValueError(f"Ya existe una tabla de Factorial llamada '{final_name}'.")
+
     for t in tables:
         if t.get("name") == name:
+            t["name"] = final_name
             t["path"] = path
             t["description"] = description.strip()
             t["date_range"] = bool(date_range)
@@ -276,17 +293,25 @@ def update_hubspot_table(
     fields: List[str],
     *,
     description: str = "",
+    new_name: Optional[str] = None,
 ) -> dict:
     object_type = object_type.strip()
     clean_fields = [f.strip() for f in fields if f.strip()]
+    final_name = (new_name or name).strip()
+    if not final_name:
+        raise ValueError("El objeto necesita un nombre.")
     if not object_type:
         raise ValueError("El objeto necesita un tipo de objeto de HubSpot (ej. contacts, companies, deals).")
     if not clean_fields:
         raise ValueError("Indica al menos una propiedad a extraer.")
 
     tables = _read(_HUBSPOT_TABLES_PATH)
+    if final_name != name and any(t.get("name") == final_name for t in tables):
+        raise ValueError(f"Ya existe un objeto de HubSpot llamado '{final_name}'.")
+
     for t in tables:
         if t.get("name") == name:
+            t["name"] = final_name
             t["object_type"] = object_type
             t["description"] = description.strip()
             t["fields"] = clean_fields

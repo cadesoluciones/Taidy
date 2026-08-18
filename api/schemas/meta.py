@@ -33,6 +33,7 @@ class CreateBcTableRequest(BaseModel):
 
 
 class UpdateBcTableRequest(BaseModel):
+    name: str
     url: str
     description: str = ""
     incremental: bool = False
@@ -67,6 +68,7 @@ class CreateFactorialTableRequest(BaseModel):
 
 
 class UpdateFactorialTableRequest(BaseModel):
+    name: str
     path: str
     fields: List[str]
     description: str = ""
@@ -96,6 +98,16 @@ class CreateHubspotTableRequest(BaseModel):
 
 
 class UpdateHubspotTableRequest(BaseModel):
+    name: str
     object_type: str
     fields: List[str]
     description: str = ""
+
+
+class AvailableProperty(BaseModel):
+    name: str
+    label: str = ""
+
+
+class AvailablePropertiesOut(BaseModel):
+    items: List[AvailableProperty]

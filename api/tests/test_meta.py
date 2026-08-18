@@ -56,7 +56,7 @@ def test_admin_can_update_bc_table(isolated_state, client):
 
     updated = client.patch(
         "/meta/bc-tables/bc_edit",
-        json={"url": "https://example/odata/New", "description": "desc", "incremental": True},
+        json={"name": "bc_edit", "url": "https://example/odata/New", "description": "desc", "incremental": True},
     )
     assert updated.status_code == 200
     assert updated.json() == {
@@ -71,7 +71,30 @@ def test_admin_can_update_bc_table(isolated_state, client):
 def test_update_bc_table_rejects_unknown_name(isolated_state, client):
     make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
     _login(client, "admin2", "AdminPass2026!")
-    resp = client.patch("/meta/bc-tables/does-not-exist", json={"url": "https://example/odata/X"})
+    resp = client.patch("/meta/bc-tables/does-not-exist", json={"name": "does-not-exist", "url": "https://example/odata/X"})
+    assert resp.status_code == 400
+
+
+def test_admin_can_rename_bc_table(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    client.post("/meta/bc-tables", json={"name": "bc_old_name", "url": "https://example/odata/X"})
+
+    resp = client.patch(
+        "/meta/bc-tables/bc_old_name", json={"name": "bc_new_name", "url": "https://example/odata/X"}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "bc_new_name"
+    assert client.get("/meta/bc-tables").json()["items"] == ["bc_new_name"]
+
+
+def test_rename_bc_table_rejects_collision_with_another_table(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    client.post("/meta/bc-tables", json={"name": "bc_first", "url": "https://example/odata/A"})
+    client.post("/meta/bc-tables", json={"name": "bc_second", "url": "https://example/odata/B"})
+
+    resp = client.patch("/meta/bc-tables/bc_first", json={"name": "bc_second", "url": "https://example/odata/A"})
     assert resp.status_code == 400
 
 
@@ -136,7 +159,13 @@ def test_admin_can_update_factorial_table(isolated_state, client):
 
     updated = client.patch(
         "/meta/factorial-tables/factorial_edit",
-        json={"path": "resources/new", "fields": ["id", "name"], "incremental": True, "overlap_days": 3},
+        json={
+            "name": "factorial_edit",
+            "path": "resources/new",
+            "fields": ["id", "name"],
+            "incremental": True,
+            "overlap_days": 3,
+        },
     )
     assert updated.status_code == 200
     body = updated.json()
@@ -149,7 +178,34 @@ def test_update_factorial_table_rejects_unknown_name(isolated_state, client):
     make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
     _login(client, "admin2", "AdminPass2026!")
     resp = client.patch(
-        "/meta/factorial-tables/does-not-exist", json={"path": "resources/x", "fields": ["id"]}
+        "/meta/factorial-tables/does-not-exist",
+        json={"name": "does-not-exist", "path": "resources/x", "fields": ["id"]},
+    )
+    assert resp.status_code == 400
+
+
+def test_admin_can_rename_factorial_table(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    client.post("/meta/factorial-tables", json={"name": "fac_old_name", "path": "resources/x", "fields": ["id"]})
+
+    resp = client.patch(
+        "/meta/factorial-tables/fac_old_name",
+        json={"name": "fac_new_name", "path": "resources/x", "fields": ["id"]},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "fac_new_name"
+    assert client.get("/meta/factorial-tables").json()["items"] == ["fac_new_name"]
+
+
+def test_rename_factorial_table_rejects_collision_with_another_table(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    client.post("/meta/factorial-tables", json={"name": "fac_first", "path": "resources/a", "fields": ["id"]})
+    client.post("/meta/factorial-tables", json={"name": "fac_second", "path": "resources/b", "fields": ["id"]})
+
+    resp = client.patch(
+        "/meta/factorial-tables/fac_first", json={"name": "fac_second", "path": "resources/a", "fields": ["id"]}
     )
     assert resp.status_code == 400
 
@@ -217,7 +273,7 @@ def test_admin_can_update_hubspot_table(isolated_state, client):
 
     updated = client.patch(
         "/meta/hubspot-tables/hubspot_edit",
-        json={"object_type": "companies", "fields": ["hs_object_id", "name"], "description": "desc"},
+        json={"name": "hubspot_edit", "object_type": "companies", "fields": ["hs_object_id", "name"], "description": "desc"},
     )
     assert updated.status_code == 200
     body = updated.json()
@@ -230,7 +286,34 @@ def test_update_hubspot_table_rejects_unknown_name(isolated_state, client):
     make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
     _login(client, "admin2", "AdminPass2026!")
     resp = client.patch(
-        "/meta/hubspot-tables/does-not-exist", json={"object_type": "deals", "fields": ["hs_object_id"]}
+        "/meta/hubspot-tables/does-not-exist",
+        json={"name": "does-not-exist", "object_type": "deals", "fields": ["hs_object_id"]},
+    )
+    assert resp.status_code == 400
+
+
+def test_admin_can_rename_hubspot_table(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    client.post("/meta/hubspot-tables", json={"name": "hs_old_name", "object_type": "deals", "fields": ["id"]})
+
+    resp = client.patch(
+        "/meta/hubspot-tables/hs_old_name",
+        json={"name": "hs_new_name", "object_type": "deals", "fields": ["id"]},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "hs_new_name"
+    assert client.get("/meta/hubspot-tables").json()["items"] == ["hs_new_name"]
+
+
+def test_rename_hubspot_table_rejects_collision_with_another_table(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    client.post("/meta/hubspot-tables", json={"name": "hs_first", "object_type": "deals", "fields": ["id"]})
+    client.post("/meta/hubspot-tables", json={"name": "hs_second", "object_type": "deals", "fields": ["id"]})
+
+    resp = client.patch(
+        "/meta/hubspot-tables/hs_first", json={"name": "hs_second", "object_type": "deals", "fields": ["id"]}
     )
     assert resp.status_code == 400
 
@@ -267,3 +350,105 @@ def test_operator_cannot_create_or_delete_hubspot_table(isolated_state, client):
         "/meta/hubspot-tables", json={"name": "hubspot_x", "object_type": "deals", "fields": ["id"]}
     ).status_code == 403
     assert client.delete("/meta/hubspot-tables/hubspot_keep").status_code == 403
+
+
+# --------------------------------------------------------------------------------------
+# Live "available properties/fields" discovery helpers -- these hit real
+# HubSpot/Factorial APIs in production, so every test here mocks the client
+# class where the router imports it (a local import inside the endpoint
+# function, so patching the module attribute before the call is enough).
+# --------------------------------------------------------------------------------------
+
+
+def test_hubspot_available_properties_requires_object_type(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    resp = client.get("/meta/hubspot-tables/available-properties", params={"object_type": "  "})
+    assert resp.status_code == 400
+
+
+def test_operator_cannot_call_hubspot_available_properties(isolated_state, client):
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+    resp = client.get("/meta/hubspot-tables/available-properties", params={"object_type": "contacts"})
+    assert resp.status_code == 403
+
+
+def test_admin_can_fetch_hubspot_available_properties(isolated_state, client, monkeypatch):
+    from src.hubspot_client import config as hubspot_config
+
+    class _FakeClient:
+        def __init__(self, settings):
+            self.settings = settings
+
+        def list_properties(self, object_type, *, include_hidden=False):
+            assert object_type == "contacts"
+            assert include_hidden is False
+            return [{"name": "email", "label": "Email"}, {"name": "firstname", "label": "First name"}]
+
+    monkeypatch.setattr(hubspot_config, "load_settings", lambda: object())
+    monkeypatch.setattr("src.hubspot_client.api.HubspotClient", _FakeClient)
+
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    resp = client.get("/meta/hubspot-tables/available-properties", params={"object_type": "contacts"})
+
+    assert resp.status_code == 200
+    assert resp.json()["items"] == [
+        {"name": "email", "label": "Email"},
+        {"name": "firstname", "label": "First name"},
+    ]
+
+
+def test_hubspot_available_properties_maps_client_error_to_400(isolated_state, client, monkeypatch):
+    from src.hubspot_client import config as hubspot_config
+
+    def fake_load_settings():
+        raise ValueError("Missing required environment variables: HUBSPOT_API_KEY")
+
+    monkeypatch.setattr(hubspot_config, "load_settings", fake_load_settings)
+
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    resp = client.get("/meta/hubspot-tables/available-properties", params={"object_type": "contacts"})
+
+    assert resp.status_code == 400
+    assert "HUBSPOT_API_KEY" in resp.json()["detail"]
+
+
+def test_factorial_available_fields_requires_path(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    resp = client.get("/meta/factorial-tables/available-fields", params={"path": ""})
+    assert resp.status_code == 400
+
+
+def test_operator_cannot_call_factorial_available_fields(isolated_state, client):
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+    resp = client.get("/meta/factorial-tables/available-fields", params={"path": "resources/employees/employees"})
+    assert resp.status_code == 403
+
+
+def test_admin_can_fetch_factorial_available_fields(isolated_state, client, monkeypatch):
+    from src.factorial_client import config as factorial_config
+
+    class _FakeClient:
+        def __init__(self, settings):
+            self.settings = settings
+
+        def sample_fields(self, *, path, date_range=False):
+            assert path == "resources/employees/employees"
+            return ["email", "id"]
+
+    monkeypatch.setattr(factorial_config, "load_settings", lambda: object())
+    monkeypatch.setattr("src.factorial_client.api.FactorialClient", _FakeClient)
+
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    resp = client.get(
+        "/meta/factorial-tables/available-fields", params={"path": "resources/employees/employees"}
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["items"] == [{"name": "email", "label": ""}, {"name": "id", "label": ""}]

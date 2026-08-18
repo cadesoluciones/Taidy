@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPatch, apiPost } from "./client";
+import { apiDelete, apiGet, apiPatch, apiPost, buildQuery } from "./client";
 
 export function fetchBcTables(): Promise<{ items: string[] }> {
   return apiGet<{ items: string[] }>("/meta/bc-tables");
@@ -38,7 +38,7 @@ export function createHubspotTable(input: CreateHubspotTableInput): Promise<Hubs
   return apiPost<HubspotTableConfig>("/meta/hubspot-tables", input);
 }
 
-export type UpdateHubspotTableInput = Omit<CreateHubspotTableInput, "name">;
+export type UpdateHubspotTableInput = CreateHubspotTableInput;
 
 export function updateHubspotTable(name: string, input: UpdateHubspotTableInput): Promise<HubspotTableConfig> {
   return apiPatch<HubspotTableConfig>(`/meta/hubspot-tables/${encodeURIComponent(name)}`, input);
@@ -46,6 +46,24 @@ export function updateHubspotTable(name: string, input: UpdateHubspotTableInput)
 
 export function deleteHubspotTable(name: string): Promise<void> {
   return apiDelete<void>(`/meta/hubspot-tables/${encodeURIComponent(name)}`);
+}
+
+export interface AvailableProperty {
+  name: string;
+  label: string;
+}
+
+/** Live "what can I extract?" discovery, used by the admin UI's available-
+ * properties picker -- takes the object type currently typed in the form,
+ * not a saved table name, so it works before the table entry even exists.
+ * Hidden/calculated HubSpot properties are excluded unless includeHidden. */
+export function fetchHubspotAvailableProperties(
+  objectType: string,
+  includeHidden = false
+): Promise<{ items: AvailableProperty[] }> {
+  return apiGet<{ items: AvailableProperty[] }>(
+    `/meta/hubspot-tables/available-properties${buildQuery({ object_type: objectType, include_hidden: includeHidden })}`
+  );
 }
 
 export interface BcTableConfig {
@@ -70,7 +88,7 @@ export function createBcTable(input: CreateBcTableInput): Promise<BcTableConfig>
   return apiPost<BcTableConfig>("/meta/bc-tables", input);
 }
 
-export type UpdateBcTableInput = Omit<CreateBcTableInput, "name">;
+export type UpdateBcTableInput = CreateBcTableInput;
 
 export function updateBcTable(name: string, input: UpdateBcTableInput): Promise<BcTableConfig> {
   return apiPatch<BcTableConfig>(`/meta/bc-tables/${encodeURIComponent(name)}`, input);
@@ -119,7 +137,7 @@ export function createFactorialTable(input: CreateFactorialTableInput): Promise<
   return apiPost<FactorialTableConfig>("/meta/factorial-tables", input);
 }
 
-export type UpdateFactorialTableInput = Omit<CreateFactorialTableInput, "name">;
+export type UpdateFactorialTableInput = CreateFactorialTableInput;
 
 export function updateFactorialTable(name: string, input: UpdateFactorialTableInput): Promise<FactorialTableConfig> {
   return apiPatch<FactorialTableConfig>(`/meta/factorial-tables/${encodeURIComponent(name)}`, input);
@@ -127,4 +145,13 @@ export function updateFactorialTable(name: string, input: UpdateFactorialTableIn
 
 export function deleteFactorialTable(name: string): Promise<void> {
   return apiDelete<void>(`/meta/factorial-tables/${encodeURIComponent(name)}`);
+}
+
+/** Live "peek" at a Factorial endpoint's real data to suggest field names --
+ * Factorial has no schema/properties endpoint like HubSpot's, so results
+ * come from sampling actual records and may miss rarely-populated fields. */
+export function fetchFactorialAvailableFields(path: string, dateRange = false): Promise<{ items: AvailableProperty[] }> {
+  return apiGet<{ items: AvailableProperty[] }>(
+    `/meta/factorial-tables/available-fields${buildQuery({ path, date_range: dateRange })}`
+  );
 }

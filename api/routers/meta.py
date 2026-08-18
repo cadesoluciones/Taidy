@@ -16,6 +16,8 @@ from webapp.users_db import ROLE_ADMIN
 
 from ..dependencies import get_current_user, require_role
 from ..schemas.meta import (
+    AvailableProperty,
+    AvailablePropertiesOut,
     BcTableListOut,
     BcTableOut,
     CreateBcTableRequest,
@@ -75,7 +77,11 @@ def create_bc_table(payload: CreateBcTableRequest) -> BcTableOut:
 def update_bc_table(name: str, payload: UpdateBcTableRequest) -> BcTableOut:
     try:
         entry = table_configs.update_bc_table(
-            name, payload.url, description=payload.description, incremental=payload.incremental
+            name,
+            payload.url,
+            description=payload.description,
+            incremental=payload.incremental,
+            new_name=payload.name,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
@@ -135,6 +141,7 @@ def update_factorial_table(name: str, payload: UpdateFactorialTableRequest) -> F
             incremental=payload.incremental,
             overlap_days=payload.overlap_days,
             chunk_days=payload.chunk_days,
+            new_name=payload.name,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
@@ -148,6 +155,36 @@ def update_factorial_table(name: str, payload: UpdateFactorialTableRequest) -> F
 )
 def delete_factorial_table(name: str) -> None:
     table_configs.delete_factorial_table(name)
+
+
+@router.get(
+    "/factorial-tables/available-fields",
+    response_model=AvailablePropertiesOut,
+    dependencies=[Depends(require_role(ROLE_ADMIN))],
+)
+def factorial_available_fields(path: str, date_range: bool = False) -> AvailablePropertiesOut:
+    """Live "peek" at a Factorial endpoint to help pick which fields to keep
+    when registering a table -- Factorial has no schema/properties endpoint,
+    so this samples real data and returns the field names actually seen
+    (see FactorialClient.sample_fields)."""
+    from dotenv import load_dotenv
+
+    from src.factorial_client.api import FactorialClient, FactorialError
+    from src.factorial_client.config import load_settings as load_factorial_settings
+
+    load_dotenv()
+    path = path.strip()
+    if not path:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Indica la ruta de la API de Factorial.")
+
+    try:
+        settings = load_factorial_settings()
+        client = FactorialClient(settings=settings)
+        names = client.sample_fields(path=path, date_range=date_range)
+    except (ValueError, FactorialError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    return AvailablePropertiesOut(items=[AvailableProperty(name=n) for n in names])
 
 
 @router.get("/hubspot-tables/full", response_model=HubspotTableListOut)
@@ -172,7 +209,7 @@ def create_hubspot_table(payload: CreateHubspotTableRequest) -> HubspotTableOut:
 def update_hubspot_table(name: str, payload: UpdateHubspotTableRequest) -> HubspotTableOut:
     try:
         entry = table_configs.update_hubspot_table(
-            name, payload.object_type, payload.fields, description=payload.description
+            name, payload.object_type, payload.fields, description=payload.description, new_name=payload.name
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
@@ -186,3 +223,33 @@ def update_hubspot_table(name: str, payload: UpdateHubspotTableRequest) -> Hubsp
 )
 def delete_hubspot_table(name: str) -> None:
     table_configs.delete_hubspot_table(name)
+
+
+@router.get(
+    "/hubspot-tables/available-properties",
+    response_model=AvailablePropertiesOut,
+    dependencies=[Depends(require_role(ROLE_ADMIN))],
+)
+def hubspot_available_properties(object_type: str, include_hidden: bool = False) -> AvailablePropertiesOut:
+    """Live discovery of every property HubSpot exposes for a CRM object
+    type, to help pick which ones to keep when registering a table (see
+    HubspotClient.list_properties). Takes a raw object_type, not a saved
+    table name, so it works even before the table entry exists."""
+    from dotenv import load_dotenv
+
+    from src.hubspot_client.api import HubspotClient, HubspotError
+    from src.hubspot_client.config import load_settings as load_hubspot_settings
+
+    load_dotenv()
+    object_type = object_type.strip()
+    if not object_type:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Indica el tipo de objeto de HubSpot.")
+
+    try:
+        settings = load_hubspot_settings()
+        client = HubspotClient(settings=settings)
+        properties = client.list_properties(object_type, include_hidden=include_hidden)
+    except (ValueError, HubspotError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    return AvailablePropertiesOut(items=[AvailableProperty(name=p["name"], label=p["label"]) for p in properties])

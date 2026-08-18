@@ -1,0 +1,93 @@
+.wrap {
+  margin: 6px 0 var(--space-3);
+}
+
+.toggleBtn {
+  font-size: 12px;
+  padding: 5px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  cursor: pointer;
+}
+
+.toggleBtn:hover:not(:disabled) {
+  background: var(--color-bg-soft);
+}
+
+.toggleBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.panel {
+  margin-top: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-soft);
+  padding: var(--space-2);
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: 6px;
+}
+
+.search {
+  flex: 1;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.hiddenToggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.emptyHint {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  padding: 4px;
+}
+
+.propertyRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 5px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.propertyRow:hover {
+  background: var(--color-bg);
+}
+
+.propertyName {
+  font-weight: 600;
+  font-family: var(--font-mono, monospace);
+}
+
+.propertyLabel {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}

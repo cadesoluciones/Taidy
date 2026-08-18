@@ -29,6 +29,12 @@ from ..utils import get_logger
 
 logger = get_logger(__name__)
 
+# How many records to inspect when peeking at a live sample to discover field
+# names (sample_fields) -- enough to catch fields that don't appear on every
+# single record, without turning a "just show me the fields" click into a
+# full extraction.
+_SAMPLE_SIZE = 20
+
 
 # --------------------------------------------------------------------------------------
 # Custom Exception
@@ -220,6 +226,34 @@ class FactorialClient:
             )
             for table in self._settings.tables
         }
+
+    def sample_fields(self, *, path: str, date_range: bool = False, version: str = "") -> List[str]:
+        """Live discovery of the field names a Factorial endpoint actually
+        returns, for the admin UI's "available fields" helper. Factorial has
+        no schema/properties endpoint like HubSpot's, so this is a
+        best-effort peek: fetch one small page of real data and return the
+        union of keys seen across up to _SAMPLE_SIZE records. It's meant to
+        help pick fields when registering a new table, not a source of
+        truth -- a field that's null/absent on every sampled record (or one
+        that only appears once employee_ids are supplied, which this call
+        never has) can be missed and would still need typing in by hand.
+        """
+        url = f"{self._settings.base_url}/{version or self._settings.api_version}/{path}"
+        params: List[tuple] = []
+        if date_range:
+            today = date.today().isoformat()
+            params += [("start_on", today), ("end_on", today)]
+
+        payload = self._fetch(url, params)
+        raw = payload.get("data", [])
+        if not isinstance(raw, list):
+            raise FactorialError(f"Unexpected response from {url}: 'data' should be a list")
+
+        keys: set = set()
+        for record in raw[:_SAMPLE_SIZE]:
+            if isinstance(record, dict):
+                keys.update(record.keys())
+        return sorted(keys)
 
     # ----------------------------------------------------------------------------------
     # Internal helpers

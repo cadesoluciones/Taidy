@@ -3,12 +3,15 @@ import { Pencil, Plus, Trash2, X } from "lucide-react";
 import {
   createHubspotTable,
   deleteHubspotTable,
+  fetchHubspotAvailableProperties,
   fetchHubspotTablesFull,
   updateHubspotTable,
   type HubspotTableConfig,
   type UpdateHubspotTableInput,
 } from "../api/meta";
 import { useTableManager } from "../hooks/useTableManager";
+import { appendField } from "../utils/fields";
+import { AvailablePropertiesPicker } from "./AvailablePropertiesPicker";
 import { ConfirmDialog } from "./ConfirmDialog";
 import formStyles from "./Form.module.css";
 import styles from "./TableManager.module.css";
@@ -52,6 +55,9 @@ export function HubspotTableManager() {
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean);
+      if (!f.name.trim()) {
+        return { error: "El objeto necesita un nombre." };
+      }
       if (!f.objectType.trim()) {
         return { error: "Indica el tipo de objeto de HubSpot (ej. contacts, companies, deals)." };
       }
@@ -60,6 +66,7 @@ export function HubspotTableManager() {
       }
       return {
         input: {
+          name: f.name.trim(),
           object_type: f.objectType.trim(),
           fields,
           description: f.description,
@@ -99,10 +106,14 @@ export function HubspotTableManager() {
               id="new_hs_table_name"
               type="text"
               value={mgr.form.name}
-              disabled={!!mgr.editingName}
               onChange={(e) => mgr.setForm((f) => ({ ...f, name: e.target.value }))}
               placeholder="hubspot_tickets"
             />
+            {mgr.editingName && (
+              <p className={formStyles.hint}>
+                Cambiar el nombre no actualiza tareas programadas que ya lo seleccionen por su nombre anterior.
+              </p>
+            )}
           </div>
           <div className={formStyles.field}>
             <label htmlFor="new_hs_table_object_type">Tipo de objeto de HubSpot</label>
@@ -122,6 +133,13 @@ export function HubspotTableManager() {
               value={mgr.form.fieldsRaw}
               onChange={(e) => mgr.setForm((f) => ({ ...f, fieldsRaw: e.target.value }))}
               placeholder="hs_object_id, subject, hs_pipeline_stage"
+            />
+            <AvailablePropertiesPicker
+              disabled={!mgr.form.objectType.trim()}
+              disabledHint="Escribe primero el tipo de objeto de HubSpot."
+              showHiddenToggle
+              fetchProperties={(includeHidden) => fetchHubspotAvailableProperties(mgr.form.objectType.trim(), includeHidden)}
+              onPick={(name) => mgr.setForm((f) => ({ ...f, fieldsRaw: appendField(f.fieldsRaw, name) }))}
             />
           </div>
           <div className={formStyles.field}>
