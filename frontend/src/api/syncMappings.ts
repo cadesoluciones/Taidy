@@ -10,6 +10,11 @@ export interface FieldPair {
   target: string;
 }
 
+export interface RowFilter {
+  field: string;
+  equals: string;
+}
+
 export interface SyncMappingConfig {
   name: string;
   description: string;
@@ -18,15 +23,20 @@ export interface SyncMappingConfig {
   matching_key: FieldPair;
   date_field: FieldPair;
   fields: FieldPair[];
+  source_filter: RowFilter | null;
+  target_filter: RowFilter | null;
 }
 
 export interface SyncMappingInput {
+  name: string;
   source: SystemRef;
   target: SystemRef;
   matching_key: FieldPair;
   date_field: FieldPair;
   fields: FieldPair[];
   description?: string;
+  source_filter?: RowFilter | null;
+  target_filter?: RowFilter | null;
 }
 
 export interface RecordAction {
@@ -59,10 +69,12 @@ export function fetchSyncMappings(): Promise<{ items: SyncMappingConfig[] }> {
   return apiGet<{ items: SyncMappingConfig[] }>("/sync/mappings");
 }
 
-export function createSyncMapping(input: SyncMappingInput & { name: string }): Promise<SyncMappingConfig> {
+export function createSyncMapping(input: SyncMappingInput): Promise<SyncMappingConfig> {
   return apiPost<SyncMappingConfig>("/sync/mappings", input);
 }
 
+/** `name` is the mapping's *current* name (used to locate it in the URL);
+ * `input.name` is the name to save it under, which may be a rename. */
 export function updateSyncMapping(name: string, input: SyncMappingInput): Promise<SyncMappingConfig> {
   return apiPatch<SyncMappingConfig>(`/sync/mappings/${encodeURIComponent(name)}`, input);
 }

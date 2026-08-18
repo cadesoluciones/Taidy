@@ -18,3 +18,7 @@ mappings:
     target: email
   - source: name
     target: firstname
+  source_filter:
+    field: type
+    equals: Person
+  target_filter: null

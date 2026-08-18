@@ -15,6 +15,7 @@ import {
   fetchSyncMappings,
   updateSyncMapping,
   type FieldPair,
+  type RowFilter,
   type SyncMappingConfig,
 } from "../api/syncMappings";
 import { ApiError } from "../api/client";
@@ -143,11 +144,17 @@ export function SyncMappingManager() {
   const [matchingKey, setMatchingKey] = useState<FieldPair>(EMPTY_KEY);
   const [dateField, setDateField] = useState<FieldPair>(EMPTY_KEY);
   const [fields, setFields] = useState<FieldPair[]>([]);
+  const [sourceFilterField, setSourceFilterField] = useState("");
+  const [sourceFilterValue, setSourceFilterValue] = useState("");
+  const [targetFilterField, setTargetFilterField] = useState("");
+  const [targetFilterValue, setTargetFilterValue] = useState("");
 
   const [sourceTables, setSourceTables] = useState<string[]>([]);
   const [targetTables, setTargetTables] = useState<string[]>([]);
   const [sourceFields, setSourceFields] = useState<string[]>([]);
   const [targetFields, setTargetFields] = useState<string[]>([]);
+  const [sourceFieldQuery, setSourceFieldQuery] = useState("");
+  const [targetFieldQuery, setTargetFieldQuery] = useState("");
 
   const [pendingDelete, setPendingDelete] = useState<SyncMappingConfig | null>(null);
   const [isBusy, setIsBusy] = useState(false);
@@ -197,6 +204,12 @@ export function SyncMappingManager() {
     setMatchingKey(EMPTY_KEY);
     setDateField(EMPTY_KEY);
     setFields([]);
+    setSourceFilterField("");
+    setSourceFilterValue("");
+    setTargetFilterField("");
+    setTargetFilterValue("");
+    setSourceFieldQuery("");
+    setTargetFieldQuery("");
   }
 
   function startEdit(mapping: SyncMappingConfig) {
@@ -212,6 +225,10 @@ export function SyncMappingManager() {
     setMatchingKey(mapping.matching_key);
     setDateField(mapping.date_field);
     setFields(mapping.fields);
+    setSourceFilterField(mapping.source_filter?.field ?? "");
+    setSourceFilterValue(mapping.source_filter?.equals ?? "");
+    setTargetFilterField(mapping.target_filter?.field ?? "");
+    setTargetFilterValue(mapping.target_filter?.equals ?? "");
   }
 
   function setFieldPairValue(rowIndex: number, side: "source" | "target", value: string) {
@@ -239,34 +256,54 @@ export function SyncMappingManager() {
   const hasKey = !!matchingKey.source && !!matchingKey.target;
   const hasDate = !!dateField.source && !!dateField.target;
   const hasFields = cleanFields.length > 0;
-  const hasName = !!editingName || !!name.trim();
-  const canSubmit = hasTables && hasKey && hasDate && hasFields && hasName;
+  // Not just `!!editingName` -- the name field is now editable during a
+  // rename too, so a blanked-out name while editing must block submit just
+  // like it does when creating.
+  const hasName = !!name.trim();
+  // A filter is optional, but half-filled (field without a value, or vice
+  // versa) is never a valid state to save -- it would silently mean "no
+  // filter" server-side, which isn't what a half-filled row usually means.
+  const sourceFilterPartial = !!sourceFilterField !== !!sourceFilterValue.trim();
+  const targetFilterPartial = !!targetFilterField !== !!targetFilterValue.trim();
+  const canSubmit = hasTables && hasKey && hasDate && hasFields && hasName && !sourceFilterPartial && !targetFilterPartial;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setSuccess(null);
 
+    if (sourceFilterPartial || targetFilterPartial) {
+      setError("El filtro necesita tanto el campo como el valor (o déjalo vacío del todo).");
+      return;
+    }
     if (!canSubmit) {
       setError("Completa lo que falte en la lista de arriba antes de guardar.");
       return;
     }
 
+    const sourceFilter: RowFilter | null =
+      sourceFilterField && sourceFilterValue.trim() ? { field: sourceFilterField, equals: sourceFilterValue.trim() } : null;
+    const targetFilter: RowFilter | null =
+      targetFilterField && targetFilterValue.trim() ? { field: targetFilterField, equals: targetFilterValue.trim() } : null;
+
     const input = {
+      name: name.trim(),
       source: { system: sourceSystem, table: sourceTable },
       target: { system: targetSystem, table: targetTable },
       matching_key: matchingKey,
       date_field: dateField,
       fields: cleanFields,
       description,
+      source_filter: sourceFilter,
+      target_filter: targetFilter,
     };
 
     try {
       if (editingName) {
-        await updateSyncMapping(editingName, input);
-        setSuccess(`'${editingName}' actualizado.`);
+        const updated = await updateSyncMapping(editingName, input);
+        setSuccess(`'${updated.name}' actualizado.`);
       } else {
-        const created = await createSyncMapping({ ...input, name: name.trim() });
+        const created = await createSyncMapping(input);
         setSuccess(`'${created.name}' añadido.`);
       }
       resetDraft();
@@ -292,6 +329,8 @@ export function SyncMappingManager() {
   const usedSourceFields = new Set(fields.map((f) => f.source).filter(Boolean));
   const usedTargetFields = new Set(fields.map((f) => f.target).filter(Boolean));
   const displayRows = [...fields, { ...EMPTY_KEY }];
+  const visibleSourceFields = sourceFields.filter((f) => f.toLowerCase().includes(sourceFieldQuery.trim().toLowerCase()));
+  const visibleTargetFields = targetFields.filter((f) => f.toLowerCase().includes(targetFieldQuery.trim().toLowerCase()));
 
   return (
     <div>
@@ -315,10 +354,14 @@ export function SyncMappingManager() {
               id="sm_name"
               type="text"
               value={name}
-              disabled={!!editingName}
               onChange={(e) => setName(e.target.value)}
               placeholder="bc_contact_a_hubspot_contacts"
             />
+            {editingName && (
+              <p className={formStyles.hint}>
+                Cambiar el nombre no actualiza tareas programadas que ya lo seleccionen por su nombre anterior.
+              </p>
+            )}
           </div>
           <div className={formStyles.field}>
             <label htmlFor="sm_desc">Descripción (opcional)</label>
@@ -338,6 +381,8 @@ export function SyncMappingManager() {
                 setMatchingKey(EMPTY_KEY);
                 setDateField(EMPTY_KEY);
                 setFields([]);
+                setSourceFilterField("");
+                setSourceFilterValue("");
               }}
             >
               {SYSTEMS.map((s) => (
@@ -357,6 +402,8 @@ export function SyncMappingManager() {
                 setMatchingKey(EMPTY_KEY);
                 setDateField(EMPTY_KEY);
                 setFields([]);
+                setSourceFilterField("");
+                setSourceFilterValue("");
               }}
             >
               <option value="">Selecciona una tabla…</option>
@@ -381,6 +428,8 @@ export function SyncMappingManager() {
                 setMatchingKey(EMPTY_KEY);
                 setDateField(EMPTY_KEY);
                 setFields([]);
+                setTargetFilterField("");
+                setTargetFilterValue("");
               }}
             >
               {SYSTEMS.map((s) => (
@@ -400,6 +449,8 @@ export function SyncMappingManager() {
                 setMatchingKey(EMPTY_KEY);
                 setDateField(EMPTY_KEY);
                 setFields([]);
+                setTargetFilterField("");
+                setTargetFilterValue("");
               }}
             >
               <option value="">Selecciona una tabla…</option>
@@ -471,20 +522,81 @@ export function SyncMappingManager() {
               </div>
             </div>
 
+            <div className={formStyles.field}>
+              <label>Filtro (opcional)</label>
+              <p className={formStyles.hint}>
+                Solo incluye filas donde el campo valga exactamente ese texto -- útil cuando una tabla mezcla varios
+                tipos de registro (ej. el campo "type" de Business Central vale "Person" o "Company", pero aquí solo
+                quieres uno de los dos).
+              </p>
+              <div className={styles.keyRow}>
+                <DropCell
+                  value={sourceFilterField}
+                  placeholder="Campo origen (opcional)"
+                  side="source"
+                  extraClassName={styles.dropCellKey}
+                  onDropValue={(v) => setSourceFilterField(v)}
+                />
+                <span className={styles.keyArrow}>=</span>
+                <input
+                  type="text"
+                  value={sourceFilterValue}
+                  onChange={(e) => setSourceFilterValue(e.target.value)}
+                  placeholder="Valor"
+                  className={styles.filterValueInput}
+                />
+              </div>
+              <div className={styles.keyRow} style={{ marginTop: "var(--space-2)" }}>
+                <DropCell
+                  value={targetFilterField}
+                  placeholder="Campo destino (opcional)"
+                  side="target"
+                  extraClassName={styles.dropCellKey}
+                  onDropValue={(v) => setTargetFilterField(v)}
+                />
+                <span className={styles.keyArrow}>=</span>
+                <input
+                  type="text"
+                  value={targetFilterValue}
+                  onChange={(e) => setTargetFilterValue(e.target.value)}
+                  placeholder="Valor"
+                  className={styles.filterValueInput}
+                />
+              </div>
+            </div>
+
             <div className={styles.columns}>
               <div className={styles.fieldColumn}>
                 <div className={styles.fieldColumnTitle}>Campos de {SYSTEM_LABELS[sourceSystem]}</div>
-                {sourceFields.length === 0 && <p className={styles.emptyHint}>Sin campos disponibles.</p>}
-                {sourceFields.map((f) => (
-                  <FieldChip key={f} side="source" value={f} dimmed={usedSourceFields.has(f)} />
-                ))}
+                <input
+                  type="text"
+                  className={styles.fieldSearch}
+                  placeholder="Buscar campo…"
+                  value={sourceFieldQuery}
+                  onChange={(e) => setSourceFieldQuery(e.target.value)}
+                />
+                <div className={styles.fieldList}>
+                  {visibleSourceFields.length === 0 && <p className={styles.emptyHint}>Sin campos disponibles.</p>}
+                  {visibleSourceFields.map((f) => (
+                    <FieldChip key={f} side="source" value={f} dimmed={usedSourceFields.has(f)} />
+                  ))}
+                </div>
               </div>
               <div className={styles.fieldColumn}>
                 <div className={styles.fieldColumnTitle}>Campos de {SYSTEM_LABELS[targetSystem]}</div>
-                {targetFields.length === 0 && <p className={styles.emptyHint}>Sin campos disponibles.</p>}
-                {targetFields.map((f) => (
-                  <FieldChip key={f} side="target" value={f} dimmed={usedTargetFields.has(f)} />
-                ))}
+                <input
+                  type="text"
+                  className={styles.fieldSearch}
+                  placeholder="Buscar campo…"
+                  value={targetFieldQuery}
+                  onChange={(e) => setTargetFieldQuery(e.target.value)}
+                />
+                <div className={styles.fieldList}>
+                  {visibleTargetFields.length === 0 && <p className={styles.emptyHint}>Sin campos disponibles.</p>}
+                  {visibleTargetFields.map((f) => (
+                    <FieldChip key={f} side="target" value={f} dimmed={usedTargetFields.has(f)} />
+                  ))}
+                </div>
               </div>
               <div className={styles.fieldColumn}>
                 <div className={styles.fieldColumnTitle}>Lienzo de mapeo</div>
@@ -564,6 +676,16 @@ export function SyncMappingManager() {
                 </span>
                 <span className={tableStyles.badge}>clave: {m.matching_key.source}</span>
                 <span className={tableStyles.badge}>fecha: {m.date_field.source}</span>
+                {m.source_filter && (
+                  <span className={tableStyles.badge}>
+                    filtro origen: {m.source_filter.field}={m.source_filter.equals}
+                  </span>
+                )}
+                {m.target_filter && (
+                  <span className={tableStyles.badge}>
+                    filtro destino: {m.target_filter.field}={m.target_filter.equals}
+                  </span>
+                )}
               </div>
               <div className={tableStyles.itemActions}>
                 <button

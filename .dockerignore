@@ -19,6 +19,7 @@ api/sessions.json
 exports/
 exports_factorial/
 exports_hubspot/
+src/sync_engine/sync_cache/
 
 # Python
 **/__pycache__/

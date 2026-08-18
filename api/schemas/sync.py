@@ -16,6 +16,11 @@ class FieldPair(BaseModel):
     target: str
 
 
+class RowFilter(BaseModel):
+    field: str
+    equals: str
+
+
 class SyncMappingOut(BaseModel):
     name: str
     description: str = ""
@@ -24,6 +29,8 @@ class SyncMappingOut(BaseModel):
     matching_key: FieldPair
     date_field: FieldPair
     fields: List[FieldPair]
+    source_filter: Optional[RowFilter] = None
+    target_filter: Optional[RowFilter] = None
 
 
 class SyncMappingListOut(BaseModel):
@@ -38,15 +45,20 @@ class CreateSyncMappingRequest(BaseModel):
     date_field: FieldPair
     fields: List[FieldPair]
     description: str = ""
+    source_filter: Optional[RowFilter] = None
+    target_filter: Optional[RowFilter] = None
 
 
 class UpdateSyncMappingRequest(BaseModel):
+    name: str
     source: SystemRef
     target: SystemRef
     matching_key: FieldPair
     date_field: FieldPair
     fields: List[FieldPair]
     description: str = ""
+    source_filter: Optional[RowFilter] = None
+    target_filter: Optional[RowFilter] = None
 
 
 class RecordActionOut(BaseModel):

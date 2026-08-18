@@ -106,3 +106,6 @@ webapp/users.db
 webapp/workflows.json
 webapp/app_settings.json
 api/sessions.json
+
+# Sync engine: caché persistida del fetch incremental (estado generado)
+src/sync_engine/sync_cache/

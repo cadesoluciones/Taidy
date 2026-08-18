@@ -43,6 +43,29 @@
   margin-bottom: 2px;
 }
 
+.fieldSearch {
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+/* Bounded + independently scrollable: with many fields (e.g. BC's ~30),
+   this list used to grow with the page, so scrolling down to find a field
+   scrolled the drop targets (the other column, the canvas) out of view too.
+   A fixed height + its own scrollbar keeps every column visible together. */
+.fieldList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 440px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.filterValueInput {
+  flex: 1;
+  min-width: 120px;
+}
+
 .chip {
   display: flex;
   align-items: center;
@@ -78,6 +101,9 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  max-height: 440px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .canvasRow {

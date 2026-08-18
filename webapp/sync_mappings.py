@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import yaml
 
@@ -73,6 +73,23 @@ def _validate_field_pair(pair: dict, label: str) -> Dict[str, str]:
     return {"source": source, "target": target}
 
 
+def _validate_row_filter(row_filter: Optional[dict], label: str) -> Optional[Dict[str, str]]:
+    """An optional 'only include rows where field == value' restriction on
+    one side of a mapping -- e.g. Business Central's shared bc_contact table
+    holds both Person and Company records, and only one of them belongs in
+    a given HubSpot object (contacts vs companies). None means no
+    restriction (today's behavior for every existing mapping)."""
+    if row_filter is None:
+        return None
+    if not isinstance(row_filter, dict):
+        raise ValueError(f"'{label}' debe indicar 'field' y 'equals'.")
+    field = str(row_filter.get("field", "")).strip()
+    equals = str(row_filter.get("equals", "")).strip()
+    if not field or not equals:
+        raise ValueError(f"'{label}' necesita tanto el campo como el valor.")
+    return {"field": field, "equals": equals}
+
+
 def _validate_fields(fields: List[dict]) -> List[Dict[str, str]]:
     if not isinstance(fields, list) or not fields:
         raise ValueError("Indica al menos un par de campos a sincronizar.")
@@ -92,6 +109,8 @@ def add_mapping(
     fields: List[dict],
     *,
     description: str = "",
+    source_filter: Optional[dict] = None,
+    target_filter: Optional[dict] = None,
 ) -> dict:
     name = name.strip()
     if not name:
@@ -109,6 +128,8 @@ def add_mapping(
         "matching_key": _validate_field_pair(matching_key, "matching_key"),
         "date_field": _validate_field_pair(date_field, "date_field"),
         "fields": _validate_fields(fields),
+        "source_filter": _validate_row_filter(source_filter, "source_filter"),
+        "target_filter": _validate_row_filter(target_filter, "target_filter"),
     }
     mappings.append(entry)
     _write(mappings)
@@ -124,16 +145,29 @@ def update_mapping(
     fields: List[dict],
     *,
     description: str = "",
+    source_filter: Optional[dict] = None,
+    target_filter: Optional[dict] = None,
+    new_name: Optional[str] = None,
 ) -> dict:
+    final_name = (new_name or name).strip()
+    if not final_name:
+        raise ValueError("El mapeo necesita un nombre.")
+
     mappings = _read()
+    if final_name != name and any(m.get("name") == final_name for m in mappings):
+        raise ValueError(f"Ya existe un mapeo llamado '{final_name}'.")
+
     for m in mappings:
         if m.get("name") == name:
+            m["name"] = final_name
             m["description"] = description.strip()
             m["source"] = _validate_system_ref(source, "source")
             m["target"] = _validate_system_ref(target, "target")
             m["matching_key"] = _validate_field_pair(matching_key, "matching_key")
             m["date_field"] = _validate_field_pair(date_field, "date_field")
             m["fields"] = _validate_fields(fields)
+            m["source_filter"] = _validate_row_filter(source_filter, "source_filter")
+            m["target_filter"] = _validate_row_filter(target_filter, "target_filter")
             _write(mappings)
             return m
     raise ValueError(f"No existe un mapeo llamado '{name}'.")

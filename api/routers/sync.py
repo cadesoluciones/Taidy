@@ -47,6 +47,8 @@ def create_mapping(payload: CreateSyncMappingRequest) -> SyncMappingOut:
             payload.date_field.model_dump(),
             [f.model_dump() for f in payload.fields],
             description=payload.description,
+            source_filter=payload.source_filter.model_dump() if payload.source_filter else None,
+            target_filter=payload.target_filter.model_dump() if payload.target_filter else None,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
@@ -64,6 +66,9 @@ def update_mapping(name: str, payload: UpdateSyncMappingRequest) -> SyncMappingO
             payload.date_field.model_dump(),
             [f.model_dump() for f in payload.fields],
             description=payload.description,
+            source_filter=payload.source_filter.model_dump() if payload.source_filter else None,
+            target_filter=payload.target_filter.model_dump() if payload.target_filter else None,
+            new_name=payload.name,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
