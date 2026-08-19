@@ -1,5 +1,5 @@
 mappings:
-- name: mapeo prueba
+- name: Business Central a Hubspot "person"
   description: ''
   source:
     system: business_central
@@ -21,4 +21,31 @@ mappings:
   source_filter:
     field: type
     equals: Person
+  target_filter: null
+- name: bc_contacto to hubspot_companies _ company
+  description: ''
+  source:
+    system: business_central
+    table: bc_contact
+  target:
+    system: hubspot
+    table: hubspot_companies
+  matching_key:
+    source: 'no'
+    target: id_businesscentral_unico
+  date_field:
+    source: systemModifiedAt
+    target: hs_lastmodifieddate
+  fields:
+  - source: name
+    target: name
+  - source: 'no'
+    target: id_businesscentral_unico
+  - source: city
+    target: city
+  - source: county
+    target: country
+  source_filter:
+    field: type
+    equals: Company
   target_filter: null
