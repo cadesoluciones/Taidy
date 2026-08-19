@@ -18,6 +18,13 @@ services:
       # no-op everywhere else (Windows/macOS Docker Desktop, non-SELinux
       # Linux), so it's safe to always set.
       - ./config.json:/app/config.json:ro,z
+      # Bind-mounted (not read-only) so the admin "Claves de servicio" screen
+      # (webapp/env_secrets.py, which writes to /app/.env in place) edits
+      # this SAME file `env_file:` above reads from -- without this mount, a
+      # secret saved from that screen only ever lands in the container's
+      # writable layer and silently vanishes on the next `docker compose up
+      # --build` (a fresh container never sees the previous one's layer).
+      - ./.env:/app/.env:z
       # tables.yaml is shared by every BC environment -- each table's `url`
       # carries a literal `{ENVIRONMENT}` placeholder resolved at load time
       # from BC_ENVIRONMENT (see .env.example), never a per-environment file.
