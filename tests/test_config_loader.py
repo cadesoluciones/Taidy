@@ -102,8 +102,8 @@ def test_expands_user_home_shortcut(tmp_path: Path, monkeypatch):
 # --------------------------------------------------------------------------------------
 
 
-def test_resolve_environment_defaults_to_production():
-    assert resolve_environment({}) == "PRODUCTION"
+def test_resolve_environment_defaults_to_sandbox_cade():
+    assert resolve_environment({}) == "SANDBOX_CADE"
 
 
 def test_resolve_environment_reads_and_uppercases_env_var():
@@ -111,7 +111,7 @@ def test_resolve_environment_reads_and_uppercases_env_var():
 
 
 def test_resolve_environment_blank_value_falls_back_to_default():
-    assert resolve_environment({"BC_ENVIRONMENT": "   "}) == "PRODUCTION"
+    assert resolve_environment({"BC_ENVIRONMENT": "   "}) == "SANDBOX_CADE"
 
 
 def test_resolve_environment_reads_real_os_environ_by_default(monkeypatch):

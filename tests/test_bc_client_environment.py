@@ -47,7 +47,7 @@ def test_read_tables_leaves_urls_without_a_placeholder_unchanged(tmp_path: Path)
     assert [t.url for t in tables] == ["https://example/odata/T1"]
 
 
-def test_read_tables_defaults_to_production_when_bc_environment_unset(tmp_path: Path):
+def test_read_tables_defaults_to_sandbox_cade_when_bc_environment_unset(tmp_path: Path):
     (tmp_path / "tables.yaml").write_text(
         "tables:\n"
         "  - name: t1\n"
@@ -56,7 +56,7 @@ def test_read_tables_defaults_to_production_when_bc_environment_unset(tmp_path: 
     )
 
     tables = _read_tables(tmp_path, {})
-    assert [t.url for t in tables] == ["https://example/PRODUCTION/odata/T1"]
+    assert [t.url for t in tables] == ["https://example/SANDBOX_CADE/odata/T1"]
 
 
 def test_read_tables_raises_clear_error_when_tables_file_missing(tmp_path: Path):

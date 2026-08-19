@@ -25,9 +25,11 @@ from typing import Any, Dict, Optional, Tuple
 # argument or environment variable.
 DEFAULT_CONFIG_FILE = "config.json"
 
-# DEFAULT_ENVIRONMENT is used when BC_ENVIRONMENT isn't set -- this repo's
-# real deployment runs against Production today.
-DEFAULT_ENVIRONMENT = "PRODUCTION"
+# DEFAULT_ENVIRONMENT is used when BC_ENVIRONMENT isn't set -- defaults to
+# SANDBOX_CADE (a non-critical copy of Production) so a deployment that
+# forgets to set BC_ENVIRONMENT explicitly never silently extracts from
+# real Production data.
+DEFAULT_ENVIRONMENT = "SANDBOX_CADE"
 
 
 # --------------------------------------------------------------------------------------
