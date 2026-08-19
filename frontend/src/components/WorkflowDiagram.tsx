@@ -33,6 +33,7 @@ type StepNodeData = Record<string, unknown> & {
   label: string;
   actionLabel: string;
   status?: string;
+  detail?: string | null;
   alwaysRun?: boolean;
 };
 
@@ -46,6 +47,7 @@ function StepNode({ data, selected }: NodeProps<StepFlowNode>) {
       <div className={styles.nodeLabel}>{data.label}</div>
       <div className={styles.nodeAction}>{data.actionLabel}</div>
       {status && <div className={styles.nodeStatus}>{statusMeta(status).label.toLowerCase()}</div>}
+      {status === "error" && data.detail && <div className={styles.nodeHint}>{data.detail}</div>}
       {data.alwaysRun && <div className={styles.nodeHint}>se lanza aunque falle una dependencia</div>}
       <Handle type="source" position={Position.Right} className={styles.handle} />
     </div>
@@ -151,6 +153,7 @@ interface WorkflowDiagramProps {
   steps: DiagramStep[];
   actionLabels: Record<string, string>;
   stepStatuses?: Record<string, string>;
+  stepDetails?: Record<string, string | null>;
   selectedStepId?: string | null;
   onSelectStep?: (id: string) => void;
   onConnectSteps?: (sourceId: string, targetId: string) => void;
@@ -172,6 +175,7 @@ export function WorkflowDiagram({
   steps,
   actionLabels,
   stepStatuses,
+  stepDetails,
   selectedStepId,
   onSelectStep,
   onConnectSteps,
@@ -196,11 +200,13 @@ export function WorkflowDiagram({
     () =>
       steps.map((s) => {
         const status = stepStatuses?.[s.id];
+        const detail = stepDetails?.[s.id];
         const data: StepNodeData = {
           label: s.label,
           actionLabel: actionLabels[s.action] ?? s.action,
           alwaysRun: s.depends_on.length > 0 && s.trigger_rule === "always",
           ...(status !== undefined ? { status } : {}),
+          ...(detail ? { detail } : {}),
         };
         return {
           id: s.id,
@@ -212,7 +218,7 @@ export function WorkflowDiagram({
           data,
         };
       }),
-    [steps, positions, nodePositions, selectedStepId, actionLabels, stepStatuses, readOnly],
+    [steps, positions, nodePositions, selectedStepId, actionLabels, stepStatuses, stepDetails, readOnly],
   );
 
   const handleNodesChange = (changes: NodeChange<StepFlowNode>[]) => {

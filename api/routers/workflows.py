@@ -125,6 +125,7 @@ def run_to_out(run) -> WorkflowRunOut:
                 trigger_rule=s.trigger_rule,
                 status=s.status,
                 task_id=s.task_id,
+                detail=s.detail,
             )
             for s in run.steps.values()
         ],

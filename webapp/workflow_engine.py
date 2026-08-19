@@ -15,7 +15,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -28,6 +28,11 @@ from webapp import history, notifications, tasks, workflows  # noqa: E402
 _POLL_SECONDS = 2
 _TERMINAL_TASK_STATUSES = {"ok", "error", "stopped"}
 _TERMINAL_STEP_STATUSES = {"ok", "error", "cancelled", "stopped"}
+# Mirrors webapp/scheduler.py's _RECOMPUTE_END_ON -- a Factorial step's
+# `end_on` would go stale (or simply be missing, since neither the flow
+# editor nor Tareas programadas ever collect it -- "Hasta" is always "today")
+# if trusted from the saved step definition instead of recomputed per run.
+_RECOMPUTE_END_ON = {"extract_factorial", "sync_factorial"}
 _MAX_FINISHED_IN_MEMORY = 20
 
 
@@ -40,6 +45,7 @@ class StepRun:
     trigger_rule: str
     status: str = "pending"  # pending | running | ok | error | cancelled | stopped
     task_id: Optional[str] = None
+    detail: Optional[str] = None
 
 
 @dataclass
@@ -163,14 +169,26 @@ def _run_worker(run: WorkflowRun, step_defs: Dict[str, dict]) -> None:
                 step.status = "cancelled"
                 continue
 
+            step_params = dict(step_defs[step.id].get("params", {}))
+            if step.action in _RECOMPUTE_END_ON:
+                step_params["end_on"] = date.today().isoformat()
+
             try:
                 task = tasks.launch(
                     step.action,
-                    step_defs[step.id].get("params", {}),
+                    step_params,
                     f"flujo: {run.workflow_name} / paso: {step.label}",
                 )
-            except (RuntimeError, ValueError):
-                # Usually a conflicting task elsewhere is still running — retry next tick.
+            except RuntimeError:
+                # A conflicting task elsewhere is still running — retry next tick.
+                continue
+            except ValueError as exc:
+                # Bad/incomplete params -- retrying won't ever succeed, so
+                # fail this step (and let its dependents cascade-cancel)
+                # instead of silently retrying forever with the block stuck
+                # on "pending" and no visible error anywhere.
+                step.status = "error"
+                step.detail = str(exc)
                 continue
             step.task_id = task.id
             step.status = "running"
@@ -269,6 +287,7 @@ def retry_failed_steps(run_id: str, triggered_by: str) -> WorkflowRun:
         if step.status in ("error", "cancelled"):
             step.status = "pending"
             step.task_id = None
+            step.detail = None
 
     run.status = "running"
     run.stop_requested = False

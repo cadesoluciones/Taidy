@@ -27,6 +27,7 @@ export interface StepRun {
   trigger_rule: string;
   status: StepStatus;
   task_id: string | null;
+  detail: string | null;
 }
 
 export interface WorkflowRun {

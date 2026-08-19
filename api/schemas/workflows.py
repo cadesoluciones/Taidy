@@ -50,6 +50,7 @@ class StepRunOut(BaseModel):
     trigger_rule: str
     status: str
     task_id: Optional[str] = None
+    detail: Optional[str] = None
 
 
 class WorkflowRunOut(BaseModel):
