@@ -18,6 +18,11 @@ class HistoryEntryOut(BaseModel):
     # Only populated for actions with a per-record breakdown (currently
     # sync_apply) -- absent/None for every other action's entries.
     details: Optional[List[Dict[str, Any]]] = None
+    # Only populated for a workflow run's own summary entry and each of its
+    # step-tasks -- lets the frontend visually connect entries that belong
+    # to the same run instead of only matching a free-text `source` string.
+    workflow_run_id: Optional[str] = None
+    workflow_name: Optional[str] = None
 
 
 class HistoryPageOut(BaseModel):

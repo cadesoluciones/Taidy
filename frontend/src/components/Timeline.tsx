@@ -9,6 +9,10 @@ export interface TimelineItem {
   timestamp?: string;
   icon?: ReactNode;
   tone?: "success" | "danger" | "neutral" | "info";
+  /** Visually marks this row as related to whatever the caller currently
+   * has selected/focused (e.g. HistoryPage highlighting every entry that
+   * shares a workflow_run_id) -- purely cosmetic, doesn't affect order. */
+  highlighted?: boolean;
 }
 
 export function Timeline({ items, emptyLabel }: { items: TimelineItem[]; emptyLabel: string }) {
@@ -19,7 +23,7 @@ export function Timeline({ items, emptyLabel }: { items: TimelineItem[]; emptyLa
   return (
     <ol className={styles.timeline}>
       {items.map((item) => (
-        <li key={item.key} className={styles.item}>
+        <li key={item.key} className={item.highlighted ? `${styles.item} ${styles.itemHighlighted}` : styles.item}>
           <span className={`${styles.dot} ${item.tone ? styles[item.tone] : ""}`} aria-hidden="true">
             {item.icon}
           </span>

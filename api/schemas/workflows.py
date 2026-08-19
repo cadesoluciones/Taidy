@@ -55,6 +55,8 @@ class StepRunOut(BaseModel):
     status: str
     task_id: Optional[str] = None
     detail: Optional[str] = None
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
 
 
 class WorkflowRunOut(BaseModel):

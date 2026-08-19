@@ -46,6 +46,8 @@ class StepRun:
     status: str = "pending"  # pending | running | ok | error | cancelled | stopped
     task_id: Optional[str] = None
     detail: Optional[str] = None
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
 
 
 @dataclass
@@ -156,6 +158,7 @@ def _run_worker(run: WorkflowRun, step_defs: Dict[str, dict]) -> None:
                 t = tasks.get_task(step.task_id)
                 if t is not None and t.status in _TERMINAL_TASK_STATUSES:
                     step.status = t.status
+                    step.finished_at = datetime.now(timezone.utc).isoformat()
 
         # 2. Launch steps whose dependencies are all resolved.
         for step in run.steps.values():
@@ -167,6 +170,7 @@ def _run_worker(run: WorkflowRun, step_defs: Dict[str, dict]) -> None:
 
             if step.trigger_rule == workflows.TRIGGER_ALL_SUCCESS and any(s != "ok" for s in dep_states):
                 step.status = "cancelled"
+                step.finished_at = datetime.now(timezone.utc).isoformat()
                 continue
 
             step_params = dict(step_defs[step.id].get("params", {}))
@@ -189,9 +193,13 @@ def _run_worker(run: WorkflowRun, step_defs: Dict[str, dict]) -> None:
                 # on "pending" and no visible error anywhere.
                 step.status = "error"
                 step.detail = str(exc)
+                step.finished_at = datetime.now(timezone.utc).isoformat()
                 continue
+            task.workflow_run_id = run.id
+            task.workflow_name = run.workflow_name
             step.task_id = task.id
             step.status = "running"
+            step.started_at = datetime.now(timezone.utc).isoformat()
 
         time.sleep(_POLL_SECONDS)
 
@@ -238,6 +246,8 @@ def _finalize(run: WorkflowRun) -> None:
         message=message,
         log="",
         duration_seconds=run.duration_seconds(),
+        workflow_run_id=run.id,
+        workflow_name=run.workflow_name,
     )
     if run.notify:
         notifications.notify_workflow_finished(
@@ -288,6 +298,8 @@ def retry_failed_steps(run_id: str, triggered_by: str) -> WorkflowRun:
             step.status = "pending"
             step.task_id = None
             step.detail = None
+            step.started_at = None
+            step.finished_at = None
 
     run.status = "running"
     run.stop_requested = False

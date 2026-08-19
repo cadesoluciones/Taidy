@@ -957,6 +957,9 @@ export function WorkflowsPage() {
                     actionLabels={ACTION_LABELS}
                     stepStatuses={Object.fromEntries(run.steps.map((s) => [s.id, s.status]))}
                     stepDetails={Object.fromEntries(run.steps.map((s) => [s.id, s.detail]))}
+                    stepTimings={Object.fromEntries(
+                      run.steps.map((s) => [s.id, { started_at: s.started_at, finished_at: s.finished_at }]),
+                    )}
                     readOnly
                     height={340}
                   />

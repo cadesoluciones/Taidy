@@ -103,6 +103,12 @@ class Task:
     return_code: Optional[int] = None
     current_step: int = 0
     notify: bool = False
+    # Set by workflow_engine.py right after tasks.launch() returns, when this
+    # task is one step of a workflow run -- lets its eventual history entry
+    # (and the run's own summary entry) share a real id instead of only a
+    # free-text "flujo: X / paso: Y" string in triggered_by.
+    workflow_run_id: Optional[str] = None
+    workflow_name: Optional[str] = None
     _log_parts: List[str] = field(default_factory=list, repr=False, compare=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
     _process: Optional[subprocess.Popen] = field(default=None, repr=False, compare=False)
@@ -263,6 +269,8 @@ def _finalize(task: Task, return_code: int) -> None:
         log=task.log(),
         duration_seconds=task.duration_seconds(),
         details=details,
+        workflow_run_id=task.workflow_run_id,
+        workflow_name=task.workflow_name,
     )
     if task.notify:
         notifications.notify_task_finished(

@@ -25,6 +25,10 @@ export function HistoryPage() {
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Toggled by clicking a "Flujo: X" badge -- highlights every entry on the
+  // current page sharing that workflow_run_id, so a run's step-tasks and its
+  // own summary entry visibly read as one thing instead of unrelated rows.
+  const [highlightedRunId, setHighlightedRunId] = useState<string | null>(null);
 
   function buildFilters(): Omit<HistoryFilters, "page" | "page_size"> {
     const filters: Omit<HistoryFilters, "page" | "page_size"> = { result: resultFilter };
@@ -131,9 +135,25 @@ export function HistoryPage() {
             key: `${entry.finished_at}-${i}`,
             icon: <OutcomeIcon ok={entry.ok} status={entry.status} />,
             tone: toneFor(entry.status),
+            highlighted: entry.workflow_run_id !== null && entry.workflow_run_id === highlightedRunId,
             title: (
               <>
                 {entry.action} <span className={styles.entrySource}>— {entry.source}</span>
+                {entry.workflow_run_id && (
+                  <button
+                    type="button"
+                    className={
+                      entry.workflow_run_id === highlightedRunId
+                        ? `${styles.workflowBadge} ${styles.workflowBadgeActive}`
+                        : styles.workflowBadge
+                    }
+                    onClick={() =>
+                      setHighlightedRunId((prev) => (prev === entry.workflow_run_id ? null : entry.workflow_run_id))
+                    }
+                  >
+                    🔗 Flujo: {entry.workflow_name}
+                  </button>
+                )}
               </>
             ),
             timestamp:

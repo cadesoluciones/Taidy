@@ -136,6 +136,8 @@ def run_to_out(run) -> WorkflowRunOut:
                 status=s.status,
                 task_id=s.task_id,
                 detail=s.detail,
+                started_at=s.started_at,
+                finished_at=s.finished_at,
             )
             for s in run.steps.values()
         ],

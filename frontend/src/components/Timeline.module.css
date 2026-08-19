@@ -15,6 +15,12 @@
   padding-bottom: 0;
 }
 
+.itemHighlighted {
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  border-radius: var(--radius-md);
+  outline: 1px solid color-mix(in srgb, var(--color-primary) 30%, transparent);
+}
+
 /* The connecting line: a pseudo-element positioned behind the dot column,
    spanning from this item's dot down to the next one's. */
 .item:not(:last-child)::before {

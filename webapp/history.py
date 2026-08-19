@@ -47,6 +47,8 @@ def record_run(
     log: str,
     duration_seconds: Optional[float] = None,
     details: Optional[List[Dict[str, Any]]] = None,
+    workflow_run_id: Optional[str] = None,
+    workflow_name: Optional[str] = None,
 ) -> None:
     entry = {
         "id": uuid.uuid4().hex,
@@ -59,6 +61,13 @@ def record_run(
         "finished_at": datetime.now(timezone.utc).isoformat(),
         "log": log[-_MAX_LOG_CHARS:],
         "details": details,
+        # Set only for a workflow run's own summary entry and each of its
+        # step-tasks (see webapp/workflow_engine.py) -- lets the frontend
+        # visually connect entries that used to only share a free-text
+        # "flujo: X / paso: Y" string in `source`, indistinguishable between
+        # two different runs of the same workflow.
+        "workflow_run_id": workflow_run_id,
+        "workflow_name": workflow_name,
     }
     with _LOCK:
         data = _read()

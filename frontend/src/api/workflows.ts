@@ -28,6 +28,8 @@ export interface StepRun {
   status: StepStatus;
   task_id: string | null;
   detail: string | null;
+  started_at: string | null;
+  finished_at: string | null;
 }
 
 export interface WorkflowRun {

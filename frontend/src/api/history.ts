@@ -19,6 +19,10 @@ export interface HistoryEntry {
   // Only present for actions with a per-record breakdown (currently
   // sync_apply) -- absent/null for every other action's entries.
   details: SyncApplyRecordDetail[] | null;
+  // Only present for a workflow run's own summary entry and each of its
+  // step-tasks -- lets entries from the same run be visually connected.
+  workflow_run_id: string | null;
+  workflow_name: string | null;
 }
 
 export interface HistoryPage {
