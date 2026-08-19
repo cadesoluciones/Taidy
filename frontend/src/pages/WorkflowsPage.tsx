@@ -292,6 +292,21 @@ export function WorkflowsPage() {
     setActiveTab("editor");
   }
 
+  /** Loads an existing workflow's steps into the draft as a NEW workflow
+   * (editingWorkflowId stays null, so saving creates rather than updates) --
+   * lets a similar flow be built by tweaking a copy instead of re-adding
+   * every block by hand. Mirrors SyncMappingManager's duplicateMapping(). */
+  function duplicateWorkflow(wf: Workflow) {
+    setDesignerError(null);
+    setEditingWorkflowId(null);
+    setWorkflowName(`${wf.name} (copia)`);
+    setWorkflowDescription(wf.description);
+    setDraftSteps(wf.steps);
+    setSelectedStepId(null);
+    setStepPositions({});
+    setActiveTab("editor");
+  }
+
   function cancelEdit() {
     setEditingWorkflowId(null);
     setWorkflowName("");
@@ -837,6 +852,11 @@ export function WorkflowsPage() {
                     {isAdmin && (
                       <button type="button" className={styles.btn} onClick={() => editWorkflow(selectedWorkflow)}>
                         Editar flujo
+                      </button>
+                    )}
+                    {isAdmin && (
+                      <button type="button" className={styles.btn} onClick={() => duplicateWorkflow(selectedWorkflow)}>
+                        Duplicar
                       </button>
                     )}
                     {isAdmin && (
