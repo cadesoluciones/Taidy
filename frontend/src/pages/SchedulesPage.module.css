@@ -41,6 +41,14 @@
   flex-wrap: wrap;
 }
 
+.row[data-dragging="true"] {
+  opacity: 0.5;
+}
+
+.row[data-drag-over="true"] {
+  border-top: 2px solid var(--color-primary);
+}
+
 .name {
   min-width: 200px;
 }

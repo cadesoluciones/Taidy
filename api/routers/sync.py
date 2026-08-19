@@ -20,6 +20,7 @@ from ..schemas.sync import (
     ComparisonReportOut,
     CreateSyncMappingRequest,
     RecordActionOut,
+    ReorderRequest,
     SkippedRecordOut,
     SyncMappingListOut,
     SyncMappingOut,
@@ -53,6 +54,15 @@ def create_mapping(payload: CreateSyncMappingRequest) -> SyncMappingOut:
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     return SyncMappingOut(**entry)
+
+
+@router.patch("/mappings/reorder", response_model=SyncMappingListOut, dependencies=[Depends(require_role(ROLE_ADMIN))])
+def reorder_mappings(payload: ReorderRequest) -> SyncMappingListOut:
+    try:
+        items = sync_mappings.reorder_mappings(payload.ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return SyncMappingListOut(items=[SyncMappingOut(**m) for m in items])
 
 
 @router.patch("/mappings/{name}", response_model=SyncMappingOut, dependencies=[Depends(require_role(ROLE_ADMIN))])

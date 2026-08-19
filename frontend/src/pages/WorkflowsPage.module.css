@@ -113,6 +113,16 @@
   background: color-mix(in srgb, var(--color-primary) 8%, var(--color-bg));
 }
 
+.savedListItem[data-dragging="true"],
+.savedListItemActive[data-dragging="true"] {
+  opacity: 0.5;
+}
+
+.savedListItem[data-drag-over="true"],
+.savedListItemActive[data-drag-over="true"] {
+  border-top: 2px solid var(--color-primary);
+}
+
 .savedListAccess {
   font-size: 11px;
   color: var(--color-text-muted);

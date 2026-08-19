@@ -204,3 +204,57 @@ def test_schedules_week_reflects_a_created_schedule(isolated_state, client):
     assert resp.status_code == 200
     occurrences = resp.json()["occurrences"]
     assert schedule_id in occurrences
+
+
+# --------------------------------------------------------------------------------------
+# PATCH /schedules/reorder
+# --------------------------------------------------------------------------------------
+
+
+def _create_schedule(client, name):
+    return client.post(
+        "/schedules",
+        json={
+            "name": name,
+            "action": "extract_bc",
+            "params": {},
+            "trigger": "interval",
+            "trigger_args": {"hours": 24},
+        },
+    ).json()["id"]
+
+
+def test_admin_can_reorder_schedules(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    id1 = _create_schedule(client, "Tarea 1")
+    id2 = _create_schedule(client, "Tarea 2")
+    id3 = _create_schedule(client, "Tarea 3")
+
+    resp = client.patch("/schedules/reorder", json={"ids": [id2, id3, id1]})
+    assert resp.status_code == 200
+    assert [s["id"] for s in resp.json()["items"]] == [id2, id3, id1]
+
+    listed = client.get("/schedules").json()["items"]
+    assert [s["id"] for s in listed] == [id2, id3, id1]
+
+
+def test_reorder_rejects_a_list_that_does_not_match_existing_schedules(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    schedule_id = _create_schedule(client, "Tarea 1")
+
+    resp = client.patch("/schedules/reorder", json={"ids": [schedule_id, "does-not-exist"]})
+    assert resp.status_code == 400
+
+
+def test_reader_cannot_reorder_schedules(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    schedule_id = _create_schedule(client, "Tarea 1")
+
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+    resp = client.patch("/schedules/reorder", json={"ids": [schedule_id]})
+    assert resp.status_code == 403

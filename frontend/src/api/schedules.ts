@@ -43,6 +43,10 @@ export function deleteSchedule(id: string): Promise<void> {
   return apiDelete<void>(`/schedules/${id}`);
 }
 
+export function reorderSchedules(ids: string[]): Promise<{ items: Schedule[] }> {
+  return apiPatch<{ items: Schedule[] }>("/schedules/reorder", { ids });
+}
+
 /** schedule_id -> ISO datetimes it's due to fire between this week's Monday
  * and Sunday -- backs Inicio's weekly calendar. */
 export function fetchSchedulesWeek(): Promise<{ occurrences: Record<string, string[]> }> {

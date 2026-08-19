@@ -72,6 +72,14 @@
   font-size: 13px;
 }
 
+.listItem[data-dragging="true"] {
+  opacity: 0.5;
+}
+
+.listItem[data-drag-over="true"] {
+  border-top: 2px solid var(--color-primary);
+}
+
 .desc {
   color: var(--color-text-muted);
 }

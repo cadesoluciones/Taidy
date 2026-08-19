@@ -162,6 +162,20 @@ def delete_workflow(workflow_id: str) -> None:
         _write(data)
 
 
+def reorder_workflows(ordered_ids: List[str]) -> List[dict]:
+    """Persists a new display order for the saved-workflows list -- purely
+    cosmetic (list order), never touched by run/schedule logic, which always
+    looks a workflow up by id via get_workflow()."""
+    with _LOCK:
+        data = _read()
+        by_id = {w["id"]: w for w in data}
+        if set(ordered_ids) != set(by_id):
+            raise ValueError("La lista de flujos a reordenar no coincide con los flujos existentes.")
+        reordered = [by_id[wid] for wid in ordered_ids]
+        _write(reordered)
+        return reordered
+
+
 def list_workflows_for_user(username: str, role: str) -> List[dict]:
     """Operator/Admin see every workflow (unchanged, role-based access);
     Reader only sees the ones an admin explicitly listed them for."""

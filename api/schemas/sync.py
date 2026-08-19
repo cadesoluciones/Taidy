@@ -37,6 +37,10 @@ class SyncMappingListOut(BaseModel):
     items: List[SyncMappingOut]
 
 
+class ReorderRequest(BaseModel):
+    ids: List[str]
+
+
 class CreateSyncMappingRequest(BaseModel):
     name: str
     source: SystemRef

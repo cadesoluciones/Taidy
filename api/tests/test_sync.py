@@ -212,3 +212,44 @@ def test_bc_table_fields_empty_when_never_extracted(isolated_state, client):
     resp = client.get("/meta/bc-tables/some_never_extracted_table/fields")
     assert resp.status_code == 200
     assert resp.json()["items"] == []
+
+
+# --------------------------------------------------------------------------------------
+# PATCH /sync/mappings/reorder
+# --------------------------------------------------------------------------------------
+
+
+def test_admin_can_reorder_mappings(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    client.post("/sync/mappings", json=_payload(name="mapeo_1"))
+    client.post("/sync/mappings", json=_payload(name="mapeo_2"))
+    client.post("/sync/mappings", json=_payload(name="mapeo_3"))
+
+    resp = client.patch("/sync/mappings/reorder", json={"ids": ["mapeo_3", "mapeo_1", "mapeo_2"]})
+    assert resp.status_code == 200
+    assert [m["name"] for m in resp.json()["items"]] == ["mapeo_3", "mapeo_1", "mapeo_2"]
+
+    listed = client.get("/sync/mappings").json()["items"]
+    assert [m["name"] for m in listed] == ["mapeo_3", "mapeo_1", "mapeo_2"]
+
+
+def test_reorder_rejects_a_list_that_does_not_match_existing_mappings(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    client.post("/sync/mappings", json=_payload(name="mapeo_1"))
+
+    resp = client.patch("/sync/mappings/reorder", json={"ids": ["mapeo_1", "does-not-exist"]})
+    assert resp.status_code == 400
+
+
+def test_operator_cannot_reorder_mappings(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    client.post("/sync/mappings", json=_payload(name="mapeo_1"))
+
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+    resp = client.patch("/sync/mappings/reorder", json={"ids": ["mapeo_1"]})
+    assert resp.status_code == 403

@@ -177,3 +177,15 @@ def delete_mapping(name: str) -> None:
     mappings = _read()
     remaining = [m for m in mappings if m.get("name") != name]
     _write(remaining)
+
+
+def reorder_mappings(ordered_names: List[str]) -> List[dict]:
+    """Persists a new display order for the mappings list -- purely cosmetic
+    (list order); compare/apply always look a mapping up by name."""
+    mappings = _read()
+    by_name = {m["name"]: m for m in mappings}
+    if set(ordered_names) != set(by_name):
+        raise ValueError("La lista de mapeos a reordenar no coincide con los mapeos existentes.")
+    reordered = [by_name[name] for name in ordered_names]
+    _write(reordered)
+    return reordered

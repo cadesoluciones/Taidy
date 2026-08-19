@@ -394,3 +394,44 @@ def test_retry_is_rejected_for_a_run_that_finished_ok(isolated_state, client, fa
 
     resp = client.post(f"/workflow-runs/{run_id}/retry")
     assert resp.status_code == 409
+
+
+# --------------------------------------------------------------------------------------
+# PATCH /workflows/reorder
+# --------------------------------------------------------------------------------------
+
+
+def test_admin_can_reorder_workflows(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    id1 = client.post("/workflows", json={"name": "Flujo 1", "steps": _SIMPLE_STEPS}).json()["id"]
+    id2 = client.post("/workflows", json={"name": "Flujo 2", "steps": _SIMPLE_STEPS}).json()["id"]
+    id3 = client.post("/workflows", json={"name": "Flujo 3", "steps": _SIMPLE_STEPS}).json()["id"]
+
+    resp = client.patch("/workflows/reorder", json={"ids": [id3, id1, id2]})
+    assert resp.status_code == 200
+    assert [w["id"] for w in resp.json()["items"]] == [id3, id1, id2]
+
+    listed = client.get("/workflows").json()["items"]
+    assert [w["id"] for w in listed] == [id3, id1, id2]
+
+
+def test_reorder_rejects_a_list_that_does_not_match_existing_workflows(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    workflow_id = client.post("/workflows", json={"name": "Flujo 1", "steps": _SIMPLE_STEPS}).json()["id"]
+
+    resp = client.patch("/workflows/reorder", json={"ids": [workflow_id, "does-not-exist"]})
+    assert resp.status_code == 400
+
+
+def test_operator_cannot_reorder_workflows(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    workflow_id = client.post("/workflows", json={"name": "Flujo 1", "steps": _SIMPLE_STEPS}).json()["id"]
+
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+    resp = client.patch("/workflows/reorder", json={"ids": [workflow_id]})
+    assert resp.status_code == 403

@@ -292,6 +292,20 @@ def remove_schedule(scheduler: BackgroundScheduler, schedule_id: str) -> None:
         pass
 
 
+def reorder_schedules(ordered_ids: List[str]) -> List[dict]:
+    """Persists a new display order for "Tareas programadas" -- purely
+    cosmetic (list order); APScheduler jobs are looked up by id, never by
+    position, so this never touches the live scheduler."""
+    with _STORE_LOCK:
+        schedules = _read_json(_SCHEDULES_PATH, [])
+        by_id = {s["id"]: s for s in schedules}
+        if set(ordered_ids) != set(by_id):
+            raise ValueError("La lista de tareas a reordenar no coincide con las tareas existentes.")
+        reordered = [by_id[sid] for sid in ordered_ids]
+        _write_json(_SCHEDULES_PATH, reordered)
+        return reordered
+
+
 def set_schedule_enabled(scheduler: BackgroundScheduler, schedule_id: str, enabled: bool) -> None:
     with _STORE_LOCK:
         schedules = _read_json(_SCHEDULES_PATH, [])

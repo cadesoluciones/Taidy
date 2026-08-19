@@ -13,12 +13,14 @@ import {
   createSyncMapping,
   deleteSyncMapping,
   fetchSyncMappings,
+  reorderSyncMappings,
   updateSyncMapping,
   type FieldPair,
   type RowFilter,
   type SyncMappingConfig,
 } from "../api/syncMappings";
 import { ApiError } from "../api/client";
+import { useDragReorder } from "../hooks/useDragReorder";
 import { ConfirmDialog } from "./ConfirmDialog";
 import formStyles from "./Form.module.css";
 import styles from "./SyncMappingManager.module.css";
@@ -168,6 +170,18 @@ export function SyncMappingManager() {
   useEffect(() => {
     void reload();
   }, []);
+
+  async function handleReorderMappings(orderedNames: string[]) {
+    const byName = new Map(mappings.map((m) => [m.name, m]));
+    setMappings(orderedNames.map((name) => byName.get(name)).filter((m): m is SyncMappingConfig => m !== undefined));
+    try {
+      await reorderSyncMappings(orderedNames);
+    } catch {
+      await reload();
+    }
+  }
+
+  const { handlersFor: mappingDragHandlers } = useDragReorder(mappings, (m) => m.name, (ids) => void handleReorderMappings(ids));
 
   useEffect(() => {
     tableNamesForSystem(sourceSystem)
@@ -691,7 +705,7 @@ export function SyncMappingManager() {
       {mappings.length > 0 && (
         <ul className={tableStyles.list} style={{ marginTop: "var(--space-4)" }}>
           {mappings.map((m) => (
-            <li key={m.name} className={tableStyles.listItem}>
+            <li key={m.name} className={tableStyles.listItem} {...mappingDragHandlers(m.name)}>
               <div>
                 <strong>{m.name}</strong>
                 {m.description && <span className={tableStyles.desc}> — {m.description}</span>}

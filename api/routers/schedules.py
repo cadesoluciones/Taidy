@@ -14,6 +14,7 @@ from webapp.users_db import ROLE_ADMIN
 from ..dependencies import get_current_user, get_scheduler, require_role
 from ..schemas.schedules import (
     CreateScheduleRequest,
+    ReorderRequest,
     ScheduleListOut,
     ScheduleOut,
     ScheduleWeekOut,
@@ -52,6 +53,15 @@ def create_schedule(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     return ScheduleOut(**schedule)
+
+
+@router.patch("/reorder", response_model=ScheduleListOut, dependencies=[Depends(require_role(ROLE_ADMIN))])
+def reorder_schedules(payload: ReorderRequest) -> ScheduleListOut:
+    try:
+        items = sched_module.reorder_schedules(payload.ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return ScheduleListOut(items=[ScheduleOut(**s) for s in items])
 
 
 @router.put("/{schedule_id}", response_model=ScheduleOut, dependencies=[Depends(require_role(ROLE_ADMIN))])

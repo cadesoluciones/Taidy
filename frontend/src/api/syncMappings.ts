@@ -83,6 +83,10 @@ export function deleteSyncMapping(name: string): Promise<void> {
   return apiDelete<void>(`/sync/mappings/${encodeURIComponent(name)}`);
 }
 
+export function reorderSyncMappings(names: string[]): Promise<{ items: SyncMappingConfig[] }> {
+  return apiPatch<{ items: SyncMappingConfig[] }>("/sync/mappings/reorder", { ids: names });
+}
+
 export function compareSyncMapping(name: string): Promise<ComparisonReport> {
   return apiPost<ComparisonReport>(`/sync/mappings/${encodeURIComponent(name)}/compare`);
 }

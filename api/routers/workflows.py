@@ -17,6 +17,7 @@ from webapp.users_db import ROLE_ADMIN, ROLE_OPERATOR
 from ..dependencies import CurrentUser, get_current_user, require_role
 from ..schemas.workflows import (
     CreateWorkflowRequest,
+    ReorderRequest,
     RunWorkflowRequest,
     SetReaderAccessRequest,
     StepRunOut,
@@ -49,6 +50,15 @@ def create_workflow(payload: CreateWorkflowRequest) -> WorkflowOut:
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     return WorkflowOut(**workflow)
+
+
+@router.patch("/reorder", response_model=WorkflowListOut, dependencies=[Depends(require_role(ROLE_ADMIN))])
+def reorder_workflows(payload: ReorderRequest) -> WorkflowListOut:
+    try:
+        items = workflows_module.reorder_workflows(payload.ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return WorkflowListOut(items=[WorkflowOut(**w) for w in items])
 
 
 @router.patch("/{workflow_id}", response_model=WorkflowOut, dependencies=[Depends(require_role(ROLE_ADMIN))])

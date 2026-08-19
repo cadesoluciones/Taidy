@@ -37,3 +37,7 @@ class SetScheduleEnabledRequest(BaseModel):
 
 class ScheduleWeekOut(BaseModel):
     occurrences: Dict[str, List[str]]  # schedule_id -> ISO datetimes due this week
+
+
+class ReorderRequest(BaseModel):
+    ids: List[str]

@@ -38,6 +38,10 @@ class SetReaderAccessRequest(BaseModel):
     reader_usernames: List[str]
 
 
+class ReorderRequest(BaseModel):
+    ids: List[str]
+
+
 class RunWorkflowRequest(BaseModel):
     notify: bool = False
 

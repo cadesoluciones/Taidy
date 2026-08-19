@@ -9,6 +9,7 @@ import {
   deleteWorkflow,
   fetchWorkflowRuns,
   fetchWorkflows,
+  reorderWorkflows,
   retryWorkflowRun,
   runWorkflow,
   setWorkflowReaderAccess,
@@ -29,6 +30,7 @@ import { SyncApplyFields } from "../components/SyncApplyFields";
 import { TagMultiSelect } from "../components/TagMultiSelect";
 import { WorkflowDiagram } from "../components/WorkflowDiagram";
 import { usePolling } from "../hooks/usePolling";
+import { useDragReorder } from "../hooks/useDragReorder";
 import { NEEDS_MODE_PARALLEL, NEEDS_START_ON, NEEDS_SKIP_EXISTING } from "../utils/actionParamGroups";
 import styles from "./WorkflowsPage.module.css";
 
@@ -131,6 +133,20 @@ export function WorkflowsPage() {
     const updated = await setWorkflowReaderAccess(workflowId, usernames);
     setWorkflows((prev) => prev.map((w) => (w.id === workflowId ? updated : w)));
   }
+
+  async function handleReorderWorkflows(orderedIds: string[]) {
+    const byId = new Map(workflows.map((w) => [w.id, w]));
+    // Optimistic reorder -- the drag gesture should feel instant, not wait
+    // on a round trip; reloadWorkflows() below reconciles with the server.
+    setWorkflows(orderedIds.map((id) => byId.get(id)).filter((w): w is Workflow => w !== undefined));
+    try {
+      await reorderWorkflows(orderedIds);
+    } catch {
+      await reloadWorkflows();
+    }
+  }
+
+  const { handlersFor: workflowDragHandlers } = useDragReorder(workflows, (w) => w.id, (ids) => void handleReorderWorkflows(ids));
 
   /** Builds `params` for the block about to be added, mirroring
    * SchedulesPage's buildParams() -- returns null when a required
@@ -814,6 +830,7 @@ export function WorkflowsPage() {
                   key={wf.id}
                   className={wf.id === selectedWorkflowId ? styles.savedListItemActive : styles.savedListItem}
                   onClick={() => setSelectedWorkflowId(wf.id)}
+                  {...(isAdmin ? workflowDragHandlers(wf.id) : {})}
                 >
                   <strong>{wf.name}</strong>
                   <span className={styles.stepMeta}>{wf.steps.length} bloque(s)</span>

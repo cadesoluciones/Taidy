@@ -62,6 +62,10 @@ export function setWorkflowReaderAccess(id: string, readerUsernames: string[]): 
   return apiPatch<Workflow>(`/workflows/${id}/reader-access`, { reader_usernames: readerUsernames });
 }
 
+export function reorderWorkflows(ids: string[]): Promise<{ items: Workflow[] }> {
+  return apiPatch<{ items: Workflow[] }>("/workflows/reorder", { ids });
+}
+
 export function runWorkflow(id: string, notify = false): Promise<WorkflowRun> {
   return apiPost<WorkflowRun>(`/workflows/${id}/run`, { notify });
 }

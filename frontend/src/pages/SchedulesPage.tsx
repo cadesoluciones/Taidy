@@ -8,6 +8,7 @@ import {
   createSchedule,
   deleteSchedule,
   fetchSchedules,
+  reorderSchedules,
   setScheduleEnabled,
   updateSchedule,
   type Schedule,
@@ -20,6 +21,7 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import formStyles from "../components/Form.module.css";
 import { NotifyCheckbox } from "../components/NotifyCheckbox";
 import { SyncApplyFields } from "../components/SyncApplyFields";
+import { useDragReorder } from "../hooks/useDragReorder";
 import { NEEDS_MODE_PARALLEL, NEEDS_START_ON, NEEDS_SKIP_EXISTING } from "../utils/actionParamGroups";
 import styles from "./SchedulesPage.module.css";
 
@@ -72,6 +74,18 @@ export function SchedulesPage() {
   async function reload() {
     setSchedules((await fetchSchedules()).items);
   }
+
+  async function handleReorderSchedules(orderedIds: string[]) {
+    const byId = new Map(schedules.map((s) => [s.id, s]));
+    setSchedules(orderedIds.map((id) => byId.get(id)).filter((s): s is Schedule => s !== undefined));
+    try {
+      await reorderSchedules(orderedIds);
+    } catch {
+      await reload();
+    }
+  }
+
+  const { handlersFor: scheduleDragHandlers } = useDragReorder(schedules, (s) => s.id, (ids) => void handleReorderSchedules(ids));
 
   useEffect(() => {
     void reload();
@@ -268,7 +282,7 @@ export function SchedulesPage() {
       ) : (
         <div className={styles.existingList}>
           {schedules.map((s) => (
-            <div className={styles.row} key={s.id}>
+            <div className={styles.row} key={s.id} {...(isAdmin ? scheduleDragHandlers(s.id) : {})}>
               <strong className={styles.name}>{s.name}</strong>
               <span>{ACTION_LABELS[s.action] ?? s.action}</span>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
