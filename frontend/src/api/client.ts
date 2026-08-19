@@ -23,7 +23,18 @@ export class ApiError extends Error {
   }
 }
 
-function extractDetailMessage(detail: unknown): { message: string; code: string | undefined } {
+/** A field name straight out of Pydantic's `loc` (e.g. "password") isn't
+ * always the label shown on the form -- this covers every field the app's
+ * request schemas actually validate with Field(...) constraints. Falls back
+ * to the raw name for anything not listed, which still beats a blank spot. */
+const VALIDATION_FIELD_LABELS: Record<string, string> = {
+  username: "Usuario",
+  password: "Contraseña",
+  role: "Rol",
+  name: "Nombre",
+};
+
+export function extractDetailMessage(detail: unknown): { message: string; code: string | undefined } {
   if (typeof detail === "string") {
     return { message: detail, code: undefined };
   }
@@ -35,6 +46,28 @@ function extractDetailMessage(detail: unknown): { message: string; code: string 
   ) {
     const code = "code" in detail && typeof (detail as { code: unknown }).code === "string" ? (detail as { code: string }).code : undefined;
     return { message: (detail as { message: string }).message, code };
+  }
+  // FastAPI's own request-validation errors (422, raised before the route
+  // handler even runs -- e.g. a password under Field(min_length=8)) shape
+  // `detail` as a list of {loc, msg, type} objects, not a string or
+  // {message}. Without this branch every one of those fell through to a
+  // useless "unexpected error" with no hint of what was actually wrong.
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (item === null || typeof item !== "object" || typeof (item as { msg?: unknown }).msg !== "string") {
+          return null;
+        }
+        const loc = (item as { loc?: unknown }).loc;
+        const field = Array.isArray(loc) ? loc.filter((p): p is string => typeof p === "string").pop() : undefined;
+        const label = field ? (VALIDATION_FIELD_LABELS[field] ?? field) : undefined;
+        const msg = (item as { msg: string }).msg;
+        return label ? `${label}: ${msg}` : msg;
+      })
+      .filter((m): m is string => Boolean(m));
+    if (messages.length > 0) {
+      return { message: messages.join(" · "), code: undefined };
+    }
   }
   return { message: "Ha ocurrido un error inesperado.", code: undefined };
 }
