@@ -93,3 +93,85 @@ def test_sample_fields_returns_empty_list_when_no_data():
     client = FactorialClient(settings=_settings(), session=_FakeSession(payload))
 
     assert client.sample_fields(path="resources/employees/employees") == []
+
+
+# --------------------------------------------------------------------------------------
+# list_available_tables -- Factorial publishes its full OpenAPI spec live (confirmed:
+# GET https://api.factorialhr.com/oas/?version=... works even unauthenticated), unlike
+# sample_fields's best-effort data peek. These tests pin the URL, the {id}-path
+# filtering, and the prefix-stripping against the real shape observed live.
+# --------------------------------------------------------------------------------------
+
+_SAMPLE_SPEC = {
+    "openapi": "3.1.0",
+    "paths": {
+        "/api/2020-01-01/resources/ats/candidates": {
+            "get": {"summary": "Reads all Candidates", "tags": ["Ats > Candidate"]},
+            "post": {"summary": "Creates a Candidate"},
+        },
+        "/api/2020-01-01/resources/ats/candidates/{id}": {
+            "get": {"summary": "Reads a single Candidate", "tags": ["Ats > Candidate"]},
+        },
+        "/api/2020-01-01/resources/employees/employees": {
+            "get": {"summary": "Reads all Employees", "tags": ["Employees > Employee"]},
+        },
+        "/api/2020-01-01/resources/employees/employees/{id}/terminate": {
+            "post": {"summary": "Terminates an Employee"},
+        },
+    },
+}
+
+
+def test_list_available_tables_hits_the_oas_endpoint_with_the_configured_version():
+    session = _FakeSession(_SAMPLE_SPEC)
+    client = FactorialClient(settings=_settings(), session=session)
+
+    client.list_available_tables()
+
+    url, params = session.requests[0]
+    assert url == "https://api.factorialhr.com/oas/"
+    assert params == [("version", "2020-01-01")]
+
+
+def test_list_available_tables_excludes_paths_with_id_parameters():
+    client = FactorialClient(settings=_settings(), session=_FakeSession(_SAMPLE_SPEC))
+
+    tables = client.list_available_tables()
+
+    names = {t["name"] for t in tables}
+    assert "resources/ats/candidates/{id}" not in names
+    assert "resources/employees/employees/{id}/terminate" not in names
+
+
+def test_list_available_tables_excludes_paths_without_a_get_method():
+    spec = {"paths": {"/api/2020-01-01/resources/x": {"post": {"summary": "Creates X"}}}}
+    client = FactorialClient(settings=_settings(), session=_FakeSession(spec))
+
+    assert client.list_available_tables() == []
+
+
+def test_list_available_tables_strips_the_version_prefix():
+    client = FactorialClient(settings=_settings(), session=_FakeSession(_SAMPLE_SPEC))
+
+    tables = client.list_available_tables()
+
+    names = {t["name"] for t in tables}
+    assert "resources/ats/candidates" in names
+    assert "resources/employees/employees" in names
+
+
+def test_list_available_tables_builds_label_from_tag_and_summary():
+    client = FactorialClient(settings=_settings(), session=_FakeSession(_SAMPLE_SPEC))
+
+    tables = client.list_available_tables()
+
+    candidates = next(t for t in tables if t["name"] == "resources/ats/candidates")
+    assert candidates["label"] == "Ats > Candidate — Reads all Candidates"
+
+
+def test_list_available_tables_sorted_by_name():
+    client = FactorialClient(settings=_settings(), session=_FakeSession(_SAMPLE_SPEC))
+
+    tables = client.list_available_tables()
+
+    assert [t["name"] for t in tables] == sorted(t["name"] for t in tables)

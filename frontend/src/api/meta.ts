@@ -66,6 +66,13 @@ export function fetchHubspotAvailableProperties(
   );
 }
 
+/** Every CRM object type this portal could plausibly extract from -- fixed
+ * standard objects, plus this portal's custom objects when available. Needs
+ * no input, unlike fetchHubspotAvailableProperties. */
+export function fetchHubspotAvailableObjectTypes(): Promise<{ items: AvailableProperty[] }> {
+  return apiGet<{ items: AvailableProperty[] }>("/meta/hubspot-tables/available-object-types");
+}
+
 export interface BcTableConfig {
   name: string;
   description: string;
@@ -154,4 +161,11 @@ export function fetchFactorialAvailableFields(path: string, dateRange = false): 
   return apiGet<{ items: AvailableProperty[] }>(
     `/meta/factorial-tables/available-fields${buildQuery({ path, date_range: dateRange })}`
   );
+}
+
+/** Live discovery of every readable endpoint in Factorial's public API --
+ * unlike fetchFactorialAvailableFields, this needs no input: Factorial
+ * publishes its full OpenAPI spec at a stable, self-contained URL. */
+export function fetchFactorialAvailableTables(): Promise<{ items: AvailableProperty[] }> {
+  return apiGet<{ items: AvailableProperty[] }>("/meta/factorial-tables/available-tables");
 }

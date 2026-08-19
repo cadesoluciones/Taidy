@@ -32,6 +32,28 @@ logger = get_logger(__name__)
 
 _PAGE_SIZE = 100
 
+# HubSpot has no API to enumerate its own *standard* CRM objects -- unlike
+# custom objects, they're a fixed part of the platform, not portal-specific
+# configuration, so this list is as close to "discoverable" as they get.
+# Whether a given one is actually usable still depends on the portal's Hub
+# subscription (e.g. "tickets" needs Service Hub) -- list_object_types()
+# doesn't try to verify that; a disabled object just 404s/403s later when
+# something actually reads it.
+STANDARD_OBJECT_TYPES: List[Dict[str, str]] = [
+    {"name": "contacts", "label": "Contactos"},
+    {"name": "companies", "label": "Empresas"},
+    {"name": "deals", "label": "Negocios"},
+    {"name": "tickets", "label": "Tickets"},
+    {"name": "products", "label": "Productos"},
+    {"name": "line_items", "label": "Líneas de producto"},
+    {"name": "quotes", "label": "Presupuestos"},
+    {"name": "calls", "label": "Llamadas"},
+    {"name": "emails", "label": "Correos"},
+    {"name": "meetings", "label": "Reuniones"},
+    {"name": "notes", "label": "Notas"},
+    {"name": "tasks", "label": "Tareas"},
+]
+
 
 # --------------------------------------------------------------------------------------
 # Custom Exception
@@ -202,6 +224,37 @@ class HubspotClient:
         if not include_hidden:
             properties = [p for p in properties if not p["hidden"] and not p["calculated"]]
         return sorted(properties, key=lambda p: p["name"])
+
+    def list_object_types(self) -> List[Dict[str, str]]:
+        """Every CRM object type this portal could plausibly extract from --
+        for the admin UI's "available object types" helper, so a new
+        hubspot_tables.yaml entry doesn't require already knowing HubSpot's
+        object type names by heart.
+
+        Always includes STANDARD_OBJECT_TYPES (fixed, not discoverable via
+        API -- see its docstring). Also tries `GET /crm/v3/schemas` to add
+        this portal's custom objects; that call needs a scope
+        (crm.schemas.custom.read or similar) this project's Private App may
+        not have been granted -- confirmed live to 403 without it -- so a
+        failure here is swallowed rather than breaking the whole picker: the
+        standard list alone is still useful.
+        """
+        types = list(STANDARD_OBJECT_TYPES)
+        try:
+            payload = self._fetch(f"{self._settings.base_url}/crm/v3/schemas", [])
+        except HubspotError:
+            logger.info("Could not list custom object schemas (likely missing scope) -- standard objects only.")
+            return types
+
+        for schema in payload.get("results", []) or []:
+            if not isinstance(schema, dict):
+                continue
+            name = schema.get("fullyQualifiedName") or schema.get("objectTypeId") or schema.get("name")
+            if not name:
+                continue
+            label = (schema.get("labels") or {}).get("plural") or schema.get("name") or name
+            types.append({"name": name, "label": label})
+        return types
 
     # ----------------------------------------------------------------------------------
     # Internal helpers

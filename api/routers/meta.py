@@ -187,6 +187,32 @@ def factorial_available_fields(path: str, date_range: bool = False) -> Available
     return AvailablePropertiesOut(items=[AvailableProperty(name=n) for n in names])
 
 
+@router.get(
+    "/factorial-tables/available-tables",
+    response_model=AvailablePropertiesOut,
+    dependencies=[Depends(require_role(ROLE_ADMIN))],
+)
+def factorial_available_tables() -> AvailablePropertiesOut:
+    """Live discovery of every readable endpoint in Factorial's public API,
+    to help pick a `path` when registering a new table (see
+    FactorialClient.list_available_tables). Unlike available-fields, this
+    needs no input -- Factorial's OpenAPI spec is self-contained."""
+    from dotenv import load_dotenv
+
+    from src.factorial_client.api import FactorialClient, FactorialError
+    from src.factorial_client.config import load_settings as load_factorial_settings
+
+    load_dotenv()
+    try:
+        settings = load_factorial_settings()
+        client = FactorialClient(settings=settings)
+        tables = client.list_available_tables()
+    except (ValueError, FactorialError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    return AvailablePropertiesOut(items=[AvailableProperty(**t) for t in tables])
+
+
 @router.get("/hubspot-tables/full", response_model=HubspotTableListOut)
 def hubspot_tables_full() -> HubspotTableListOut:
     return HubspotTableListOut(items=[HubspotTableOut(**t) for t in table_configs.list_hubspot_tables_full()])
@@ -253,3 +279,30 @@ def hubspot_available_properties(object_type: str, include_hidden: bool = False)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
     return AvailablePropertiesOut(items=[AvailableProperty(name=p["name"], label=p["label"]) for p in properties])
+
+
+@router.get(
+    "/hubspot-tables/available-object-types",
+    response_model=AvailablePropertiesOut,
+    dependencies=[Depends(require_role(ROLE_ADMIN))],
+)
+def hubspot_available_object_types() -> AvailablePropertiesOut:
+    """Every CRM object type this portal could plausibly extract from, to
+    help pick `object_type` when registering a new table (see
+    HubspotClient.list_object_types). Needs no input -- always includes the
+    fixed standard objects, plus this portal's custom objects when the
+    Private App token has the scope to list them."""
+    from dotenv import load_dotenv
+
+    from src.hubspot_client.api import HubspotClient, HubspotError
+    from src.hubspot_client.config import load_settings as load_hubspot_settings
+
+    load_dotenv()
+    try:
+        settings = load_hubspot_settings()
+        client = HubspotClient(settings=settings)
+        types = client.list_object_types()
+    except (ValueError, HubspotError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    return AvailablePropertiesOut(items=[AvailableProperty(**t) for t in types])

@@ -1,22 +1,31 @@
 import { useEffect, useState } from "react";
 
-import { fetchBcTablesFull, fetchFactorialTablesFull, type BcTableConfig, type FactorialTableConfig } from "../api/meta";
+import {
+  fetchBcTablesFull,
+  fetchFactorialTablesFull,
+  fetchHubspotTablesFull,
+  type BcTableConfig,
+  type FactorialTableConfig,
+  type HubspotTableConfig,
+} from "../api/meta";
 import formStyles from "../components/Form.module.css";
 import styles from "./CatalogoDatosPage.module.css";
 
 export function CatalogoDatosPage() {
   const [bcTables, setBcTables] = useState<BcTableConfig[]>([]);
   const [factorialTables, setFactorialTables] = useState<FactorialTableConfig[]>([]);
+  const [hubspotTables, setHubspotTables] = useState<HubspotTableConfig[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchBcTablesFull(), fetchFactorialTablesFull()])
-      .then(([bc, factorial]) => {
+    Promise.all([fetchBcTablesFull(), fetchFactorialTablesFull(), fetchHubspotTablesFull()])
+      .then(([bc, factorial, hubspot]) => {
         if (cancelled) return;
         setBcTables(bc.items);
         setFactorialTables(factorial.items);
+        setHubspotTables(hubspot.items);
       })
       .catch(() => {
         if (!cancelled) setError("No se pudo cargar el catálogo de datos.");
@@ -101,6 +110,34 @@ export function CatalogoDatosPage() {
                           {t.incremental ? "Sí" : "No"}
                         </span>
                       </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <h2>HubSpot CRM</h2>
+          {hubspotTables.length === 0 ? (
+            <p>No hay objetos de HubSpot configurados todavía.</p>
+          ) : (
+            <div className={styles.tableWrap}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Descripción</th>
+                    <th>Tipo de objeto</th>
+                    <th>Propiedades</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {hubspotTables.map((t) => (
+                    <tr key={t.name}>
+                      <td>{t.name}</td>
+                      <td>{t.description || "—"}</td>
+                      <td className={styles.mono}>{t.object_type}</td>
+                      <td className={styles.mono}>{t.fields.join(", ")}</td>
                     </tr>
                   ))}
                 </tbody>

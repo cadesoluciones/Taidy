@@ -3,6 +3,7 @@ import { Pencil, Plus, Trash2, X } from "lucide-react";
 import {
   createHubspotTable,
   deleteHubspotTable,
+  fetchHubspotAvailableObjectTypes,
   fetchHubspotAvailableProperties,
   fetchHubspotTablesFull,
   updateHubspotTable,
@@ -123,6 +124,11 @@ export function HubspotTableManager() {
               value={mgr.form.objectType}
               onChange={(e) => mgr.setForm((f) => ({ ...f, objectType: e.target.value }))}
               placeholder="tickets"
+            />
+            <AvailablePropertiesPicker
+              buttonLabel="Ver tipos de objeto disponibles"
+              fetchProperties={() => fetchHubspotAvailableObjectTypes()}
+              onPick={(name) => mgr.setForm((f) => ({ ...f, objectType: name }))}
             />
           </div>
           <div className={formStyles.field}>

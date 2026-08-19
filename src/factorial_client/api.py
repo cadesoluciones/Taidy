@@ -255,6 +255,38 @@ class FactorialClient:
                 keys.update(record.keys())
         return sorted(keys)
 
+    def list_available_tables(self) -> List[Dict[str, str]]:
+        """Live discovery of every readable endpoint Factorial's public API
+        exposes, for the admin UI's "available tables" helper -- unlike
+        sample_fields (which peeks at real data because there's no schema
+        endpoint), Factorial *does* publish its full OpenAPI spec live at
+        GET {domain}/oas/?version=..., confirmed to work even without
+        authentication. Returns only GET "list" endpoints (no `{id}` path
+        parameter -- e.g. `resources/ats/candidates`, not
+        `resources/ats/candidates/{id}`), in the same relative-path shape
+        TableConfig.path already expects.
+        """
+        base_root = self._settings.base_url.removesuffix("/api")
+        url = f"{base_root}/oas/"
+        spec = self._fetch(url, [("version", self._settings.api_version)])
+
+        paths = spec.get("paths", {})
+        if not isinstance(paths, dict):
+            raise FactorialError(f"Unexpected response from {url}: 'paths' should be a mapping")
+
+        prefix = f"/api/{self._settings.api_version}/"
+        tables: List[Dict[str, str]] = []
+        for path, methods in paths.items():
+            if "{" in path or not isinstance(methods, dict) or "get" not in methods:
+                continue
+            relative = path[len(prefix):] if path.startswith(prefix) else path.lstrip("/")
+            get_info = methods["get"] or {}
+            tag = (get_info.get("tags") or [relative])[0]
+            summary = get_info.get("summary") or ""
+            label = f"{tag} — {summary}" if summary else tag
+            tables.append({"name": relative, "label": label})
+        return sorted(tables, key=lambda t: t["name"])
+
     # ----------------------------------------------------------------------------------
     # Internal helpers
     # ----------------------------------------------------------------------------------

@@ -98,3 +98,58 @@ def test_list_properties_carries_the_label():
 
     by_name = {p["name"]: p["label"] for p in props}
     assert by_name["email"] == "Email"
+
+
+# --------------------------------------------------------------------------------------
+# list_object_types -- standard objects are always included; custom objects only when
+# the Private App token has the crm.schemas.custom.read scope (confirmed live to 403
+# without it, so a failed schemas call must degrade gracefully, not blow up the picker).
+# --------------------------------------------------------------------------------------
+
+
+class _FakeCallableSession:
+    def __init__(self, responder):
+        self._responder = responder
+
+    def get(self, url, headers=None, params=None, timeout=None):
+        return self._responder(url)
+
+
+def test_list_object_types_always_includes_standard_objects():
+    session = _FakeCallableSession(lambda url: _FakeResponse(403, {"message": "missing scope"}))
+    client = HubspotClient(settings=_settings(), session=session)
+
+    types = client.list_object_types()
+
+    names = {t["name"] for t in types}
+    assert {"contacts", "companies", "deals"} <= names
+
+
+def test_list_object_types_degrades_gracefully_without_custom_schema_scope():
+    session = _FakeCallableSession(lambda url: _FakeResponse(403, {"message": "missing scope"}))
+    client = HubspotClient(settings=_settings(), session=session)
+
+    types = client.list_object_types()
+
+    from src.hubspot_client.api import STANDARD_OBJECT_TYPES
+
+    assert types == STANDARD_OBJECT_TYPES
+
+
+def test_list_object_types_adds_custom_objects_when_schema_access_is_available():
+    schemas_payload = {
+        "results": [
+            {
+                "fullyQualifiedName": "p123_pets",
+                "name": "pets",
+                "labels": {"singular": "Pet", "plural": "Pets"},
+            }
+        ]
+    }
+    session = _FakeCallableSession(lambda url: _FakeResponse(200, schemas_payload))
+    client = HubspotClient(settings=_settings(), session=session)
+
+    types = client.list_object_types()
+
+    custom = next(t for t in types if t["name"] == "p123_pets")
+    assert custom["label"] == "Pets"

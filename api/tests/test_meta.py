@@ -452,3 +452,91 @@ def test_admin_can_fetch_factorial_available_fields(isolated_state, client, monk
 
     assert resp.status_code == 200
     assert resp.json()["items"] == [{"name": "email", "label": ""}, {"name": "id", "label": ""}]
+
+
+def test_operator_cannot_call_hubspot_available_object_types(isolated_state, client):
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+    resp = client.get("/meta/hubspot-tables/available-object-types")
+    assert resp.status_code == 403
+
+
+def test_admin_can_fetch_hubspot_available_object_types(isolated_state, client, monkeypatch):
+    from src.hubspot_client import config as hubspot_config
+
+    class _FakeClient:
+        def __init__(self, settings):
+            self.settings = settings
+
+        def list_object_types(self):
+            return [{"name": "contacts", "label": "Contactos"}]
+
+    monkeypatch.setattr(hubspot_config, "load_settings", lambda: object())
+    monkeypatch.setattr("src.hubspot_client.api.HubspotClient", _FakeClient)
+
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    resp = client.get("/meta/hubspot-tables/available-object-types")
+
+    assert resp.status_code == 200
+    assert resp.json()["items"] == [{"name": "contacts", "label": "Contactos"}]
+
+
+def test_hubspot_available_object_types_maps_client_error_to_400(isolated_state, client, monkeypatch):
+    from src.hubspot_client import config as hubspot_config
+
+    def fake_load_settings():
+        raise ValueError("Missing required environment variables: HUBSPOT_API_KEY")
+
+    monkeypatch.setattr(hubspot_config, "load_settings", fake_load_settings)
+
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    resp = client.get("/meta/hubspot-tables/available-object-types")
+
+    assert resp.status_code == 400
+
+
+def test_operator_cannot_call_factorial_available_tables(isolated_state, client):
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+    resp = client.get("/meta/factorial-tables/available-tables")
+    assert resp.status_code == 403
+
+
+def test_admin_can_fetch_factorial_available_tables(isolated_state, client, monkeypatch):
+    from src.factorial_client import config as factorial_config
+
+    class _FakeClient:
+        def __init__(self, settings):
+            self.settings = settings
+
+        def list_available_tables(self):
+            return [{"name": "resources/ats/candidates", "label": "Ats > Candidate — Reads all Candidates"}]
+
+    monkeypatch.setattr(factorial_config, "load_settings", lambda: object())
+    monkeypatch.setattr("src.factorial_client.api.FactorialClient", _FakeClient)
+
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    resp = client.get("/meta/factorial-tables/available-tables")
+
+    assert resp.status_code == 200
+    assert resp.json()["items"] == [
+        {"name": "resources/ats/candidates", "label": "Ats > Candidate — Reads all Candidates"}
+    ]
+
+
+def test_factorial_available_tables_maps_client_error_to_400(isolated_state, client, monkeypatch):
+    from src.factorial_client import config as factorial_config
+
+    def fake_load_settings():
+        raise ValueError("Missing required environment variables: FACTORIAL_API_KEY")
+
+    monkeypatch.setattr(factorial_config, "load_settings", fake_load_settings)
+
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    resp = client.get("/meta/factorial-tables/available-tables")
+
+    assert resp.status_code == 400

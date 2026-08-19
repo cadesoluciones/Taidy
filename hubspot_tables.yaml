@@ -39,3 +39,13 @@ tables:
   - closedate
   - createdate
   - hs_lastmodifieddate
+- name: hubspot_quote
+  description: ''
+  object_type: quotes
+  fields:
+  - hs_deal_name
+  - hs_object_id
+  - hs_status
+  - hs_tax_total
+  - hs_tcv
+  - hs_title

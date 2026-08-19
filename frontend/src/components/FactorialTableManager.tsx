@@ -4,6 +4,7 @@ import {
   createFactorialTable,
   deleteFactorialTable,
   fetchFactorialAvailableFields,
+  fetchFactorialAvailableTables,
   fetchFactorialTablesFull,
   updateFactorialTable,
   type FactorialTableConfig,
@@ -136,6 +137,11 @@ export function FactorialTableManager() {
               type="text"
               value={mgr.form.path}
               onChange={(e) => mgr.setForm((f) => ({ ...f, path: e.target.value }))}
+            />
+            <AvailablePropertiesPicker
+              buttonLabel="Ver tablas disponibles"
+              fetchProperties={() => fetchFactorialAvailableTables()}
+              onPick={(name) => mgr.setForm((f) => ({ ...f, path: name }))}
             />
           </div>
           <div className={formStyles.field}>
