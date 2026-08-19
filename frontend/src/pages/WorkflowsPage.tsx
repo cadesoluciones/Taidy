@@ -29,6 +29,7 @@ import { SyncApplyFields } from "../components/SyncApplyFields";
 import { TagMultiSelect } from "../components/TagMultiSelect";
 import { WorkflowDiagram } from "../components/WorkflowDiagram";
 import { usePolling } from "../hooks/usePolling";
+import { NEEDS_MODE_PARALLEL, NEEDS_START_ON, NEEDS_SKIP_EXISTING } from "../utils/actionParamGroups";
 import styles from "./WorkflowsPage.module.css";
 
 /**
@@ -65,6 +66,13 @@ export function WorkflowsPage() {
   const [newStepSyncMapping, setNewStepSyncMapping] = useState("");
   const [newStepSyncDirection, setNewStepSyncDirection] = useState<SyncApplyDirection>("to_target");
   const [newStepSyncConfirmLargeBatch, setNewStepSyncConfirmLargeBatch] = useState(false);
+  const [newStepWorkflowId, setNewStepWorkflowId] = useState("");
+  const [newStepMode, setNewStepMode] = useState<"incremental" | "full">("incremental");
+  const [newStepParallel, setNewStepParallel] = useState(1);
+  const [newStepStartOn, setNewStepStartOn] = useState("2025-01-01");
+  const [newStepEmployeeStatus, setNewStepEmployeeStatus] = useState<"active" | "inactive" | "all">("active");
+  const [newStepSkipExisting, setNewStepSkipExisting] = useState(false);
+  const [stepPositions, setStepPositions] = useState<Record<string, { x: number; y: number }>>({});
 
   const { data: runsData, refetch: refetchRuns } = usePolling(() => fetchWorkflowRuns(), 3000);
   const runs = runsData?.items ?? [];
@@ -101,6 +109,17 @@ export function WorkflowsPage() {
     }
   }, [pipelines, newStepAction, newStepPipeline]);
 
+  // A block can't launch the workflow it's currently being edited into --
+  // that would be an immediate self-reference loop.
+  const workflowChoicesForStep = workflows.filter((w) => w.id !== editingWorkflowId);
+
+  useEffect(() => {
+    if (newStepAction === "run_workflow" && !newStepWorkflowId && workflowChoicesForStep.length > 0) {
+      setNewStepWorkflowId(workflowChoicesForStep[0]?.id ?? "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newStepAction, workflowChoicesForStep.length]);
+
   useEffect(() => {
     if (!isAdmin) return;
     fetchUsers()
@@ -113,22 +132,47 @@ export function WorkflowsPage() {
     setWorkflows((prev) => prev.map((w) => (w.id === workflowId ? updated : w)));
   }
 
+  /** Builds `params` for the block about to be added, mirroring
+   * SchedulesPage's buildParams() -- returns null when a required
+   * selection (pipeline, mapping, flujo) hasn't been made yet. */
+  function buildNewStepParams(): Record<string, unknown> | null {
+    if (newStepAction === "run_pipeline") {
+      if (!newStepPipeline) return null;
+      return { pipeline: newStepPipeline };
+    }
+    if (newStepAction === "sync_apply") {
+      if (!newStepSyncMapping) return null;
+      return {
+        mapping: newStepSyncMapping,
+        direction: newStepSyncDirection,
+        confirm_large_batch: newStepSyncConfirmLargeBatch,
+      };
+    }
+    if (newStepAction === "run_workflow") {
+      if (!newStepWorkflowId) return null;
+      return { workflow_id: newStepWorkflowId };
+    }
+    const params: Record<string, unknown> = {};
+    if (NEEDS_MODE_PARALLEL.has(newStepAction)) {
+      params.mode = newStepMode;
+      params.parallel = newStepParallel;
+    }
+    if (NEEDS_START_ON.has(newStepAction)) {
+      params.start_on = newStepStartOn;
+      params.employee_status = newStepEmployeeStatus;
+    }
+    if (NEEDS_SKIP_EXISTING.has(newStepAction)) {
+      params.skip_existing = newStepSkipExisting;
+    }
+    return params;
+  }
+
   function addStep() {
-    if (newStepAction === "run_pipeline" && !newStepPipeline) return;
-    if (newStepAction === "sync_apply" && !newStepSyncMapping) return;
+    const params = buildNewStepParams();
+    if (params === null) return;
     setDesignerError(null);
     const id = `step_${Math.random().toString(36).slice(2, 10)}`;
     const label = `Bloque ${draftSteps.length + 1}`;
-    const params =
-      newStepAction === "run_pipeline"
-        ? { pipeline: newStepPipeline }
-        : newStepAction === "sync_apply"
-          ? {
-              mapping: newStepSyncMapping,
-              direction: newStepSyncDirection,
-              confirm_large_batch: newStepSyncConfirmLargeBatch,
-            }
-          : {};
     setDraftSteps((prev) => [
       ...prev,
       { id, label, action: newStepAction, params, depends_on: [], trigger_rule: "all_success" },
@@ -145,6 +189,11 @@ export function WorkflowsPage() {
       prev.filter((s) => s.id !== id).map((s) => ({ ...s, depends_on: s.depends_on.filter((d) => d !== id) })),
     );
     setSelectedStepId((cur) => (cur === id ? null : cur));
+    setStepPositions((prev) => {
+      if (!(id in prev)) return prev;
+      const { [id]: _removed, ...rest } = prev;
+      return rest;
+    });
   }
 
   /** Client-side mirror of webapp/workflows.py:_validate_steps()'s cycle
@@ -204,6 +253,16 @@ export function WorkflowsPage() {
       setDesignerError(`El bloque "${missingPipeline.label}" necesita que elijas qué pipeline lanzar.`);
       return;
     }
+    const missingMapping = draftSteps.find((s) => s.action === "sync_apply" && !s.params.mapping);
+    if (missingMapping) {
+      setDesignerError(`El bloque "${missingMapping.label}" necesita que elijas qué mapeo sincronizar.`);
+      return;
+    }
+    const missingWorkflow = draftSteps.find((s) => s.action === "run_workflow" && !s.params.workflow_id);
+    if (missingWorkflow) {
+      setDesignerError(`El bloque "${missingWorkflow.label}" necesita que elijas qué flujo lanzar.`);
+      return;
+    }
     try {
       const saved = editingWorkflowId
         ? await updateWorkflow(editingWorkflowId, workflowName, draftSteps, workflowDescription)
@@ -213,6 +272,7 @@ export function WorkflowsPage() {
       setWorkflowDescription("");
       setEditingWorkflowId(null);
       setSelectedStepId(null);
+      setStepPositions({});
       setSelectedWorkflowId(saved.id);
       setActiveTab("saved");
       await reloadWorkflows();
@@ -228,6 +288,7 @@ export function WorkflowsPage() {
     setWorkflowDescription(wf.description);
     setDraftSteps(wf.steps);
     setSelectedStepId(null);
+    setStepPositions({});
     setActiveTab("editor");
   }
 
@@ -237,12 +298,14 @@ export function WorkflowsPage() {
     setWorkflowDescription("");
     setDraftSteps([]);
     setSelectedStepId(null);
+    setStepPositions({});
     setActiveTab("saved");
   }
 
   function discardDraft() {
     setDraftSteps([]);
     setSelectedStepId(null);
+    setStepPositions({});
     setWorkflowName("");
     setWorkflowDescription("");
   }
@@ -405,14 +468,90 @@ export function WorkflowsPage() {
                     onConfirmLargeBatchChange={setNewStepSyncConfirmLargeBatch}
                   />
                 )}
+                {newStepAction === "run_workflow" &&
+                  (workflowChoicesForStep.length === 0 ? (
+                    <p className={formStyles.hint}>No hay otro flujo guardado que se pueda lanzar desde aquí.</p>
+                  ) : (
+                    <div className={formStyles.field}>
+                      <label htmlFor="new_step_workflow">Flujo</label>
+                      <select
+                        id="new_step_workflow"
+                        value={newStepWorkflowId}
+                        onChange={(e) => setNewStepWorkflowId(e.target.value)}
+                      >
+                        {workflowChoicesForStep.map((w) => (
+                          <option key={w.id} value={w.id}>
+                            {w.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                {NEEDS_MODE_PARALLEL.has(newStepAction) && (
+                  <div className={formStyles.grid}>
+                    <div className={formStyles.field}>
+                      <label htmlFor="new_step_mode">Modo</label>
+                      <select
+                        id="new_step_mode"
+                        value={newStepMode}
+                        onChange={(e) => setNewStepMode(e.target.value as "incremental" | "full")}
+                      >
+                        <option value="incremental">incremental</option>
+                        <option value="full">full</option>
+                      </select>
+                    </div>
+                    <div className={formStyles.field}>
+                      <label htmlFor="new_step_parallel">Hilos en paralelo</label>
+                      <input
+                        id="new_step_parallel"
+                        type="number"
+                        min={1}
+                        value={newStepParallel}
+                        onChange={(e) => setNewStepParallel(Number(e.target.value))}
+                      />
+                    </div>
+                  </div>
+                )}
+                {NEEDS_START_ON.has(newStepAction) && (
+                  <div className={formStyles.grid}>
+                    <div className={formStyles.field}>
+                      <label htmlFor="new_step_start_on">Fecha de inicio (solo si aún no hay checkpoint)</label>
+                      <input
+                        id="new_step_start_on"
+                        type="date"
+                        value={newStepStartOn}
+                        onChange={(e) => setNewStepStartOn(e.target.value)}
+                      />
+                    </div>
+                    <div className={formStyles.field}>
+                      <label htmlFor="new_step_emp_status">Empleados</label>
+                      <select
+                        id="new_step_emp_status"
+                        value={newStepEmployeeStatus}
+                        onChange={(e) => setNewStepEmployeeStatus(e.target.value as "active" | "inactive" | "all")}
+                      >
+                        <option value="active">active</option>
+                        <option value="inactive">inactive</option>
+                        <option value="all">all</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+                {NEEDS_SKIP_EXISTING.has(newStepAction) && (
+                  <label className={formStyles.checkboxField}>
+                    <input
+                      type="checkbox"
+                      checked={newStepSkipExisting}
+                      onChange={(e) => setNewStepSkipExisting(e.target.checked)}
+                    />
+                    <span>Omitir ficheros ya subidos</span>
+                  </label>
+                )}
                 <button
                   type="button"
                   className={formStyles.submit}
                   onClick={addStep}
-                  disabled={
-                    (newStepAction === "run_pipeline" && !newStepPipeline) ||
-                    (newStepAction === "sync_apply" && !newStepSyncMapping)
-                  }
+                  disabled={buildNewStepParams() === null}
                 >
                   Añadir bloque al flujo
                 </button>
@@ -482,6 +621,105 @@ export function WorkflowsPage() {
                       }
                     />
                   )}
+                  {selectedStep.action === "run_workflow" &&
+                    (workflowChoicesForStep.length === 0 ? (
+                      <p className={formStyles.hint}>No hay otro flujo guardado que se pueda lanzar desde aquí.</p>
+                    ) : (
+                      <div className={formStyles.field}>
+                        <label htmlFor="edit_step_workflow">Flujo</label>
+                        <select
+                          id="edit_step_workflow"
+                          value={(selectedStep.params.workflow_id as string) ?? ""}
+                          onChange={(e) =>
+                            updateStep(selectedStep.id, { params: { workflow_id: e.target.value } })
+                          }
+                        >
+                          {workflowChoicesForStep.map((w) => (
+                            <option key={w.id} value={w.id}>
+                              {w.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  {NEEDS_MODE_PARALLEL.has(selectedStep.action) && (
+                    <div className={formStyles.grid}>
+                      <div className={formStyles.field}>
+                        <label htmlFor="edit_step_mode">Modo</label>
+                        <select
+                          id="edit_step_mode"
+                          value={(selectedStep.params.mode as string) ?? "incremental"}
+                          onChange={(e) =>
+                            updateStep(selectedStep.id, { params: { ...selectedStep.params, mode: e.target.value } })
+                          }
+                        >
+                          <option value="incremental">incremental</option>
+                          <option value="full">full</option>
+                        </select>
+                      </div>
+                      <div className={formStyles.field}>
+                        <label htmlFor="edit_step_parallel">Hilos en paralelo</label>
+                        <input
+                          id="edit_step_parallel"
+                          type="number"
+                          min={1}
+                          value={Number(selectedStep.params.parallel ?? 1)}
+                          onChange={(e) =>
+                            updateStep(selectedStep.id, {
+                              params: { ...selectedStep.params, parallel: Number(e.target.value) },
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {NEEDS_START_ON.has(selectedStep.action) && (
+                    <div className={formStyles.grid}>
+                      <div className={formStyles.field}>
+                        <label htmlFor="edit_step_start_on">Fecha de inicio (solo si aún no hay checkpoint)</label>
+                        <input
+                          id="edit_step_start_on"
+                          type="date"
+                          value={(selectedStep.params.start_on as string) ?? "2025-01-01"}
+                          onChange={(e) =>
+                            updateStep(selectedStep.id, {
+                              params: { ...selectedStep.params, start_on: e.target.value },
+                            })
+                          }
+                        />
+                      </div>
+                      <div className={formStyles.field}>
+                        <label htmlFor="edit_step_emp_status">Empleados</label>
+                        <select
+                          id="edit_step_emp_status"
+                          value={(selectedStep.params.employee_status as string) ?? "active"}
+                          onChange={(e) =>
+                            updateStep(selectedStep.id, {
+                              params: { ...selectedStep.params, employee_status: e.target.value },
+                            })
+                          }
+                        >
+                          <option value="active">active</option>
+                          <option value="inactive">inactive</option>
+                          <option value="all">all</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                  {NEEDS_SKIP_EXISTING.has(selectedStep.action) && (
+                    <label className={formStyles.checkboxField}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedStep.params.skip_existing)}
+                        onChange={(e) =>
+                          updateStep(selectedStep.id, {
+                            params: { ...selectedStep.params, skip_existing: e.target.checked },
+                          })
+                        }
+                      />
+                      <span>Omitir ficheros ya subidos</span>
+                    </label>
+                  )}
                   {selectedStep.depends_on.length > 0 && (
                     <div className={formStyles.field}>
                       <label htmlFor="edit_step_trigger_rule">¿Cuándo lanzar este bloque?</label>
@@ -529,6 +767,8 @@ export function WorkflowsPage() {
                   onSelectStep={setSelectedStepId}
                   onConnectSteps={connectSteps}
                   onRemoveDependency={removeDependency}
+                  nodePositions={stepPositions}
+                  onNodePositionChange={(id, position) => setStepPositions((prev) => ({ ...prev, [id]: position }))}
                   height="100%"
                   testId="designer-diagram"
                 />

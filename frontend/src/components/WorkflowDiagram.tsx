@@ -9,6 +9,7 @@ import {
   useStore,
   type Edge,
   type Node,
+  type NodeChange,
   type NodeProps,
   type OnConnect,
 } from "@xyflow/react";
@@ -155,6 +156,11 @@ interface WorkflowDiagramProps {
   onConnectSteps?: (sourceId: string, targetId: string) => void;
   onRemoveDependency?: (sourceId: string, targetId: string) => void;
   readOnly?: boolean;
+  /** Manual positions (from a previous drag) that override the auto-layout
+   * for the steps they cover -- lets the designer's canvas remember where
+   * the user dragged a block instead of snapping it back on every render. */
+  nodePositions?: Record<string, { x: number; y: number }>;
+  onNodePositionChange?: (stepId: string, position: { x: number; y: number }) => void;
   /** Number (px) for the fixed-height read-only cards, or a CSS value like
    * "100%" for the designer, which sizes itself off its own container
    * instead (see WorkflowsPage.module.css's .designerCanvas). */
@@ -171,6 +177,8 @@ export function WorkflowDiagram({
   onConnectSteps,
   onRemoveDependency,
   readOnly = false,
+  nodePositions,
+  onNodePositionChange,
   height = 320,
   testId,
 }: WorkflowDiagramProps) {
@@ -197,15 +205,27 @@ export function WorkflowDiagram({
         return {
           id: s.id,
           type: "step",
-          position: positions.get(s.id) ?? { x: 0, y: 0 },
+          position: nodePositions?.[s.id] ?? positions.get(s.id) ?? { x: 0, y: 0 },
           selected: s.id === selectedStepId,
           draggable: !readOnly,
           connectable: !readOnly,
           data,
         };
       }),
-    [steps, positions, selectedStepId, actionLabels, stepStatuses, readOnly],
+    [steps, positions, nodePositions, selectedStepId, actionLabels, stepStatuses, readOnly],
   );
+
+  const handleNodesChange = (changes: NodeChange<StepFlowNode>[]) => {
+    if (!onNodePositionChange) return;
+    // Only commit once the drag gesture ends -- committing on every
+    // in-flight move would re-render the parent (and thus this component)
+    // dozens of times per second for no visual benefit.
+    for (const change of changes) {
+      if (change.type === "position" && change.dragging === false && change.position) {
+        onNodePositionChange(change.id, change.position);
+      }
+    }
+  };
 
   const edges: Edge[] = useMemo(
     () =>
@@ -234,6 +254,7 @@ export function WorkflowDiagram({
         edges={edges}
         nodeTypes={nodeTypes}
         onConnect={handleConnect}
+        onNodesChange={handleNodesChange}
         onNodeClick={(_e, node) => onSelectStep?.(node.id)}
         onEdgeClick={(_e, edge) => {
           if (!readOnly) onRemoveDependency?.(edge.source, edge.target);

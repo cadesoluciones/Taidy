@@ -20,11 +20,8 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import formStyles from "../components/Form.module.css";
 import { NotifyCheckbox } from "../components/NotifyCheckbox";
 import { SyncApplyFields } from "../components/SyncApplyFields";
+import { NEEDS_MODE_PARALLEL, NEEDS_START_ON, NEEDS_SKIP_EXISTING } from "../utils/actionParamGroups";
 import styles from "./SchedulesPage.module.css";
-
-const NEEDS_MODE_PARALLEL = new Set(["extract_bc", "sync_bc", "extract_factorial", "sync_factorial"]);
-const NEEDS_START_ON = new Set(["extract_factorial", "sync_factorial"]);
-const NEEDS_SKIP_EXISTING = new Set(["upload_bc", "upload_factorial", "sync_bc", "sync_factorial"]);
 
 function describeFrequency(s: Schedule): string {
   if (s.trigger === "cron") {
