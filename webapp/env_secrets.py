@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List
@@ -86,9 +87,22 @@ def set_field(key: str, value: str) -> Dict[str, Any]:
     if field is None:
         raise ValueError(f"'{key}' no es una clave reconocida.")
 
-    if not _ENV_PATH.is_file():
-        _ENV_PATH.write_text("", encoding="utf-8")
-    dotenv.set_key(str(_ENV_PATH), key, value, quote_mode="always")
+    # dotenv.set_key() writes via a temp file + os.replace() onto _ENV_PATH --
+    # an atomic rename that the kernel refuses ("Device or resource busy")
+    # when _ENV_PATH is itself a single-file Docker bind mount (as it is in
+    # production, so an admin's edit here survives a redeploy). Working on a
+    # throwaway copy elsewhere and writing the *result* back in place (a
+    # plain truncate+write, not a rename) keeps dotenv's correct parsing/
+    # quoting while never renaming onto the mounted path.
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_env = Path(tmp_dir) / ".env"
+        if _ENV_PATH.is_file():
+            tmp_env.write_bytes(_ENV_PATH.read_bytes())
+        else:
+            tmp_env.write_text("", encoding="utf-8")
+        dotenv.set_key(str(tmp_env), key, value, quote_mode="always")
+        _ENV_PATH.write_bytes(tmp_env.read_bytes())
+
     os.environ[key] = value
 
     return _as_dict(field, value)
