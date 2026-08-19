@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPatch, apiPost } from "./client";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "./client";
 
 export interface Schedule {
   id: string;
@@ -27,6 +27,12 @@ export function fetchSchedules(): Promise<{ items: Schedule[] }> {
 
 export function createSchedule(input: CreateScheduleInput): Promise<Schedule> {
   return apiPost<Schedule>("/schedules", input);
+}
+
+/** Full edit of an existing schedule's config -- distinct from
+ * setScheduleEnabled, which only ever flips pause/resume. */
+export function updateSchedule(id: string, input: CreateScheduleInput): Promise<Schedule> {
+  return apiPut<Schedule>(`/schedules/${id}`, input);
 }
 
 export function setScheduleEnabled(id: string, enabled: boolean): Promise<void> {

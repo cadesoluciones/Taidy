@@ -3,6 +3,52 @@
   font-size: 12px;
 }
 
+/* Editor tab: option panels (add-block / edit-block / save) in a left
+   column, the diagram filling the rest of the width and most of the
+   viewport height -- previously everything was stacked in one long column
+   with the diagram squeezed to a small fixed height among the forms. */
+.designerLayout {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.designerOptions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.designerCanvas {
+  min-height: 420px;
+  height: calc(100vh - 300px);
+}
+
+.designerEmpty {
+  height: 100%;
+  min-height: 420px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-soft);
+  color: var(--color-text-muted);
+  padding: var(--space-4);
+}
+
+@media (max-width: 900px) {
+  .designerLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .designerCanvas {
+    height: 480px;
+  }
+}
+
 .tabBar {
   display: flex;
   gap: var(--space-2);
@@ -26,6 +72,54 @@
 .tabActive {
   color: var(--color-primary);
   border-bottom-color: var(--color-primary);
+}
+
+/* "Flujos guardados": a compact list (name + who has access) on the left,
+   the selected flow's full detail (diagram + launch/edit/delete) on the
+   right -- instead of every saved flow rendering its own diagram fully
+   expanded, stacked one after another. */
+.savedLayout {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.savedList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.savedListItem,
+.savedListItemActive {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  cursor: pointer;
+}
+
+.savedListItemActive {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-bg));
+}
+
+.savedListAccess {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.savedDetail {
+  min-width: 0;
 }
 
 .workflowCard {

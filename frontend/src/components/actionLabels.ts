@@ -14,5 +14,6 @@ export const ACTION_LABELS: Record<string, string> = {
   upload_hubspot: "HubSpot · Subir",
   sync_hubspot: "HubSpot · Sync (extraer + subir)",
   run_pipeline: "Fabric · Ejecutar pipeline",
+  sync_apply: "Sincronización · Aplicar",
   run_workflow: "Flujo (varios bloques)",
 };

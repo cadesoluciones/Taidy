@@ -62,6 +62,111 @@ def test_admin_can_create_pause_and_delete_a_schedule(isolated_state, client):
     assert client.get("/schedules").json()["items"] == []
 
 
+def test_reader_cannot_update_a_schedule(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    created = client.post(
+        "/schedules",
+        json={"name": "Nightly BC", "action": "extract_bc", "params": {}, "trigger": "interval", "trigger_args": {"hours": 24}},
+    ).json()
+
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+    resp = client.put(
+        f"/schedules/{created['id']}",
+        json={"name": "x", "action": "extract_bc", "params": {}, "trigger": "interval", "trigger_args": {"hours": 1}},
+    )
+    assert resp.status_code == 403
+
+
+def test_admin_can_update_an_existing_schedule(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    created = client.post(
+        "/schedules",
+        json={
+            "name": "Nightly BC",
+            "action": "extract_bc",
+            "params": {},
+            "trigger": "interval",
+            "trigger_args": {"hours": 24},
+        },
+    ).json()
+    schedule_id, created_at = created["id"], created["created_at"]
+
+    updated = client.put(
+        f"/schedules/{schedule_id}",
+        json={
+            "name": "Nightly BC renombrada",
+            "action": "sync_bc",
+            "params": {"mode": "incremental", "parallel": 2},
+            "trigger": "interval",
+            "trigger_args": {"hours": 12},
+        },
+    )
+    assert updated.status_code == 200
+    body = updated.json()
+    assert body["id"] == schedule_id
+    assert body["name"] == "Nightly BC renombrada"
+    assert body["action"] == "sync_bc"
+    assert body["params"] == {"mode": "incremental", "parallel": 2}
+    assert body["trigger_args"] == {"hours": 12}
+    # id, created_at and enabled state are preserved -- history/other
+    # references to this schedule_id stay valid after the edit.
+    assert body["created_at"] == created_at
+    assert body["enabled"] is True
+    # A live scheduler backs this endpoint -- the new trigger config must
+    # already be reflected in the recomputed next_run_time.
+    assert body["next_run_time"] is not None
+
+
+def test_updating_a_paused_schedule_keeps_it_paused(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    created = client.post(
+        "/schedules",
+        json={"name": "Nightly BC", "action": "extract_bc", "params": {}, "trigger": "interval", "trigger_args": {"hours": 24}},
+    ).json()
+    schedule_id = created["id"]
+    client.patch(f"/schedules/{schedule_id}", json={"enabled": False})
+
+    updated = client.put(
+        f"/schedules/{schedule_id}",
+        json={"name": "Nightly BC", "action": "extract_bc", "params": {}, "trigger": "interval", "trigger_args": {"hours": 6}},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["enabled"] is False
+    assert updated.json()["next_run_time"] is None
+
+
+def test_update_unknown_schedule_is_404(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    resp = client.put(
+        "/schedules/does-not-exist",
+        json={"name": "x", "action": "extract_bc", "params": {}, "trigger": "interval", "trigger_args": {"hours": 1}},
+    )
+    assert resp.status_code == 404
+
+
+def test_update_schedule_rejects_invalid_cron(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    created = client.post(
+        "/schedules",
+        json={"name": "Nightly BC", "action": "extract_bc", "params": {}, "trigger": "interval", "trigger_args": {"hours": 24}},
+    ).json()
+
+    resp = client.put(
+        f"/schedules/{created['id']}",
+        json={"name": "x", "action": "extract_bc", "params": {}, "trigger": "cron", "trigger_args": {"expr": "not a cron"}},
+    )
+    assert resp.status_code == 400
+
+
 def test_invalid_cron_expression_is_rejected(isolated_state, client):
     make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
     _login(client, "admin2", "AdminPass2026!")

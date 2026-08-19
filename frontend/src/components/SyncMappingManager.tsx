@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, Check, GripVertical, Pencil, Trash2, X } from "lucide-react";
+import { ArrowRight, Check, Copy, GripVertical, Pencil, Trash2, X } from "lucide-react";
 
 import {
   fetchBcTableFields,
@@ -217,6 +217,30 @@ export function SyncMappingManager() {
     setSuccess(null);
     setEditingName(mapping.name);
     setName(mapping.name);
+    setDescription(mapping.description);
+    setSourceSystem(mapping.source.system);
+    setSourceTable(mapping.source.table);
+    setTargetSystem(mapping.target.system);
+    setTargetTable(mapping.target.table);
+    setMatchingKey(mapping.matching_key);
+    setDateField(mapping.date_field);
+    setFields(mapping.fields);
+    setSourceFilterField(mapping.source_filter?.field ?? "");
+    setSourceFilterValue(mapping.source_filter?.equals ?? "");
+    setTargetFilterField(mapping.target_filter?.field ?? "");
+    setTargetFilterValue(mapping.target_filter?.equals ?? "");
+  }
+
+  /** Loads an existing mapping's full config into the draft as a NEW mapping
+   * (editingName stays null, so submitting creates rather than updates) --
+   * lets a mapping like "BC Personas → HubSpot Contacts" become the
+   * starting point for "BC Empresas → HubSpot Companies" instead of
+   * rebuilding the whole field list and filter by hand. */
+  function duplicateMapping(mapping: SyncMappingConfig) {
+    setError(null);
+    setSuccess(null);
+    setEditingName(null);
+    setName(`${mapping.name} (copia)`);
     setDescription(mapping.description);
     setSourceSystem(mapping.source.system);
     setSourceTable(mapping.source.table);
@@ -695,6 +719,14 @@ export function SyncMappingManager() {
                   onClick={() => startEdit(m)}
                 >
                   <Pencil size={14} />
+                </button>
+                <button
+                  type="button"
+                  className={tableStyles.editBtn}
+                  aria-label={`Duplicar mapeo ${m.name}`}
+                  onClick={() => duplicateMapping(m)}
+                >
+                  <Copy size={14} />
                 </button>
                 <button
                   type="button"

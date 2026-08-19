@@ -18,6 +18,7 @@ class StepIn(BaseModel):
 class WorkflowOut(BaseModel):
     id: str
     name: str
+    description: str = ""
     steps: List[StepIn]
     created_at: str
     reader_allowed_users: List[str] = []
@@ -29,6 +30,7 @@ class WorkflowListOut(BaseModel):
 
 class CreateWorkflowRequest(BaseModel):
     name: str
+    description: str = ""
     steps: List[StepIn]
 
 

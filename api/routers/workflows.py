@@ -43,7 +43,9 @@ def list_workflows(current: CurrentUser = Depends(get_current_user)) -> Workflow
 @router.post("", response_model=WorkflowOut, dependencies=[Depends(require_role(ROLE_ADMIN))])
 def create_workflow(payload: CreateWorkflowRequest) -> WorkflowOut:
     try:
-        workflow = workflows_module.create_workflow(payload.name, [s.model_dump() for s in payload.steps])
+        workflow = workflows_module.create_workflow(
+            payload.name, [s.model_dump() for s in payload.steps], description=payload.description
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     return WorkflowOut(**workflow)
@@ -52,7 +54,9 @@ def create_workflow(payload: CreateWorkflowRequest) -> WorkflowOut:
 @router.patch("/{workflow_id}", response_model=WorkflowOut, dependencies=[Depends(require_role(ROLE_ADMIN))])
 def update_workflow(workflow_id: str, payload: CreateWorkflowRequest) -> WorkflowOut:
     try:
-        workflow = workflows_module.update_workflow(workflow_id, payload.name, [s.model_dump() for s in payload.steps])
+        workflow = workflows_module.update_workflow(
+            workflow_id, payload.name, [s.model_dump() for s in payload.steps], description=payload.description
+        )
     except ValueError as exc:
         detail = str(exc)
         code = status.HTTP_404_NOT_FOUND if detail.startswith("Flujo desconocido") else status.HTTP_400_BAD_REQUEST

@@ -54,6 +54,38 @@ def create_schedule(
     return ScheduleOut(**schedule)
 
 
+@router.put("/{schedule_id}", response_model=ScheduleOut, dependencies=[Depends(require_role(ROLE_ADMIN))])
+def update_schedule(
+    schedule_id: str,
+    payload: CreateScheduleRequest,
+    scheduler: BackgroundScheduler = Depends(get_scheduler),
+) -> ScheduleOut:
+    """Full edit of an existing schedule's config (name/action/params/
+    trigger) -- distinct from the PATCH below, which only ever flips
+    `enabled`. Keeps the schedule's id/created_at/enabled state; see
+    webapp/scheduler.py::update_schedule for how the live APScheduler job
+    is (or isn't) replaced."""
+    try:
+        schedule = sched_module.update_schedule(
+            scheduler,
+            schedule_id,
+            name=payload.name,
+            action=payload.action,
+            params=payload.params,
+            trigger=payload.trigger,
+            trigger_args=payload.trigger_args,
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        code = (
+            status.HTTP_404_NOT_FOUND
+            if detail.startswith("Tarea programada desconocida")
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(status_code=code, detail=detail)
+    return ScheduleOut(**schedule)
+
+
 @router.patch("/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_role(ROLE_ADMIN))])
 def set_schedule_enabled(
     schedule_id: str,

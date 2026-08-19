@@ -93,7 +93,7 @@ def _validate_steps(steps: List[dict]) -> None:
         raise ValueError("El flujo tiene una dependencia circular entre bloques.")
 
 
-def create_workflow(name: str, steps: List[dict]) -> dict:
+def create_workflow(name: str, steps: List[dict], *, description: str = "") -> dict:
     name = name.strip()
     if not name:
         raise ValueError("El flujo necesita un nombre.")
@@ -101,6 +101,7 @@ def create_workflow(name: str, steps: List[dict]) -> dict:
     workflow = {
         "id": uuid.uuid4().hex,
         "name": name,
+        "description": description.strip(),
         "steps": steps,
         "created_at": datetime.now(timezone.utc).isoformat(),
         # Reader-role users can only see/launch a workflow they're listed
@@ -117,9 +118,9 @@ def create_workflow(name: str, steps: List[dict]) -> dict:
     return workflow
 
 
-def update_workflow(workflow_id: str, name: str, steps: List[dict]) -> dict:
-    """Overwrites an existing workflow's name/steps in place -- same
-    validation as create_workflow(), but keeps the original `id`,
+def update_workflow(workflow_id: str, name: str, steps: List[dict], *, description: str = "") -> dict:
+    """Overwrites an existing workflow's name/steps/description in place --
+    same validation as create_workflow(), but keeps the original `id`,
     `created_at` and `reader_allowed_users` so scheduled entries, past run
     history, and reader access that reference this workflow_id stay valid
     after the edit."""
@@ -133,6 +134,7 @@ def update_workflow(workflow_id: str, name: str, steps: List[dict]) -> dict:
         if existing is None:
             raise ValueError(f"Flujo desconocido: {workflow_id}")
         existing["name"] = name
+        existing["description"] = description.strip()
         existing["steps"] = steps
         _write(data)
         return existing

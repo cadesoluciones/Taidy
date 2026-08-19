@@ -1,3 +1,37 @@
+/* "Nueva tarea" and the existing-tasks list side by side instead of
+   stacked -- the list gets more width (each row has several inline
+   fields) and its own bounded scroll so a long list doesn't push the
+   create form far down the page. */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.newTaskColumn {
+  min-width: 0;
+}
+
+.existingColumn {
+  min-width: 0;
+}
+
+.existingList {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .existingList {
+    max-height: none;
+  }
+}
+
 .row {
   display: flex;
   align-items: center;

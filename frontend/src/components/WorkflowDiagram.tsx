@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   Background,
   Controls,
@@ -6,6 +6,7 @@ import {
   Position,
   ReactFlow,
   useReactFlow,
+  useStore,
   type Edge,
   type Node,
   type NodeProps,
@@ -55,18 +56,54 @@ const nodeTypes = { step: StepNode };
 /** React Flow's `fitView` prop only re-centers the viewport on the initial
  * mount -- adding a block, or connecting one (which can shift a node into a
  * new dependency layer, see layoutSteps()), repositions nodes without ever
- * re-fitting, so newly-placed nodes/edges can land outside the viewport that
- * was fit around the ORIGINAL, smaller layout. Re-fit whenever the layout
- * signature (which id sits at which position) actually changes. */
-function FitViewOnLayoutChange({ layoutSignature }: { layoutSignature: string }) {
-  const { fitView } = useReactFlow();
+ * re-fitting, so a newly-placed node/edge landing outside the viewport that
+ * was fit around the ORIGINAL, smaller layout would otherwise go unseen.
+ *
+ * But re-fitting on *every* layout change resets the zoom/pan the user just
+ * set, which is disorienting when working zoomed into one area and adding
+ * an unrelated block elsewhere. So this only calls fitView when the new
+ * layout actually doesn't fit inside the current viewport -- otherwise it
+ * leaves the current zoom/pan alone. The very first layout (mount) is left
+ * to the <ReactFlow fitView> prop, not duplicated here. */
+function FitViewOnLayoutChange({ layoutSignature, nodes }: { layoutSignature: string; nodes: StepFlowNode[] }) {
+  const { fitView, getViewport } = useReactFlow();
+  const { width, height } = useStore((s) => ({ width: s.width, height: s.height }));
+  const isFirstRun = useRef(true);
+
   useEffect(() => {
-    // No animation duration -- an animated re-fit leaves a window where a
-    // node's on-screen position doesn't match its final, settled position
-    // yet, which is exactly the kind of window a drag-to-connect gesture
-    // (grabbing a handle's coordinates once, up front) can land in.
-    fitView({ padding: 0.3 });
-    // fitView identity is stable per ReactFlow instance; only the signature should retrigger this.
+    if (nodes.length === 0) return;
+
+    if (isFirstRun.current) {
+      isFirstRun.current = false;
+      return;
+    }
+
+    if (!width || !height) {
+      fitView({ padding: 0.3 });
+      return;
+    }
+
+    const { x, y, zoom } = getViewport();
+    const visibleLeft = -x / zoom;
+    const visibleTop = -y / zoom;
+    const visibleRight = visibleLeft + width / zoom;
+    const visibleBottom = visibleTop + height / zoom;
+
+    const allNodesVisible = nodes.every(
+      (n) =>
+        n.position.x >= visibleLeft &&
+        n.position.y >= visibleTop &&
+        n.position.x + NODE_WIDTH <= visibleRight &&
+        n.position.y + NODE_HEIGHT <= visibleBottom,
+    );
+
+    if (!allNodesVisible) {
+      // No animation duration -- an animated re-fit leaves a window where a
+      // node's on-screen position doesn't match its final, settled position
+      // yet, which is exactly the kind of window a drag-to-connect gesture
+      // (grabbing a handle's coordinates once, up front) can land in.
+      fitView({ padding: 0.3 });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layoutSignature]);
   return null;
@@ -118,7 +155,10 @@ interface WorkflowDiagramProps {
   onConnectSteps?: (sourceId: string, targetId: string) => void;
   onRemoveDependency?: (sourceId: string, targetId: string) => void;
   readOnly?: boolean;
-  height?: number;
+  /** Number (px) for the fixed-height read-only cards, or a CSS value like
+   * "100%" for the designer, which sizes itself off its own container
+   * instead (see WorkflowsPage.module.css's .designerCanvas). */
+  height?: number | string;
   testId?: string;
 }
 
@@ -207,7 +247,7 @@ export function WorkflowDiagram({
       >
         <Background gap={16} />
         <Controls showInteractive={false} />
-        <FitViewOnLayoutChange layoutSignature={layoutSignature} />
+        <FitViewOnLayoutChange layoutSignature={layoutSignature} nodes={nodes} />
       </ReactFlow>
     </div>
   );

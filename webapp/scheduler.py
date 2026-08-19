@@ -229,6 +229,58 @@ def add_schedule(
     return _find_schedule(schedule["id"])
 
 
+def update_schedule(
+    scheduler: BackgroundScheduler,
+    schedule_id: str,
+    *,
+    name: str,
+    action: str,
+    params: dict,
+    trigger: str,
+    trigger_args: dict,
+) -> dict:
+    """Rewrites an existing schedule's config in place -- same validation as
+    add_schedule(), but keeps the original `id`, `created_at` and `enabled`
+    state. If the schedule is currently enabled, the live APScheduler job is
+    replaced with one built from the new trigger config (same `replace_existing`
+    pattern add_schedule uses); if it's paused, only the persisted record
+    changes -- the next set_schedule_enabled(..., True) call already reads
+    the (now updated) persisted trigger config when it re-registers the job,
+    so there's nothing stale to fix up there.
+    """
+    if action not in tasks.ACTION_LABELS and action != "run_workflow":
+        raise ValueError(f"Acción desconocida: {action}")
+    apscheduler_trigger = _build_trigger(trigger, trigger_args)  # raises early if invalid
+
+    with _STORE_LOCK:
+        schedules = _read_json(_SCHEDULES_PATH, [])
+        existing = next((s for s in schedules if s["id"] == schedule_id), None)
+        if existing is None:
+            raise ValueError(f"Tarea programada desconocida: {schedule_id}")
+        existing["name"] = name
+        existing["action"] = action
+        existing["params"] = params
+        existing["trigger"] = trigger
+        existing["trigger_args"] = trigger_args
+        was_enabled = existing.get("enabled", True)
+        _write_json(_SCHEDULES_PATH, schedules)
+
+    if was_enabled:
+        scheduler.add_job(
+            _run_scheduled,
+            trigger=apscheduler_trigger,
+            args=[schedule_id],
+            id=schedule_id,
+            replace_existing=True,
+            misfire_grace_time=_MISFIRE_GRACE_SECONDS,
+            coalesce=True,
+            max_instances=1,
+        )
+        _snapshot_next_run_time(scheduler, schedule_id)
+
+    return _find_schedule(schedule_id)
+
+
 def remove_schedule(scheduler: BackgroundScheduler, schedule_id: str) -> None:
     with _STORE_LOCK:
         schedules = _read_json(_SCHEDULES_PATH, [])

@@ -12,28 +12,13 @@ import {
 import { syncApply, type SyncApplyDirection } from "../../api/tasks";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import formStyles from "../../components/Form.module.css";
+import { directionLabel, SYSTEM_LABELS } from "../../utils/syncLabels";
 import styles from "./Sincronizacion.module.css";
-
-const SYSTEM_LABELS: Record<string, string> = {
-  business_central: "Business Central",
-  factorial: "Factorial HR",
-  hubspot: "HubSpot CRM",
-};
 
 // Mirrors src/sync_engine/apply.py's DEFAULT_THRESHOLD -- the server always
 // re-validates this for real, this is only to decide client-side whether to
 // show the extra confirmation dialog before calling the API.
 const LARGE_BATCH_THRESHOLD = 50;
-
-/** "to_target"/"to_source" mean nothing on their own -- name the actual
- * systems instead, so it's always clear whether a given run means
- * BC→HubSpot or HubSpot→BC (which depends on which system this particular
- * mapping declares as "source" vs "target"). */
-function directionLabel(direction: SyncApplyDirection, sourceLabel: string, targetLabel: string): string {
-  if (direction === "to_target") return `${sourceLabel} → ${targetLabel}`;
-  if (direction === "to_source") return `${targetLabel} → ${sourceLabel}`;
-  return `Ambas direcciones (${sourceLabel} ↔ ${targetLabel})`;
-}
 
 function countPendingActions(report: ComparisonReport, direction: SyncApplyDirection): number {
   let total = 0;

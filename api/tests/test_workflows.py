@@ -82,6 +82,41 @@ def test_admin_can_update_an_existing_workflow(isolated_state, client):
     assert listed[0]["name"] == "Flujo 1 renombrado"
 
 
+def test_admin_can_create_workflow_with_a_description(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    created = client.post(
+        "/workflows", json={"name": "Flujo 1", "description": "Extrae y sube BC cada noche", "steps": _SIMPLE_STEPS}
+    )
+    assert created.status_code == 200
+    assert created.json()["description"] == "Extrae y sube BC cada noche"
+
+
+def test_workflow_description_defaults_to_empty_string(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    created = client.post("/workflows", json={"name": "Flujo 1", "steps": _SIMPLE_STEPS})
+    assert created.json()["description"] == ""
+
+
+def test_admin_can_update_a_workflow_description(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    created = client.post(
+        "/workflows", json={"name": "Flujo 1", "description": "Original", "steps": _SIMPLE_STEPS}
+    ).json()
+
+    updated = client.patch(
+        f"/workflows/{created['id']}",
+        json={"name": "Flujo 1", "description": "Actualizada", "steps": _SIMPLE_STEPS},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["description"] == "Actualizada"
+
+
 def test_update_unknown_workflow_is_404(isolated_state, client):
     make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
     _login(client, "admin2", "AdminPass2026!")

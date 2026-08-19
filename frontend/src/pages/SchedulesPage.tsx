@@ -4,13 +4,22 @@ import { AlertTriangle, CirclePause, CirclePlay } from "lucide-react";
 import { ROLE_ADMIN } from "../api/auth";
 import { ApiError } from "../api/client";
 import { fetchPipelines } from "../api/meta";
-import { createSchedule, deleteSchedule, fetchSchedules, setScheduleEnabled, type Schedule } from "../api/schedules";
+import {
+  createSchedule,
+  deleteSchedule,
+  fetchSchedules,
+  setScheduleEnabled,
+  updateSchedule,
+  type Schedule,
+} from "../api/schedules";
+import type { SyncApplyDirection } from "../api/tasks";
 import { fetchWorkflows, type Workflow } from "../api/workflows";
 import { useAuth } from "../auth/AuthContext";
 import { ACTION_LABELS } from "../components/actionLabels";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import formStyles from "../components/Form.module.css";
 import { NotifyCheckbox } from "../components/NotifyCheckbox";
+import { SyncApplyFields } from "../components/SyncApplyFields";
 import styles from "./SchedulesPage.module.css";
 
 const NEEDS_MODE_PARALLEL = new Set(["extract_bc", "sync_bc", "extract_factorial", "sync_factorial"]);
@@ -33,6 +42,7 @@ export function SchedulesPage() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [pendingDelete, setPendingDelete] = useState<Schedule | null>(null);
   const [isBusy, setIsBusy] = useState(false);
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [action, setAction] = useState("extract_bc");
@@ -58,6 +68,9 @@ export function SchedulesPage() {
   const [pollSeconds, setPollSeconds] = useState(15);
   const [workflowsList, setWorkflowsList] = useState<Workflow[]>([]);
   const [workflowId, setWorkflowId] = useState("");
+  const [syncMapping, setSyncMapping] = useState("");
+  const [syncDirection, setSyncDirection] = useState<SyncApplyDirection>("to_target");
+  const [syncConfirmLargeBatch, setSyncConfirmLargeBatch] = useState(false);
 
   async function reload() {
     setSchedules((await fetchSchedules()).items);
@@ -93,6 +106,14 @@ export function SchedulesPage() {
       return params;
     }
 
+    if (action === "sync_apply") {
+      if (!syncMapping) return null;
+      params.mapping = syncMapping;
+      params.direction = syncDirection;
+      params.confirm_large_batch = syncConfirmLargeBatch;
+      return params;
+    }
+
     if (NEEDS_MODE_PARALLEL.has(action)) {
       params.mode = mode;
       params.parallel = parallel;
@@ -113,7 +134,7 @@ export function SchedulesPage() {
     return params;
   }
 
-  async function handleCreate(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setCreateError(null);
     setCreateSuccess(null);
@@ -127,24 +148,102 @@ export function SchedulesPage() {
     }
     const params = buildParams();
     if (params === null) {
-      setCreateError(action === "run_workflow" ? "Elige un flujo guardado." : "Elige un pipeline configurado.");
+      if (action === "run_workflow") setCreateError("Elige un flujo guardado.");
+      else if (action === "sync_apply") setCreateError("Elige un mapeo de sincronización.");
+      else setCreateError("Elige un pipeline configurado.");
       return;
     }
+    const input = {
+      name: name.trim(),
+      action,
+      params,
+      trigger: triggerKind,
+      trigger_args: triggerKind === "interval" ? { hours, minutes } : { expr: cronExpr.trim() },
+    };
     try {
-      await createSchedule({
-        name: name.trim(),
-        action,
-        params,
-        trigger: triggerKind,
-        trigger_args: triggerKind === "interval" ? { hours, minutes } : { expr: cronExpr.trim() },
-      });
-      setCreateSuccess(`Tarea '${name}' creada.`);
+      if (editingScheduleId) {
+        await updateSchedule(editingScheduleId, input);
+        setCreateSuccess(`Tarea '${name}' actualizada.`);
+      } else {
+        await createSchedule(input);
+        setCreateSuccess(`Tarea '${name}' creada.`);
+      }
+      setEditingScheduleId(null);
       setName("");
       setNotify(false);
       await reload();
     } catch (err) {
-      setCreateError(err instanceof ApiError ? err.message : "No se pudo crear la tarea.");
+      setCreateError(err instanceof ApiError ? err.message : "No se pudo guardar la tarea.");
     }
+  }
+
+  /** Loads an existing schedule's full config into the form -- mirrors
+   * buildParams()'s per-action shape in reverse, so editing round-trips
+   * exactly what was saved. */
+  function editSchedule(s: Schedule) {
+    setCreateError(null);
+    setCreateSuccess(null);
+    setEditingScheduleId(s.id);
+    setName(s.name);
+    setAction(s.action);
+    setNotify(Boolean(s.params.notify));
+
+    if (s.trigger === "cron") {
+      setTriggerKind("cron");
+      setCronExpr(String(s.trigger_args.expr ?? "0 6 * * *"));
+    } else {
+      setTriggerKind("interval");
+      setHours(Number(s.trigger_args.hours ?? 24));
+      setMinutes(Number(s.trigger_args.minutes ?? 0));
+    }
+
+    if (s.action === "run_workflow") {
+      setWorkflowId(String(s.params.workflow_id ?? ""));
+    }
+    if (NEEDS_MODE_PARALLEL.has(s.action)) {
+      setMode((s.params.mode as "incremental" | "full") ?? "incremental");
+      setParallel(Number(s.params.parallel ?? 1));
+    }
+    if (NEEDS_START_ON.has(s.action)) {
+      setStartOn(String(s.params.start_on ?? "2025-01-01"));
+      setEmployeeStatus((s.params.employee_status as "active" | "inactive" | "all") ?? "active");
+    }
+    if (NEEDS_SKIP_EXISTING.has(s.action)) {
+      setSkipExisting(Boolean(s.params.skip_existing));
+    }
+    if (s.action === "run_pipeline") {
+      setPipeline(String(s.params.pipeline ?? ""));
+      setPollSeconds(Number(s.params.poll_seconds ?? 15));
+    }
+    if (s.action === "sync_apply") {
+      setSyncMapping(String(s.params.mapping ?? ""));
+      setSyncDirection((s.params.direction as SyncApplyDirection) ?? "to_target");
+      setSyncConfirmLargeBatch(Boolean(s.params.confirm_large_batch));
+    }
+  }
+
+  function cancelEditSchedule() {
+    setEditingScheduleId(null);
+    setCreateError(null);
+    setCreateSuccess(null);
+    setName("");
+    setAction("extract_bc");
+    setTriggerKind("interval");
+    setHours(24);
+    setMinutes(0);
+    setCronExpr("0 6 * * *");
+    setNotify(false);
+    setMode("incremental");
+    setParallel(1);
+    setStartOn("2025-01-01");
+    setEmployeeStatus("active");
+    setSkipExisting(false);
+    setPipeline("");
+    setPollSeconds(15);
+    setWorkflowId("");
+    setSyncMapping("");
+    setSyncDirection("to_target");
+    setSyncConfirmLargeBatch(false);
   }
 
   async function toggleEnabled(s: Schedule) {
@@ -164,6 +263,55 @@ export function SchedulesPage() {
     }
   }
 
+  const existingTasksSection = (
+    <div className={styles.existingColumn}>
+      <h2>Tareas existentes</h2>
+      {schedules.length === 0 ? (
+        <p>No hay tareas programadas todavía.</p>
+      ) : (
+        <div className={styles.existingList}>
+          {schedules.map((s) => (
+            <div className={styles.row} key={s.id}>
+              <strong className={styles.name}>{s.name}</strong>
+              <span>{ACTION_LABELS[s.action] ?? s.action}</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                {s.enabled ? (
+                  <CirclePlay size={14} color="var(--color-success)" />
+                ) : (
+                  <CirclePause size={14} color="var(--color-text-muted)" />
+                )}
+                {s.enabled ? "Activa" : "Pausada"}
+              </span>
+              <span className={styles.freq}>{describeFrequency(s)}</span>
+              {s.missed_last_run && (
+                <span
+                  className={styles.missedWarning}
+                  title="El servidor estuvo caído en el momento en que debía ejecutarse; se retoma en la próxima fecha programada."
+                >
+                  <AlertTriangle size={14} color="var(--color-warning)" />
+                  Se perdió la última ejecución
+                </span>
+              )}
+              {isAdmin && (
+                <div className={styles.actions}>
+                  <button type="button" className={styles.btn} onClick={() => editSchedule(s)}>
+                    Editar
+                  </button>
+                  <button type="button" className={styles.btn} onClick={() => void toggleEnabled(s)}>
+                    {s.enabled ? "Pausar" : "Reanudar"}
+                  </button>
+                  <button type="button" className={styles.btnDanger} onClick={() => setPendingDelete(s)}>
+                    Borrar
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <section>
       <h1>Tareas programadas</h1>
@@ -172,12 +320,13 @@ export function SchedulesPage() {
         supervisor de procesos (systemd, Docker con restart policy, etc.).
       </p>
 
-      {isAdmin && (
-        <>
-          <h2>Nueva tarea</h2>
-          {createSuccess && <div className={formStyles.successBanner}>{createSuccess}</div>}
-          {createError && <div className={formStyles.errorBanner}>{createError}</div>}
-          <form className={formStyles.card} onSubmit={handleCreate}>
+      {isAdmin ? (
+        <div className={styles.layout}>
+          <div className={styles.newTaskColumn}>
+            <h2>{editingScheduleId ? "Editar tarea" : "Nueva tarea"}</h2>
+            {createSuccess && <div className={formStyles.successBanner}>{createSuccess}</div>}
+            {createError && <div className={formStyles.errorBanner}>{createError}</div>}
+            <form className={formStyles.card} onSubmit={handleSubmit}>
             <div className={formStyles.field}>
               <label htmlFor="name">Nombre de la tarea</label>
               <input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} />
@@ -208,6 +357,18 @@ export function SchedulesPage() {
                   </select>
                 </div>
               ))}
+
+            {action === "sync_apply" && (
+              <SyncApplyFields
+                idPrefix="sched_sync"
+                mapping={syncMapping}
+                onMappingChange={setSyncMapping}
+                direction={syncDirection}
+                onDirectionChange={setSyncDirection}
+                confirmLargeBatch={syncConfirmLargeBatch}
+                onConfirmLargeBatchChange={setSyncConfirmLargeBatch}
+              />
+            )}
 
             {NEEDS_MODE_PARALLEL.has(action) && (
               <div className={formStyles.grid}>
@@ -330,50 +491,20 @@ export function SchedulesPage() {
             )}
             <NotifyCheckbox checked={notify} onChange={setNotify} />
             <button type="submit" className={formStyles.submit}>
-              Crear tarea programada
+              {editingScheduleId ? "Guardar cambios" : "Crear tarea programada"}
             </button>
+            {editingScheduleId && (
+              <button type="button" className={styles.btn} style={{ marginLeft: 8 }} onClick={cancelEditSchedule}>
+                Cancelar edición
+              </button>
+            )}
           </form>
-        </>
-      )}
-
-      <h2>Tareas existentes</h2>
-      {schedules.length === 0 ? (
-        <p>No hay tareas programadas todavía.</p>
-      ) : (
-        schedules.map((s) => (
-          <div className={styles.row} key={s.id}>
-            <strong className={styles.name}>{s.name}</strong>
-            <span>{ACTION_LABELS[s.action] ?? s.action}</span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-              {s.enabled ? (
-                <CirclePlay size={14} color="var(--color-success)" />
-              ) : (
-                <CirclePause size={14} color="var(--color-text-muted)" />
-              )}
-              {s.enabled ? "Activa" : "Pausada"}
-            </span>
-            <span className={styles.freq}>{describeFrequency(s)}</span>
-            {s.missed_last_run && (
-              <span
-                className={styles.missedWarning}
-                title="El servidor estuvo caído en el momento en que debía ejecutarse; se retoma en la próxima fecha programada."
-              >
-                <AlertTriangle size={14} color="var(--color-warning)" />
-                Se perdió la última ejecución
-              </span>
-            )}
-            {isAdmin && (
-              <div className={styles.actions}>
-                <button type="button" className={styles.btn} onClick={() => void toggleEnabled(s)}>
-                  {s.enabled ? "Pausar" : "Reanudar"}
-                </button>
-                <button type="button" className={styles.btnDanger} onClick={() => setPendingDelete(s)}>
-                  Borrar
-                </button>
-              </div>
-            )}
           </div>
-        ))
+
+          {existingTasksSection}
+        </div>
+      ) : (
+        existingTasksSection
       )}
 
       <ConfirmDialog
