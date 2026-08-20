@@ -13,6 +13,30 @@ FROM python:3.12-slim AS backend
 
 WORKDIR /app
 
+# ODBC Driver 18 for SQL Server -- needed by pyodbc (requirements.txt) to
+# query a Fabric Lakehouse's SQL analytics endpoint (bronze./gold. schema
+# tables, see src/fabric_pipelines/api.py::list_lakehouse_tables). Microsoft
+# only ships this via its own apt repo, not Debian's.
+#
+# Uses Microsoft's own packages-microsoft-prod.deb helper (registers the
+# repo AND its signing key together) rather than hand-adding the repo with
+# the generic key from packages.microsoft.com/keys/microsoft.asc --
+# confirmed live in a throwaway container: that generic key's fingerprint
+# doesn't match the one actually signing the Debian 13 (trixie) repo
+# (`apt-get update` fails with "Missing key EE4D7792F748182B"), which is
+# the real Debian version python:3.12-slim currently resolves to, not 12
+# (bookworm). The .deb helper sidesteps needing to track that manually.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl unixodbc-dev \
+    && curl -sSL -o /tmp/packages-microsoft-prod.deb https://packages.microsoft.com/config/debian/13/packages-microsoft-prod.deb \
+    && dpkg -i /tmp/packages-microsoft-prod.deb \
+    && rm /tmp/packages-microsoft-prod.deb \
+    && apt-get update \
+    && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 \
+    && apt-get purge -y curl \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 

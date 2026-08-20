@@ -39,15 +39,20 @@ class _FakeFabricClient:
     folders) -- reproduced live against the real workspace before writing
     this module, see FabricPipelineClient.list_items()/list_folders()."""
 
-    def __init__(self, items, folders):
+    def __init__(self, items, folders, lakehouse_tables=None):
         self._items = items
         self._folders = folders
+        # {lakehouse_item_id: [{"schema": ..., "table": ...}, ...]}
+        self._lakehouse_tables = lakehouse_tables or {}
 
     def list_items(self):
         return self._items
 
     def list_folders(self):
         return self._folders
+
+    def list_lakehouse_tables(self, item_id, display_name):
+        return self._lakehouse_tables.get(item_id, [])
 
 
 _EMPTY_CLIENT = _FakeFabricClient(items=[], folders=[])
@@ -122,6 +127,61 @@ def test_list_catalog_items_merges_bc_and_hubspot_static_tables(isolated_state, 
     hs_item = next(i for i in items if i["item_id"] == "hubspot:hubspot_contacts")
     assert hs_item["name"] == "hubspot_contacts"
     assert hs_item["folder_path"] == ["HubSpot"]
+
+
+def test_list_catalog_items_merges_lakehouse_tables_nested_under_the_lakehouse(isolated_state, monkeypatch):
+    _no_bc_or_hubspot_tables(monkeypatch)
+    client = _FakeFabricClient(
+        items=[{"id": "lh-1", "type": "Lakehouse", "displayName": "Lakehouse", "folderId": "f-root"}],
+        folders=[{"id": "f-root", "displayName": "Sandbox"}],
+        lakehouse_tables={"lh-1": [{"schema": "bronze", "table": "bc_cuentas_contables"}]},
+    )
+    items = fabric_catalog.list_catalog_items(client)
+    assert len(items) == 2
+
+    lakehouse = next(i for i in items if i["item_id"] == "lh-1")
+    assert lakehouse["folder_path"] == ["Fabric", "Sandbox"]
+
+    table_id = "lakehouse-table:lh-1:bronze.bc_cuentas_contables"
+    table = next(i for i in items if i["item_id"] == table_id)
+    assert table["name"] == "bronze.bc_cuentas_contables"
+    assert table["type"] == "Tabla"
+    # One level deeper than the Lakehouse itself -- reads as "inside" it.
+    assert table["folder_path"] == ["Fabric", "Sandbox", "Lakehouse"]
+    assert table["is_custom"] is False
+
+
+def test_list_catalog_items_only_queries_lakehouse_tables_for_lakehouse_items(isolated_state, monkeypatch):
+    """A Notebook/DataPipeline/etc. never triggers the SQL-endpoint lookup --
+    only an item whose type is literally "Lakehouse" does."""
+    _no_bc_or_hubspot_tables(monkeypatch)
+
+    class _ExplodingLakehouseTables(_FakeFabricClient):
+        def list_lakehouse_tables(self, item_id, display_name):
+            raise AssertionError("list_lakehouse_tables should not be called for a non-Lakehouse item")
+
+    client = _ExplodingLakehouseTables(
+        items=[{"id": "nb-1", "type": "Notebook", "displayName": "silver_facturas"}],
+        folders=[],
+    )
+    items = fabric_catalog.list_catalog_items(client)
+    assert len(items) == 1
+
+
+def test_list_catalog_items_lakehouse_table_keeps_its_saved_metadata(isolated_state, monkeypatch):
+    _no_bc_or_hubspot_tables(monkeypatch)
+    table_id = "lakehouse-table:lh-1:bronze.bc_cuentas_contables"
+    _set(table_id, short_description="Cuentas contables de BC", data_owner=["ana"])
+
+    client = _FakeFabricClient(
+        items=[{"id": "lh-1", "type": "Lakehouse", "displayName": "Lakehouse"}],
+        folders=[],
+        lakehouse_tables={"lh-1": [{"schema": "bronze", "table": "bc_cuentas_contables"}]},
+    )
+    items = fabric_catalog.list_catalog_items(client)
+    table = next(i for i in items if i["item_id"] == table_id)
+    assert table["short_description"] == "Cuentas contables de BC"
+    assert table["data_owner"] == ["ana"]
 
 
 def test_list_catalog_items_bc_table_keeps_its_saved_metadata(isolated_state, monkeypatch):

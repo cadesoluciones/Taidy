@@ -10,9 +10,11 @@ from __future__ import annotations
 
 import base64
 import json
+import struct
 import time
 from typing import Any, Dict, List, Optional
 
+import pyodbc
 import requests
 from azure.identity import ClientSecretCredential
 from requests.exceptions import ChunkedEncodingError
@@ -25,6 +27,18 @@ logger = get_logger(__name__)
 
 _FABRIC_API_BASE = "https://api.fabric.microsoft.com/v1"
 _FABRIC_SCOPE = "https://api.fabric.microsoft.com/.default"
+
+# A Lakehouse's tables (bronze./gold. schema-qualified names included) are
+# NOT reachable through the Fabric REST API for a Lakehouse with schemas
+# enabled -- confirmed live, that call fails with
+# UnsupportedOperationForSchemasEnabledLakehouse. The SQL analytics endpoint
+# every Lakehouse exposes (properties.sqlEndpointProperties in the item's
+# own detail response) works uniformly for schema-enabled and legacy
+# Lakehouses alike, so it's used for both rather than keeping two code
+# paths. Same service principal as the rest of this client, just a
+# different token audience (SQL, not the Fabric REST API).
+_SQL_SCOPE = "https://database.windows.net/.default"
+_SQL_COPT_SS_ACCESS_TOKEN = 1256
 
 # Terminal job statuses per the Fabric API; anything else means still running.
 TERMINAL_STATUSES = {"Completed", "Failed", "Cancelled", "Deduped"}
@@ -176,6 +190,63 @@ class FabricPipelineClient:
                 f"No se pudo consultar el estado del pipeline (HTTP {response.status_code}): {response.text}"
             )
         return response.json()
+
+    def _sql_access_token_struct(self) -> bytes:
+        """pyodbc's documented way to hand an AAD token to the ODBC driver
+        instead of a username/password: SQL_COPT_SS_ACCESS_TOKEN wants the
+        UTF-16-LE token bytes prefixed with a little-endian length header."""
+        token = self._credential.get_token(_SQL_SCOPE).token
+        token_bytes = token.encode("utf-16-le")
+        return struct.pack("=i", len(token_bytes)) + token_bytes
+
+    def list_lakehouse_tables(self, item_id: str, display_name: str) -> List[Dict[str, str]]:
+        """Every table in a Lakehouse's SQL analytics endpoint, as
+        [{"schema": ..., "table": ...}, ...] -- this is how bronze./gold.
+        (or any other schema) tables are actually discovered; there is no
+        REST equivalent for a schema-enabled Lakehouse (see module docstring
+        above). Deliberately non-fatal: a Lakehouse whose SQL endpoint isn't
+        provisioned yet, or that this service principal can't reach, just
+        contributes no tables instead of failing the whole catalog listing
+        -- one unreachable Lakehouse shouldn't hide every other item."""
+        url = f"{_FABRIC_API_BASE}/workspaces/{self._settings.workspace_id}/lakehouses/{item_id}"
+        try:
+            response = self._request("GET", url, headers=self._headers())
+            if response.status_code != 200:
+                logger.warning(
+                    "No se pudieron leer las propiedades del Lakehouse %s (HTTP %s): %s",
+                    item_id,
+                    response.status_code,
+                    response.text,
+                )
+                return []
+            properties = response.json().get("properties", {}) or {}
+            endpoint = properties.get("sqlEndpointProperties", {}) or {}
+            server = endpoint.get("connectionString", "")
+            if not server or endpoint.get("provisioningStatus") != "Success":
+                return []
+
+            conn_str = (
+                f"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={server};DATABASE={display_name};"
+                "Encrypt=yes;TrustServerCertificate=no"
+            )
+            conn = pyodbc.connect(
+                conn_str,
+                attrs_before={_SQL_COPT_SS_ACCESS_TOKEN: self._sql_access_token_struct()},
+                timeout=15,
+            )
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT s.name AS schema_name, t.name AS table_name "
+                    "FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id "
+                    "ORDER BY s.name, t.name"
+                )
+                return [{"schema": row.schema_name, "table": row.table_name} for row in cursor.fetchall()]
+            finally:
+                conn.close()
+        except (requests.ConnectionError, requests.Timeout, pyodbc.Error) as exc:
+            logger.warning("No se pudieron leer las tablas del Lakehouse %s (%s): %s", display_name, item_id, exc)
+            return []
 
     def get_definition(self, item_id: str) -> Dict[str, Any]:
         """Fetches a Data Pipeline item's definition (its activities and

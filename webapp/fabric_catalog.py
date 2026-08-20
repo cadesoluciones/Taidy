@@ -6,11 +6,14 @@ another way to run or manage anything already covered by src/fabric_pipelines
 
 Fabric/BC/HubSpot are the source of truth for *structure* (which
 notebooks/pipelines/tables exist): Fabric's discovered live via
-FabricPipelineClient.list_items()/list_folders(); BC/HubSpot come from the
-same static tables.yaml/hubspot_tables.yaml the extraction jobs already
-read. This module only stores the human-curated layer on top: descriptions,
-governance roles, and typed relationships between items, keyed by each
-item's stable id so a rename upstream doesn't orphan the metadata.
+FabricPipelineClient.list_items()/list_folders() (plus, per Lakehouse,
+list_lakehouse_tables() for its own bronze./gold. tables -- those aren't
+Fabric workspace items, so they don't show up in list_items()); BC/HubSpot
+come from the same static tables.yaml/hubspot_tables.yaml the extraction
+jobs already read. This module only stores the human-curated layer on top:
+descriptions, governance roles, and typed relationships between items,
+keyed by each item's stable id so a rename upstream doesn't orphan the
+metadata.
 """
 
 from __future__ import annotations
@@ -75,6 +78,14 @@ HUBSPOT_ID_PREFIX = "hubspot:"
 BC_FOLDER_PATH = ["Business Central"]
 HUBSPOT_FOLDER_PATH = ["HubSpot"]
 FABRIC_FOLDER_LABEL = "Fabric"
+
+# A Lakehouse's own tables (bronze.*, gold.*, ... -- discovered live via its
+# SQL analytics endpoint, see FabricPipelineClient.list_lakehouse_tables)
+# aren't Fabric workspace items themselves, so they need their own id
+# scheme: deterministic like BC/HubSpot's (derived from the parent
+# Lakehouse's id + the table's own schema-qualified name), not random like
+# a custom item's.
+LAKEHOUSE_TABLE_ID_PREFIX = "lakehouse-table:"
 
 _EMPTY_ENTRY: dict = {
     "short_description": "",
@@ -421,13 +432,16 @@ def _shape_item(item_id: str, name: str, type_: str, folder_path: List[str], met
 
 
 def list_catalog_items(client: Any) -> List[dict]:
-    """Merges four sources into one flat list, each item shaped identically:
+    """Merges five sources into one flat list, each item shaped identically:
     live Fabric items+folders (nested one level under "Fabric" so it reads
-    as its own system alongside the others), the static BC/HubSpot table
-    configs (flat, one level under "Business Central"/"HubSpot"), and any
-    custom items (under "Personalizados") -- all merged with locally-stored
-    governance metadata. `client` is a FabricPipelineClient (passed in
-    rather than constructed here so tests can inject a fake)."""
+    as its own system alongside the others), each Lakehouse's own tables
+    (nested one level further under the Lakehouse's own name, discovered
+    live via its SQL analytics endpoint -- there's no Fabric workspace item
+    per table), the static BC/HubSpot table configs (flat, one level under
+    "Business Central"/"HubSpot"), and any custom items (under
+    "Personalizados") -- all merged with locally-stored governance
+    metadata. `client` is a FabricPipelineClient (passed in rather than
+    constructed here so tests can inject a fake)."""
     fabric_items = client.list_items()
     folders = client.list_folders()
     folders_by_id = {f["id"]: f for f in folders}
@@ -436,9 +450,19 @@ def list_catalog_items(client: Any) -> List[dict]:
     result: List[dict] = []
     for item in fabric_items:
         item_id = item.get("id", "")
+        display_name = item.get("displayName", "")
         meta = {**_EMPTY_ENTRY, **metadata.get(item_id, {})}
         folder_path = [FABRIC_FOLDER_LABEL, *_folder_path(item.get("folderId"), folders_by_id)]
-        result.append(_shape_item(item_id, item.get("displayName", ""), item.get("type", ""), folder_path, meta, is_custom=False))
+        result.append(_shape_item(item_id, display_name, item.get("type", ""), folder_path, meta, is_custom=False))
+
+        if item.get("type") == "Lakehouse":
+            for table in client.list_lakehouse_tables(item_id, display_name):
+                table_name = f"{table['schema']}.{table['table']}"
+                table_id = f"{LAKEHOUSE_TABLE_ID_PREFIX}{item_id}:{table_name}"
+                table_meta = {**_EMPTY_ENTRY, **metadata.get(table_id, {})}
+                result.append(
+                    _shape_item(table_id, table_name, "Tabla", [*folder_path, display_name], table_meta, is_custom=False)
+                )
 
     for table in table_configs.list_bc_tables_full():
         item_id = f"{BC_ID_PREFIX}{table.get('name', '')}"

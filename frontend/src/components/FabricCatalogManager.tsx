@@ -28,7 +28,7 @@ import { FABRIC_ICON_OPTIONS, fabricIconFor } from "../utils/fabricIcons";
 import { DATA_ROLE_INFO } from "../utils/dataRoles";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { FabricCatalogBrowser } from "./FabricCatalogBrowser";
-import { FabricRelationshipCanvas, RELATIONSHIP_LABELS } from "./FabricRelationshipCanvas";
+import { FabricRelationshipCanvas } from "./FabricRelationshipCanvas";
 import { FreeTagInput } from "./FreeTagInput";
 import { Modal } from "./Modal";
 import styles from "./FabricCatalogManager.module.css";
@@ -173,8 +173,6 @@ export function FabricCatalogManager() {
     }
     return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([color]) => color).slice(0, 8);
   }, [items]);
-
-  const itemsById = useMemo(() => new Map(items.map((i) => [i.item_id, i])), [items]);
 
   function applyItemPatch(itemId: string, patch: Partial<FabricCatalogItem>) {
     setItems((prev) => prev.map((i) => (i.item_id === itemId ? { ...i, ...patch } : i)));
@@ -419,15 +417,6 @@ export function FabricCatalogManager() {
                     __html: renderMarkdown(selected.long_description_markdown) || "<p><em>Vacío.</em></p>",
                   }}
                 />
-                <h4>Relaciones</h4>
-                <ul>
-                  {selected.relationships.length === 0 && <li>Sin relaciones registradas.</li>}
-                  {selected.relationships.map((rel) => (
-                    <li key={`${rel.type}|${rel.target_item_id}`}>
-                      {RELATIONSHIP_LABELS[rel.type]} {itemsById.get(rel.target_item_id)?.name ?? rel.target_item_id}
-                    </li>
-                  ))}
-                </ul>
                 {selected.reviewed_at && (
                   <p>
                     Última revisión: {selected.reviewed_by} · {new Date(selected.reviewed_at).toLocaleString("es-ES")}
@@ -435,9 +424,9 @@ export function FabricCatalogManager() {
                 )}
               </div>
 
-              <div className={`${styles.fieldsGrid} no-print`}>
+              <div className={styles.fieldsGrid}>
                 <div className={styles.generalColumn}>
-                  <div className={formStyles.field}>
+                  <div className={`${formStyles.field} no-print`}>
                     <label htmlFor="fc_short_description">Descripción breve</label>
                     <input
                       id="fc_short_description"
@@ -448,7 +437,7 @@ export function FabricCatalogManager() {
                     />
                   </div>
 
-                  <div className={styles.roleGrid}>
+                  <div className={`${styles.roleGrid} no-print`}>
                     {DATA_ROLE_FIELDS.map((field) => {
                       const info = DATA_ROLE_INFO[field];
                       return (
@@ -468,7 +457,7 @@ export function FabricCatalogManager() {
                     })}
                   </div>
 
-                  <div className={styles.compactField}>
+                  <div className={`${styles.compactField} no-print`}>
                     <span className={styles.compactLabel}>Etiquetas</span>
                     <FreeTagInput
                       id="fc_tags"
@@ -479,7 +468,7 @@ export function FabricCatalogManager() {
                     />
                   </div>
 
-                  <div className={styles.fieldRow}>
+                  <div className={`${styles.fieldRow} no-print`}>
                     <div className={styles.compactField}>
                       <label className={styles.compactLabel} htmlFor="fc_criticality">
                         Criticidad
@@ -592,7 +581,11 @@ export function FabricCatalogManager() {
                     <div className={styles.detailHead}>
                       <label style={{ marginBottom: 0 }}>Relaciones</label>
                       {canEdit && (
-                        <button type="button" className={styles.relType} onClick={() => setRelationshipModalOpen(true)}>
+                        <button
+                          type="button"
+                          className={`${styles.relType} no-print`}
+                          onClick={() => setRelationshipModalOpen(true)}
+                        >
                           Editar relaciones
                         </button>
                       )}
@@ -610,7 +603,7 @@ export function FabricCatalogManager() {
                   </div>
                 </div>
 
-                <div className={styles.longDescColumn}>
+                <div className={`${styles.longDescColumn} no-print`}>
                   <div className={styles.detailHead}>
                     <label htmlFor="fc_long_description" style={{ marginBottom: 0 }}>
                       Descripción detallada

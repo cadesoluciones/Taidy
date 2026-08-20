@@ -8,6 +8,12 @@ azure-identity>=1.19
 azure-storage-file-datalake>=12.18
 azure-core>=1.30
 
+# --- Lectura del endpoint SQL de un Lakehouse de Fabric (tablas
+# bronze./gold. con schemas habilitados, ver src/fabric_pipelines/api.py) ---
+# Necesita el "ODBC Driver 18 for SQL Server" instalado en el sistema
+# (ver Dockerfile); en Windows local suele venir con SSMS/Power BI Desktop.
+pyodbc>=5.1
+
 # --- Orquestación (webapp/) ---
 APScheduler>=3.10
 
