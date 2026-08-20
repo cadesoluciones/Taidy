@@ -329,7 +329,9 @@ def test_set_favorite_and_hidden_endpoints(isolated_state, client, monkeypatch):
 
     resp = client.put("/fabric-catalog/items/nb-1/favorite", json={"is_favorite": True})
     assert resp.status_code == 200
-    assert resp.json() == {"is_favorite": True, "is_hidden": False}
+    # is_hidden defaults to True (opt-in curation) -- setting favorite alone
+    # doesn't touch it.
+    assert resp.json() == {"is_favorite": True, "is_hidden": True}
 
     resp = client.put("/fabric-catalog/items/nb-1/hidden", json={"is_hidden": True})
     assert resp.status_code == 200

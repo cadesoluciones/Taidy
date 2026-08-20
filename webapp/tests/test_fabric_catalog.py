@@ -97,7 +97,7 @@ def test_list_catalog_items_merges_live_structure_with_stored_metadata(isolated_
     assert pipeline["icon"] == ""
     assert pipeline["canvas_positions"] == {}
     assert pipeline["is_favorite"] is False
-    assert pipeline["is_hidden"] is False
+    assert pipeline["is_hidden"] is True  # opt-in curation: everything starts hidden
 
 
 def test_list_catalog_items_merges_bc_and_hubspot_static_tables(isolated_state, monkeypatch):
@@ -196,7 +196,7 @@ def test_get_metadata_for_unknown_item_returns_fully_shaped_empty_entry(isolated
         "icon": "",
         "canvas_positions": {},
         "is_favorite": False,
-        "is_hidden": False,
+        "is_hidden": True,  # opt-in curation: everything starts hidden
     }
 
 
@@ -268,6 +268,21 @@ def test_update_item_form_save_does_not_wipe_favorite_or_hidden_flags(isolated_s
     stored = fabric_catalog.get_metadata("nb-1")
     assert stored["is_favorite"] is True
     assert stored["is_hidden"] is True
+
+
+def test_new_items_default_to_hidden(isolated_state, monkeypatch):
+    """Opt-in curation: with Fabric+BC+HubSpot merged an untouched catalog
+    is 100+ items, so nothing shows until someone explicitly un-hides it."""
+    _no_bc_or_hubspot_tables(monkeypatch)
+    client = _FakeFabricClient(items=[{"id": "nb-1", "type": "Notebook", "displayName": "x"}], folders=[])
+    items = fabric_catalog.list_catalog_items(client)
+    assert items[0]["is_hidden"] is True
+
+
+def test_set_hidden_can_unhide_and_it_survives_a_form_save(isolated_state):
+    fabric_catalog.set_hidden("nb-1", False)
+    _set("nb-1", short_description="Facturas")
+    assert fabric_catalog.get_metadata("nb-1")["is_hidden"] is False
 
 
 def test_add_relationship_appends_without_touching_other_fields(isolated_state):

@@ -26,7 +26,6 @@ import { useAuth } from "../auth/AuthContext";
 import { renderMarkdown } from "../utils/markdown";
 import { FABRIC_ICON_OPTIONS, fabricIconFor } from "../utils/fabricIcons";
 import { DATA_ROLE_INFO } from "../utils/dataRoles";
-import { addRecentColor, getRecentColors } from "../utils/recentColors";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { FabricRelationshipCanvas } from "./FabricRelationshipCanvas";
 import { FreeTagInput } from "./FreeTagInput";
@@ -91,7 +90,6 @@ export function FabricCatalogManager() {
   const [colorDraft, setColorDraft] = useState("");
   const [iconDraft, setIconDraft] = useState("");
   const [appearanceOpen, setAppearanceOpen] = useState(false);
-  const [recentColors, setRecentColors] = useState<string[]>(() => getRecentColors());
   const appearanceRef = useRef<HTMLDivElement>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
@@ -218,6 +216,18 @@ export function FabricCatalogManager() {
     });
   }
 
+  // Colors already assigned to some block, most-used first -- lets a new
+  // pick reuse what's already out there instead of every block drifting to
+  // its own one-off shade. Not "recently clicked": a color someone picked
+  // once and never saved anywhere shouldn't show up here.
+  const usedColors = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of items) {
+      if (item.color) counts.set(item.color, (counts.get(item.color) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([color]) => color).slice(0, 8);
+  }, [items]);
+
   const relationshipCountByItem = useMemo(() => {
     const counts = new Map<string, number>();
     for (const item of items) {
@@ -251,11 +261,6 @@ export function FabricCatalogManager() {
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : "No se pudo actualizar la visibilidad.");
     }
-  }
-
-  function handleColorPick(color: string) {
-    setColorDraft(color);
-    setRecentColors(addRecentColor(color));
   }
 
   async function handleCanvasAddRelationship(ownerId: string, type: FabricRelationshipType, targetId: string) {
@@ -650,24 +655,31 @@ export function FabricCatalogManager() {
                               <input
                                 type="color"
                                 value={colorDraft || "#94a3b8"}
-                                onChange={(e) => handleColorPick(e.target.value)}
+                                onChange={(e) => setColorDraft(e.target.value)}
                               />
-                              {recentColors.map((c) => (
-                                <button
-                                  key={c}
-                                  type="button"
-                                  className={styles.recentSwatch}
-                                  style={{ background: c }}
-                                  title={c}
-                                  onClick={() => handleColorPick(c)}
-                                />
-                              ))}
                               {colorDraft && (
                                 <button type="button" className={styles.relType} onClick={() => setColorDraft("")}>
                                   Quitar
                                 </button>
                               )}
                             </div>
+                            {usedColors.length > 0 && (
+                              <div className={styles.colorPickRow}>
+                                <span className={styles.compactLabel} title="Colores ya usados en otros bloques -- reutilízalos para homogeneizar">
+                                  Usados:
+                                </span>
+                                {usedColors.map((c) => (
+                                  <button
+                                    key={c}
+                                    type="button"
+                                    className={styles.recentSwatch}
+                                    style={{ background: c }}
+                                    title={c}
+                                    onClick={() => setColorDraft(c)}
+                                  />
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

@@ -101,7 +101,11 @@ _EMPTY_ENTRY: dict = {
     # Personal-bookmark-style flags -- global on the item (there's no
     # per-user store anywhere else in this module), not tied to who set them.
     "is_favorite": False,
-    "is_hidden": False,
+    # Opt-in curation: with Fabric+BC+HubSpot merged, an untouched catalog
+    # is 100+ items -- everything starts hidden until someone explicitly
+    # un-hides the ones worth tracking day to day (via "mostrar ocultos" to
+    # find and reveal them), rather than starting from a full, noisy list.
+    "is_hidden": True,
 }
 
 
