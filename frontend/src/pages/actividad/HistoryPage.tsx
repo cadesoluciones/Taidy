@@ -15,6 +15,15 @@ function toneFor(status: string): "success" | "danger" | "neutral" {
   return "neutral";
 }
 
+/** "38m 23s" instead of the raw "2302.5s" -- minutes only shown once there
+ * actually are any, so a short run still just reads "23s". */
+function formatDuration(seconds: number): string {
+  const total = Math.round(seconds);
+  const minutes = Math.floor(total / 60);
+  const secs = total % 60;
+  return minutes > 0 ? `${minutes}m ${secs}s` : `${secs}s`;
+}
+
 export function HistoryPage() {
   const [result, setResult] = useState<HistoryPageData | null>(null);
   const [resultFilter, setResultFilter] = useState<"all" | "ok" | "error" | "stopped">("all");
@@ -157,7 +166,8 @@ export function HistoryPage() {
               </>
             ),
             timestamp:
-              entry.finished_at + (entry.duration_seconds !== null ? ` · ${entry.duration_seconds}s` : ""),
+              new Date(entry.finished_at).toLocaleString("es-ES") +
+              (entry.duration_seconds !== null ? ` · ${formatDuration(entry.duration_seconds)}` : ""),
             description: (
               <>
                 {entry.message}
