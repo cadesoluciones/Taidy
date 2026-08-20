@@ -6,6 +6,16 @@ from webapp.tests.conftest import make_user
 
 from api.routers import fabric_catalog as fabric_catalog_router
 
+_EMPTY_PAYLOAD = {
+    "short_description": "",
+    "long_description_markdown": "",
+    "owners": [],
+    "criticality": "",
+    "status": "",
+    "tags": [],
+    "relationships": [],
+}
+
 
 def _login(client, username, password):
     assert client.post("/auth/login", json={"username": username, "password": password}).status_code == 200
@@ -52,7 +62,10 @@ def test_operator_can_list_catalog_items(isolated_state, client, monkeypatch):
     assert {i["item_id"] for i in items} == {"nb-1", "pl-1"}
     notebook = next(i for i in items if i["item_id"] == "nb-1")
     assert notebook["folder_path"] == ["ETLs Medallion", "silver"]
-    assert notebook["description"] == ""
+    assert notebook["short_description"] == ""
+    assert notebook["owners"] == []
+    assert notebook["tags"] == []
+    assert notebook["reviewed_by"] == ""
 
 
 def test_reader_cannot_update_catalog_item(isolated_state, client, monkeypatch):
@@ -60,7 +73,7 @@ def test_reader_cannot_update_catalog_item(isolated_state, client, monkeypatch):
     make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
     _login(client, "reader1", "ReaderPass2026!")
 
-    resp = client.patch("/fabric-catalog/items/nb-1", json={"description": "x", "relationships": []})
+    resp = client.patch("/fabric-catalog/items/nb-1", json=_EMPTY_PAYLOAD)
     assert resp.status_code == 403
 
 
@@ -72,17 +85,32 @@ def test_operator_can_update_catalog_item(isolated_state, client, monkeypatch):
     resp = client.patch(
         "/fabric-catalog/items/nb-1",
         json={
-            "description": "Facturas consolidadas desde bronze",
+            **_EMPTY_PAYLOAD,
+            "short_description": "Facturas consolidadas desde bronze",
+            "long_description_markdown": "# Facturas\nConsolidado **diario**.",
+            "owners": ["jose"],
+            "criticality": "alta",
+            "status": "activo",
+            "tags": ["finanzas"],
             "relationships": [{"type": "reads_from", "target_item_id": "lh-bronze"}],
         },
     )
     assert resp.status_code == 200
-    assert resp.json()["description"] == "Facturas consolidadas desde bronze"
-    assert resp.json()["relationships"] == [{"type": "reads_from", "target_item_id": "lh-bronze"}]
+    body = resp.json()
+    assert body["short_description"] == "Facturas consolidadas desde bronze"
+    assert body["long_description_markdown"] == "# Facturas\nConsolidado **diario**."
+    assert body["owners"] == ["jose"]
+    assert body["criticality"] == "alta"
+    assert body["status"] == "activo"
+    assert body["tags"] == ["finanzas"]
+    assert body["relationships"] == [{"type": "reads_from", "target_item_id": "lh-bronze"}]
+    assert body["reviewed_by"] == "operator1"
+    assert body["reviewed_at"] != ""
 
     listed = client.get("/fabric-catalog/items").json()["items"]
     notebook = next(i for i in listed if i["item_id"] == "nb-1")
-    assert notebook["description"] == "Facturas consolidadas desde bronze"
+    assert notebook["short_description"] == "Facturas consolidadas desde bronze"
+    assert notebook["reviewed_by"] == "operator1"
 
 
 def test_admin_can_update_catalog_item(isolated_state, client, monkeypatch):
@@ -90,8 +118,12 @@ def test_admin_can_update_catalog_item(isolated_state, client, monkeypatch):
     make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
     _login(client, "admin2", "AdminPass2026!")
 
-    resp = client.patch("/fabric-catalog/items/pl-1", json={"description": "Pipeline bronce", "relationships": []})
+    resp = client.patch(
+        "/fabric-catalog/items/pl-1",
+        json={**_EMPTY_PAYLOAD, "short_description": "Pipeline bronce"},
+    )
     assert resp.status_code == 200
+    assert resp.json()["reviewed_by"] == "admin2"
 
 
 def test_update_rejects_an_invalid_relationship_type(isolated_state, client, monkeypatch):
@@ -101,7 +133,19 @@ def test_update_rejects_an_invalid_relationship_type(isolated_state, client, mon
 
     resp = client.patch(
         "/fabric-catalog/items/nb-1",
-        json={"description": "", "relationships": [{"type": "not_a_real_type", "target_item_id": "x"}]},
+        json={**_EMPTY_PAYLOAD, "relationships": [{"type": "not_a_real_type", "target_item_id": "x"}]},
+    )
+    assert resp.status_code == 400
+
+
+def test_update_rejects_an_invalid_criticality(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    resp = client.patch(
+        "/fabric-catalog/items/nb-1",
+        json={**_EMPTY_PAYLOAD, "criticality": "urgentisimo"},
     )
     assert resp.status_code == 400
 

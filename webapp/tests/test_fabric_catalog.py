@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 webapp/fabric_catalog.py -- Fabric structure is always live (via whatever
-client is passed in), only description/relationships persist locally.
+client is passed in), only the governance metadata (descriptions, owners,
+criticality/status, tags, relationships) persists locally.
 """
 
 from __future__ import annotations
@@ -9,6 +10,22 @@ from __future__ import annotations
 import pytest
 
 from webapp import fabric_catalog
+
+_EMPTY_KWARGS = dict(
+    short_description="",
+    long_description_markdown="",
+    owners=[],
+    criticality="",
+    status="",
+    tags=[],
+    relationships=[],
+    reviewed_by="",
+)
+
+
+def _set(item_id: str, **overrides):
+    kwargs = {**_EMPTY_KWARGS, **overrides}
+    return fabric_catalog.set_metadata(item_id, **kwargs)
 
 
 class _FakeFabricClient:
@@ -39,7 +56,7 @@ def test_list_catalog_items_merges_live_structure_with_stored_metadata(isolated_
             {"id": "f-silver", "displayName": "silver", "parentFolderId": "f-root"},
         ],
     )
-    fabric_catalog.set_metadata("nb-1", description="Facturas consolidadas", relationships=[])
+    _set("nb-1", short_description="Facturas consolidadas", owners=["jose"], criticality="alta")
 
     items = fabric_catalog.list_catalog_items(client)
     assert len(items) == 2
@@ -48,42 +65,85 @@ def test_list_catalog_items_merges_live_structure_with_stored_metadata(isolated_
     assert notebook["name"] == "silver_facturas"
     assert notebook["type"] == "Notebook"
     assert notebook["folder_path"] == ["ETLs Medallion", "silver"]
-    assert notebook["description"] == "Facturas consolidadas"
+    assert notebook["short_description"] == "Facturas consolidadas"
+    assert notebook["owners"] == ["jose"]
+    assert notebook["criticality"] == "alta"
+    assert notebook["reviewed_by"] == ""
 
     pipeline = next(i for i in items if i["item_id"] == "pl-1")
     assert pipeline["folder_path"] == []  # workspace root -- no folderId at all
-    assert pipeline["description"] == ""
+    assert pipeline["short_description"] == ""
     assert pipeline["relationships"] == []
+    assert pipeline["tags"] == []
 
 
-def test_set_metadata_persists_and_round_trips_relationships(isolated_state):
-    fabric_catalog.set_metadata(
+def test_set_metadata_persists_and_round_trips_all_fields(isolated_state):
+    _set(
         "nb-1",
-        description="Se construye desde bronze_facturas.csv",
+        short_description="Facturas",
+        long_description_markdown="# Facturas\nSe construye desde **bronze_facturas.csv**",
+        owners=["jose", "ana"],
+        criticality="media",
+        status="activo",
+        tags=["finanzas", "diario"],
         relationships=[{"type": "reads_from", "target_item_id": "lh-bronze"}],
+        reviewed_by="admin1",
     )
     stored = fabric_catalog.get_metadata("nb-1")
-    assert stored["description"] == "Se construye desde bronze_facturas.csv"
+    assert stored["short_description"] == "Facturas"
+    assert stored["long_description_markdown"] == "# Facturas\nSe construye desde **bronze_facturas.csv**"
+    assert stored["owners"] == ["jose", "ana"]
+    assert stored["criticality"] == "media"
+    assert stored["status"] == "activo"
+    assert stored["tags"] == ["finanzas", "diario"]
     assert stored["relationships"] == [{"type": "reads_from", "target_item_id": "lh-bronze"}]
+    assert stored["reviewed_by"] == "admin1"
+    assert stored["reviewed_at"] != ""
 
 
-def test_get_metadata_for_unknown_item_returns_empty_not_none(isolated_state):
-    assert fabric_catalog.get_metadata("does-not-exist") == {"description": "", "relationships": []}
+def test_set_metadata_dedupes_and_strips_owners_and_tags(isolated_state):
+    entry = _set("nb-1", owners=[" jose ", "jose", "ana"], tags=["a", "", " a ", "b"])
+    assert entry["owners"] == ["jose", "ana"]
+    assert entry["tags"] == ["a", "b"]
+
+
+def test_get_metadata_for_unknown_item_returns_fully_shaped_empty_entry(isolated_state):
+    assert fabric_catalog.get_metadata("does-not-exist") == {
+        "short_description": "",
+        "long_description_markdown": "",
+        "owners": [],
+        "criticality": "",
+        "status": "",
+        "tags": [],
+        "relationships": [],
+        "reviewed_by": "",
+        "reviewed_at": "",
+    }
 
 
 def test_set_metadata_rejects_an_unknown_relationship_type(isolated_state):
     with pytest.raises(ValueError, match="relación"):
-        fabric_catalog.set_metadata("nb-1", description="", relationships=[{"type": "deletes", "target_item_id": "x"}])
+        _set("nb-1", relationships=[{"type": "deletes", "target_item_id": "x"}])
 
 
 def test_set_metadata_rejects_a_relationship_missing_a_target(isolated_state):
     with pytest.raises(ValueError):
-        fabric_catalog.set_metadata("nb-1", description="", relationships=[{"type": "reads_from", "target_item_id": ""}])
+        _set("nb-1", relationships=[{"type": "reads_from", "target_item_id": ""}])
 
 
 def test_set_metadata_rejects_self_referencing_relationship(isolated_state):
     with pytest.raises(ValueError, match="sí mismo|consigo"):
-        fabric_catalog.set_metadata("nb-1", description="", relationships=[{"type": "writes_to", "target_item_id": "nb-1"}])
+        _set("nb-1", relationships=[{"type": "writes_to", "target_item_id": "nb-1"}])
+
+
+def test_set_metadata_rejects_an_unknown_criticality(isolated_state):
+    with pytest.raises(ValueError, match="[Cc]riticidad"):
+        _set("nb-1", criticality="urgentisimo")
+
+
+def test_set_metadata_rejects_an_unknown_status(isolated_state):
+    with pytest.raises(ValueError, match="[Ee]stado"):
+        _set("nb-1", status="no_existe")
 
 
 def test_folder_path_handles_a_deeply_nested_folder(isolated_state):

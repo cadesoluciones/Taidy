@@ -23,7 +23,7 @@ from src.fabric_pipelines.config import load_settings
 from webapp import fabric_catalog
 from webapp.users_db import ROLE_ADMIN, ROLE_OPERATOR
 
-from ..dependencies import require_any_role
+from ..dependencies import CurrentUser, get_current_user, require_any_role
 from ..schemas.fabric_catalog import (
     FabricCatalogListOut,
     FabricCatalogItemOut,
@@ -56,12 +56,22 @@ def list_items() -> FabricCatalogListOut:
 
 
 @router.patch("/items/{item_id}", response_model=UpdateFabricCatalogItemOut)
-def update_item(item_id: str, payload: UpdateFabricCatalogItemRequest) -> UpdateFabricCatalogItemOut:
+def update_item(
+    item_id: str,
+    payload: UpdateFabricCatalogItemRequest,
+    current: CurrentUser = Depends(get_current_user),
+) -> UpdateFabricCatalogItemOut:
     try:
         entry = fabric_catalog.set_metadata(
             item_id,
-            description=payload.description,
+            short_description=payload.short_description,
+            long_description_markdown=payload.long_description_markdown,
+            owners=payload.owners,
+            criticality=payload.criticality,
+            status=payload.status,
+            tags=payload.tags,
             relationships=[r.model_dump() for r in payload.relationships],
+            reviewed_by=current.username,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))

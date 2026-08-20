@@ -8,14 +8,16 @@ Fabric itself is the source of truth for *structure* (which notebooks/
 pipelines/lakehouses exist, and which folder each lives in) -- always
 discovered live via FabricPipelineClient.list_items()/list_folders(), never
 cached here. This module only stores the human-curated layer on top:
-description text and typed relationships between items, keyed by each
-item's stable Fabric id so a rename in Fabric doesn't orphan the metadata.
+descriptions, ownership/governance fields, and typed relationships between
+items, keyed by each item's stable Fabric id so a rename in Fabric doesn't
+orphan the metadata.
 """
 
 from __future__ import annotations
 
 import json
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -25,6 +27,20 @@ _CATALOG_PATH = state_path("fabric_catalog.json", Path(__file__).resolve().paren
 _LOCK = threading.Lock()
 
 RELATIONSHIP_TYPES = {"reads_from", "writes_to", "triggered_by"}
+CRITICALITY_LEVELS = {"baja", "media", "alta"}
+STATUS_VALUES = {"activo", "en_desuso", "deprecado"}
+
+_EMPTY_ENTRY: dict = {
+    "short_description": "",
+    "long_description_markdown": "",
+    "owners": [],
+    "criticality": "",
+    "status": "",
+    "tags": [],
+    "relationships": [],
+    "reviewed_by": "",
+    "reviewed_at": "",
+}
 
 
 def _read() -> Dict[str, dict]:
@@ -43,11 +59,11 @@ def _write(data: Dict[str, dict]) -> None:
 
 
 def get_metadata(item_id: str) -> dict:
-    """Always returns a usable entry (empty description/relationships if
-    nothing's been saved yet) -- callers never need a None-check."""
+    """Always returns a fully-shaped entry (every field present, even if
+    empty) -- callers never need a None-check or a KeyError guard."""
     with _LOCK:
         entry = _read().get(item_id)
-    return entry or {"description": "", "relationships": []}
+    return {**_EMPTY_ENTRY, **(entry or {})}
 
 
 def list_metadata() -> Dict[str, dict]:
@@ -55,7 +71,27 @@ def list_metadata() -> Dict[str, dict]:
         return _read()
 
 
-def set_metadata(item_id: str, *, description: str, relationships: List[Dict[str, str]]) -> dict:
+def _clean_list(values: List[str]) -> List[str]:
+    seen: List[str] = []
+    for value in values:
+        cleaned = value.strip()
+        if cleaned and cleaned not in seen:
+            seen.append(cleaned)
+    return seen
+
+
+def set_metadata(
+    item_id: str,
+    *,
+    short_description: str,
+    long_description_markdown: str,
+    owners: List[str],
+    criticality: str,
+    status: str,
+    tags: List[str],
+    relationships: List[Dict[str, str]],
+    reviewed_by: str,
+) -> dict:
     for rel in relationships:
         rel_type = rel.get("type")
         target = rel.get("target_item_id")
@@ -66,7 +102,22 @@ def set_metadata(item_id: str, *, description: str, relationships: List[Dict[str
         if target == item_id:
             raise ValueError("Un elemento no puede relacionarse consigo mismo.")
 
-    entry = {"description": description.strip(), "relationships": relationships}
+    if criticality and criticality not in CRITICALITY_LEVELS:
+        raise ValueError(f"Criticidad desconocida: {criticality!r}")
+    if status and status not in STATUS_VALUES:
+        raise ValueError(f"Estado desconocido: {status!r}")
+
+    entry = {
+        "short_description": short_description.strip(),
+        "long_description_markdown": long_description_markdown,
+        "owners": _clean_list(owners),
+        "criticality": criticality,
+        "status": status,
+        "tags": _clean_list(tags),
+        "relationships": relationships,
+        "reviewed_by": reviewed_by,
+        "reviewed_at": datetime.now(timezone.utc).isoformat(),
+    }
     with _LOCK:
         data = _read()
         data[item_id] = entry
@@ -101,9 +152,9 @@ def _folder_path(folder_id: Optional[str], folders_by_id: Dict[str, dict]) -> Li
 
 
 def list_catalog_items(client: Any) -> List[dict]:
-    """Live Fabric items + folders, merged with locally-stored description/
-    relationships. `client` is a FabricPipelineClient (passed in rather than
-    constructed here so tests can inject a fake)."""
+    """Live Fabric items + folders, merged with locally-stored metadata.
+    `client` is a FabricPipelineClient (passed in rather than constructed
+    here so tests can inject a fake)."""
     items = client.list_items()
     folders = client.list_folders()
     folders_by_id = {f["id"]: f for f in folders}
@@ -112,15 +163,22 @@ def list_catalog_items(client: Any) -> List[dict]:
     result: List[dict] = []
     for item in items:
         item_id = item.get("id", "")
-        meta = metadata.get(item_id, {"description": "", "relationships": []})
+        meta = {**_EMPTY_ENTRY, **metadata.get(item_id, {})}
         result.append(
             {
                 "item_id": item_id,
                 "name": item.get("displayName", ""),
                 "type": item.get("type", ""),
                 "folder_path": _folder_path(item.get("folderId"), folders_by_id),
-                "description": meta.get("description", ""),
-                "relationships": meta.get("relationships", []),
+                "short_description": meta["short_description"],
+                "long_description_markdown": meta["long_description_markdown"],
+                "owners": meta["owners"],
+                "criticality": meta["criticality"],
+                "status": meta["status"],
+                "tags": meta["tags"],
+                "relationships": meta["relationships"],
+                "reviewed_by": meta["reviewed_by"],
+                "reviewed_at": meta["reviewed_at"],
             }
         )
     return result

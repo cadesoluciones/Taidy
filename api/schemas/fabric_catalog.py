@@ -21,8 +21,15 @@ class FabricCatalogItemOut(BaseModel):
     name: str
     type: str
     folder_path: List[str]
-    description: str = ""
+    short_description: str = ""
+    long_description_markdown: str = ""
+    owners: List[str] = []
+    criticality: str = ""  # "" | "baja" | "media" | "alta"
+    status: str = ""  # "" | "activo" | "en_desuso" | "deprecado"
+    tags: List[str] = []
     relationships: List[RelationshipOut] = []
+    reviewed_by: str = ""
+    reviewed_at: str = ""
 
 
 class FabricCatalogListOut(BaseModel):
@@ -30,10 +37,22 @@ class FabricCatalogListOut(BaseModel):
 
 
 class UpdateFabricCatalogItemRequest(BaseModel):
-    description: str = ""
+    short_description: str = ""
+    long_description_markdown: str = ""
+    owners: List[str] = []
+    criticality: str = ""
+    status: str = ""
+    tags: List[str] = []
     relationships: List[RelationshipIn] = []
 
 
 class UpdateFabricCatalogItemOut(BaseModel):
-    description: str
+    short_description: str
+    long_description_markdown: str
+    owners: List[str]
+    criticality: str
+    status: str
+    tags: List[str]
     relationships: List[RelationshipOut]
+    reviewed_by: str
+    reviewed_at: str
