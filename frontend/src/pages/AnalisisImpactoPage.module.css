@@ -10,6 +10,51 @@
   background: var(--color-bg);
 }
 
+.graphHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.graphHead h3 {
+  font-size: 14px;
+  margin: 0;
+}
+
+.depthControl {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.depthControl button {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  cursor: pointer;
+  padding: 0;
+}
+
+.depthControl button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.depthControl strong {
+  min-width: 1.2em;
+  text-align: center;
+  color: var(--color-text);
+}
+
 .columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
