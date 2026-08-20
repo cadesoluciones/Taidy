@@ -25,6 +25,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 from webapp import (  # noqa: E402
     app_settings,
     auth,
+    fabric_catalog,
     history,
     scheduler as sched_module,
     tasks,
@@ -43,6 +44,7 @@ def isolated_state(tmp_path, monkeypatch):
     monkeypatch.setattr(workflows, "_WORKFLOWS_PATH", tmp_path / "workflows.json")
     monkeypatch.setattr(history, "_HISTORY_PATH", tmp_path / "run_history.json")
     monkeypatch.setattr(app_settings, "_SETTINGS_PATH", tmp_path / "app_settings.json")
+    monkeypatch.setattr(fabric_catalog, "_CATALOG_PATH", tmp_path / "fabric_catalog.json")
     users_db.init_db()
     # A freshly-seeded admin always has must_change_password=1; clear it so any
     # test using "admin" doesn't need to handle the forced-password-change case

@@ -119,6 +119,52 @@ class FabricPipelineClient:
             params = {"type": "DataPipeline", "continuationToken": token}
         return results
 
+    def list_items(self) -> List[Dict[str, Any]]:
+        """Every item in the workspace (any type -- Notebook, DataPipeline,
+        Lakehouse, Warehouse, Report, ...), paginated. Each dict has at least
+        id/type/displayName/description; `folderId` is present only for
+        items not sitting at the workspace root. Backs the Fabric catalog
+        (webapp/fabric_catalog.py) -- purely a read, never mocked or cached,
+        same as list_pipelines()."""
+        url = f"{_FABRIC_API_BASE}/workspaces/{self._settings.workspace_id}/items"
+        results: List[Dict[str, Any]] = []
+        params: Dict[str, str] = {}
+        while True:
+            response = self._request("GET", url, headers=self._headers(), params=params)
+            if response.status_code != 200:
+                raise FabricPipelineError(
+                    f"No se pudieron listar los elementos del workspace (HTTP {response.status_code}): {response.text}"
+                )
+            payload = response.json()
+            results.extend(payload.get("value", []))
+            token = payload.get("continuationToken")
+            if not token:
+                break
+            params = {"continuationToken": token}
+        return results
+
+    def list_folders(self) -> List[Dict[str, Any]]:
+        """Every folder in the workspace (id/displayName/parentFolderId --
+        root folders have no parentFolderId), paginated. Combined with
+        list_items()'s `folderId` to rebuild the full path shown in Fabric's
+        own UI (e.g. "ETLs Medallion/silver")."""
+        url = f"{_FABRIC_API_BASE}/workspaces/{self._settings.workspace_id}/folders"
+        results: List[Dict[str, Any]] = []
+        params: Dict[str, str] = {}
+        while True:
+            response = self._request("GET", url, headers=self._headers(), params=params)
+            if response.status_code != 200:
+                raise FabricPipelineError(
+                    f"No se pudieron listar las carpetas del workspace (HTTP {response.status_code}): {response.text}"
+                )
+            payload = response.json()
+            results.extend(payload.get("value", []))
+            token = payload.get("continuationToken")
+            if not token:
+                break
+            params = {"continuationToken": token}
+        return results
+
     def get_status(self, item_id: str, job_instance_id: str) -> Dict[str, Any]:
         url = (
             f"{_FABRIC_API_BASE}/workspaces/{self._settings.workspace_id}/items/{item_id}"

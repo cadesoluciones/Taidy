@@ -8,6 +8,7 @@ import {
   type FactorialTableConfig,
   type HubspotTableConfig,
 } from "../api/meta";
+import { FabricCatalogManager } from "../components/FabricCatalogManager";
 import formStyles from "../components/Form.module.css";
 import styles from "./CatalogoDatosPage.module.css";
 
@@ -144,6 +145,14 @@ export function CatalogoDatosPage() {
               </table>
             </div>
           )}
+
+          <h2>Fabric</h2>
+          <p>
+            Notebooks, pipelines y lakehouses de vuestro workspace de Fabric, descubiertos en vivo -- añade una
+            descripción y relaciones entre ellos (Operator/Admin) para documentar de dónde viene cada uno y qué
+            alimenta.
+          </p>
+          <FabricCatalogManager />
         </>
       )}
     </section>

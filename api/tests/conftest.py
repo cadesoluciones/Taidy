@@ -24,6 +24,7 @@ from webapp import (  # noqa: E402
     app_settings,
     auth,
     env_secrets,
+    fabric_catalog,
     history,
     scheduler as sched_module,
     sync_mappings,
@@ -49,6 +50,7 @@ def isolated_state(tmp_path, monkeypatch):
     monkeypatch.setattr(table_configs, "_FACTORIAL_TABLES_PATH", tmp_path / "factorial_tables.yaml")
     monkeypatch.setattr(table_configs, "_HUBSPOT_TABLES_PATH", tmp_path / "hubspot_tables.yaml")
     monkeypatch.setattr(sync_mappings, "_SYNC_MAPPINGS_PATH", tmp_path / "sync_mappings.yaml")
+    monkeypatch.setattr(fabric_catalog, "_CATALOG_PATH", tmp_path / "fabric_catalog.json")
     monkeypatch.setattr(env_secrets, "_ENV_PATH", tmp_path / ".env")
     monkeypatch.setattr(session_store, "_SESSIONS_PATH", tmp_path / "sessions.json")
     monkeypatch.setattr(app_settings, "_SETTINGS_PATH", tmp_path / "app_settings.json")

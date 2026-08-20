@@ -1,0 +1,126 @@
+# -*- coding: utf-8 -*-
+"""
+A documentation/context layer over the Fabric workspace's own structure --
+NOT another way to run or manage anything already covered by
+src/fabric_pipelines (that's orchestration; this is pure annotation).
+
+Fabric itself is the source of truth for *structure* (which notebooks/
+pipelines/lakehouses exist, and which folder each lives in) -- always
+discovered live via FabricPipelineClient.list_items()/list_folders(), never
+cached here. This module only stores the human-curated layer on top:
+description text and typed relationships between items, keyed by each
+item's stable Fabric id so a rename in Fabric doesn't orphan the metadata.
+"""
+
+from __future__ import annotations
+
+import json
+import threading
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from webapp.state_dir import state_path
+
+_CATALOG_PATH = state_path("fabric_catalog.json", Path(__file__).resolve().parent)
+_LOCK = threading.Lock()
+
+RELATIONSHIP_TYPES = {"reads_from", "writes_to", "triggered_by"}
+
+
+def _read() -> Dict[str, dict]:
+    if not _CATALOG_PATH.exists():
+        return {}
+    try:
+        return json.loads(_CATALOG_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _write(data: Dict[str, dict]) -> None:
+    tmp = _CATALOG_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(_CATALOG_PATH)
+
+
+def get_metadata(item_id: str) -> dict:
+    """Always returns a usable entry (empty description/relationships if
+    nothing's been saved yet) -- callers never need a None-check."""
+    with _LOCK:
+        entry = _read().get(item_id)
+    return entry or {"description": "", "relationships": []}
+
+
+def list_metadata() -> Dict[str, dict]:
+    with _LOCK:
+        return _read()
+
+
+def set_metadata(item_id: str, *, description: str, relationships: List[Dict[str, str]]) -> dict:
+    for rel in relationships:
+        rel_type = rel.get("type")
+        target = rel.get("target_item_id")
+        if rel_type not in RELATIONSHIP_TYPES:
+            raise ValueError(f"Tipo de relación desconocido: {rel_type!r}")
+        if not target or not isinstance(target, str):
+            raise ValueError("Cada relación necesita un 'target_item_id'.")
+        if target == item_id:
+            raise ValueError("Un elemento no puede relacionarse consigo mismo.")
+
+    entry = {"description": description.strip(), "relationships": relationships}
+    with _LOCK:
+        data = _read()
+        data[item_id] = entry
+        _write(data)
+    return entry
+
+
+def delete_metadata(item_id: str) -> None:
+    """Not exposed via the API today (items are never deleted through this
+    module, only through Fabric itself) -- kept for symmetry/tests and in
+    case an admin ever wants to explicitly clear stale metadata."""
+    with _LOCK:
+        data = _read()
+        if item_id in data:
+            del data[item_id]
+            _write(data)
+
+
+def _folder_path(folder_id: Optional[str], folders_by_id: Dict[str, dict]) -> List[str]:
+    path: List[str] = []
+    seen = set()
+    current_id = folder_id
+    while current_id and current_id not in seen:
+        seen.add(current_id)
+        folder = folders_by_id.get(current_id)
+        if folder is None:
+            break
+        path.append(folder.get("displayName", ""))
+        current_id = folder.get("parentFolderId")
+    path.reverse()
+    return path
+
+
+def list_catalog_items(client: Any) -> List[dict]:
+    """Live Fabric items + folders, merged with locally-stored description/
+    relationships. `client` is a FabricPipelineClient (passed in rather than
+    constructed here so tests can inject a fake)."""
+    items = client.list_items()
+    folders = client.list_folders()
+    folders_by_id = {f["id"]: f for f in folders}
+    metadata = list_metadata()
+
+    result: List[dict] = []
+    for item in items:
+        item_id = item.get("id", "")
+        meta = metadata.get(item_id, {"description": "", "relationships": []})
+        result.append(
+            {
+                "item_id": item_id,
+                "name": item.get("displayName", ""),
+                "type": item.get("type", ""),
+                "folder_path": _folder_path(item.get("folderId"), folders_by_id),
+                "description": meta.get("description", ""),
+                "relationships": meta.get("relationships", []),
+            }
+        )
+    return result
