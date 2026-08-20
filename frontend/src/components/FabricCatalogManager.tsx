@@ -1,33 +1,32 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { ChevronDown, Trash2 } from "lucide-react";
+import { ChevronDown, Trash2, X } from "lucide-react";
 
 import { ROLE_ADMIN, ROLE_OPERATOR } from "../api/auth";
 import { ApiError } from "../api/client";
 import {
+  addFabricRelationship,
   createCustomFabricItem,
   deleteCustomFabricItem,
   fetchFabricCatalog,
+  removeFabricRelationship,
+  setFabricCanvasPositions,
   updateFabricCatalogItem,
+  type FabricCanvasPosition,
   type FabricCatalogItem,
   type FabricCriticality,
-  type FabricRelationship,
   type FabricRelationshipType,
   type FabricStatus,
 } from "../api/fabricCatalog";
 import { useAuth } from "../auth/AuthContext";
 import { renderMarkdown } from "../utils/markdown";
+import { FABRIC_ICON_OPTIONS } from "../utils/fabricIcons";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { type DiagramStep, WorkflowDiagram } from "./WorkflowDiagram";
+import { FabricRelationshipCanvas } from "./FabricRelationshipCanvas";
 import { FreeTagInput } from "./FreeTagInput";
+import { Modal } from "./Modal";
 import styles from "./FabricCatalogManager.module.css";
 import formStyles from "./Form.module.css";
-
-const RELATIONSHIP_LABELS: Record<FabricRelationshipType, string> = {
-  reads_from: "Lee de",
-  writes_to: "Escribe en",
-  triggered_by: "Se lanza tras",
-};
 
 const CRITICALITY_LABELS: Record<Exclude<FabricCriticality, "">, string> = {
   baja: "Baja",
@@ -47,55 +46,8 @@ const STATUS_LABELS: Record<Exclude<FabricStatus, "">, string> = {
   deprecado: "Deprecado",
 };
 
-// How many hops (in either direction) around the selected item the
-// relationship canvas shows -- bounded so it stays a readable "local
-// neighborhood" instead of the whole (106-item) catalog graph.
-const NEIGHBORHOOD_HOPS = 2;
-
 function folderKey(path: string[]): string {
   return path.length > 0 ? path.join(" / ") : "(raíz del workspace)";
-}
-
-/** Directed producer -> consumer adjacency over the WHOLE catalog (not
- * scoped to one item), used for the impact-analysis summary. A relationship
- * always points from whoever produces/triggers to whoever consumes/is
- * triggered, regardless of which of the two items declared it:
- * "writes_to" is declared forward (owner -> target); "reads_from" and
- * "triggered_by" are declared backward (target -> owner). */
-function buildImpactGraph(items: FabricCatalogItem[]): {
-  forward: Map<string, Set<string>>;
-  backward: Map<string, Set<string>>;
-} {
-  const forward = new Map<string, Set<string>>();
-  const backward = new Map<string, Set<string>>();
-  function addEdge(from: string, to: string) {
-    if (!forward.has(from)) forward.set(from, new Set());
-    forward.get(from)!.add(to);
-    if (!backward.has(to)) backward.set(to, new Set());
-    backward.get(to)!.add(from);
-  }
-  for (const item of items) {
-    for (const rel of item.relationships) {
-      if (rel.type === "writes_to") addEdge(item.item_id, rel.target_item_id);
-      else addEdge(rel.target_item_id, item.item_id);
-    }
-  }
-  return { forward, backward };
-}
-
-function reachable(startId: string, adjacency: Map<string, Set<string>>): Set<string> {
-  const seen = new Set<string>();
-  const stack = [startId];
-  while (stack.length > 0) {
-    const current = stack.pop() as string;
-    for (const next of adjacency.get(current) ?? []) {
-      if (next !== startId && !seen.has(next)) {
-        seen.add(next);
-        stack.push(next);
-      }
-    }
-  }
-  return seen;
 }
 
 export function FabricCatalogManager() {
@@ -116,14 +68,14 @@ export function FabricCatalogManager() {
   const [criticalityDraft, setCriticalityDraft] = useState<FabricCriticality>("");
   const [statusDraft, setStatusDraft] = useState<FabricStatus>("");
   const [tagsDraft, setTagsDraft] = useState<string[]>([]);
-  const [relationshipsDraft, setRelationshipsDraft] = useState<FabricRelationship[]>([]);
-  const [newRelType, setNewRelType] = useState<FabricRelationshipType>("reads_from");
-  const [targetPickerOpen, setTargetPickerOpen] = useState(false);
-  const [targetSearch, setTargetSearch] = useState("");
-  const [edgeHint, setEdgeHint] = useState<string | null>(null);
+  const [colorDraft, setColorDraft] = useState("");
+  const [iconDraft, setIconDraft] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  const [relationshipModalOpen, setRelationshipModalOpen] = useState(false);
+  const [canvasError, setCanvasError] = useState<string | null>(null);
 
   const [customFormOpen, setCustomFormOpen] = useState(false);
   const [customName, setCustomName] = useState("");
@@ -160,12 +112,12 @@ export function FabricCatalogManager() {
     setCriticalityDraft(selected?.criticality ?? "");
     setStatusDraft(selected?.status ?? "");
     setTagsDraft(selected?.tags ?? []);
-    setRelationshipsDraft(selected?.relationships ?? []);
+    setColorDraft(selected?.color ?? "");
+    setIconDraft(selected?.icon ?? "");
     setSaveError(null);
     setSaveSuccess(null);
-    setTargetPickerOpen(false);
-    setTargetSearch("");
-    setEdgeHint(null);
+    setCanvasError(null);
+    setRelationshipModalOpen(false);
     setConfirmDeleteCustomOpen(false);
     // Only reset the draft when the SELECTED item changes, not on every
     // keystroke (selected is a fresh object each render via items.find()).
@@ -209,134 +161,38 @@ export function FabricCatalogManager() {
     return counts;
   }, [items]);
 
-  const targetCandidates = useMemo(() => {
-    if (!selected) return [];
-    const q = targetSearch.trim().toLowerCase();
-    return items.filter((i) => {
-      if (i.item_id === selected.item_id) return false;
-      if (!q) return true;
-      return i.name.toLowerCase().includes(q) || i.type.toLowerCase().includes(q);
-    });
-  }, [items, selected, targetSearch]);
-
-  // The relationship canvas shows the selected item's local neighborhood
-  // (up to 2 hops in either direction), not a strict hub-and-spoke -- a
-  // chain or merge between two OTHER items shows up as a direct edge
-  // between them even when neither is the selected item, exactly like it
-  // would look browsing the same items from either end. It reflects the
-  // in-progress draft (relationshipsDraft), not just what's saved, so
-  // adding/removing a relationship below updates the picture immediately.
-  const neighborDiagram = useMemo(() => {
-    if (!selected) return { steps: [] as DiagramStep[] };
-    const itemsForGraph = items.map((i) =>
-      i.item_id === selected.item_id ? { ...i, relationships: relationshipsDraft } : i,
-    );
-    const byId = new Map(itemsForGraph.map((i) => [i.item_id, i]));
-    const { forward, backward } = buildImpactGraph(itemsForGraph);
-
-    // Undirected BFS just to decide which nodes are "close enough" to show
-    // -- direction is only meaningful once we draw the actual edges below.
-    const distance = new Map<string, number>([[selected.item_id, 0]]);
-    let frontier = [selected.item_id];
-    for (let hop = 0; hop < NEIGHBORHOOD_HOPS && frontier.length > 0; hop++) {
-      const next: string[] = [];
-      for (const id of frontier) {
-        const neighborIds = new Set([...(forward.get(id) ?? []), ...(backward.get(id) ?? [])]);
-        for (const neighborId of neighborIds) {
-          if (!distance.has(neighborId)) {
-            distance.set(neighborId, hop + 1);
-            next.push(neighborId);
-          }
-        }
-      }
-      frontier = next;
-    }
-
-    const nodes = new Map<string, DiagramStep>();
-    for (const id of distance.keys()) {
-      const found = byId.get(id);
-      nodes.set(id, {
-        id,
-        label: found?.name ?? id,
-        action: id === selected.item_id ? `${selected.type} · seleccionado` : found?.type ?? "?",
-        depends_on: [],
-        trigger_rule: "all_success",
-      });
-    }
-
-    function addDependency(dependentId: string, dependsOnId: string) {
-      const node = nodes.get(dependentId);
-      if (!node) return;
-      if (!node.depends_on.includes(dependsOnId)) node.depends_on = [...node.depends_on, dependsOnId];
-    }
-
-    // Only relationships directly touching the selected item get a
-    // "Lee de / Escribe en / ..." label on the OTHER node -- that's the
-    // actionable one; a 2nd-hop node just shows its Fabric type.
-    const directTouchLabels = new Map<string, Set<string>>();
-    function addDirectTouchLabel(itemId: string, label: string) {
-      const set = directTouchLabels.get(itemId) ?? new Set<string>();
-      set.add(label);
-      directTouchLabels.set(itemId, set);
-    }
-
-    // Draw every relationship whose BOTH ends made it into the gathered
-    // neighborhood -- including ones between two non-selected items.
-    for (const item of itemsForGraph) {
-      if (!nodes.has(item.item_id)) continue;
-      for (const rel of item.relationships) {
-        if (!nodes.has(rel.target_item_id)) continue;
-        if (rel.type === "writes_to") addDependency(rel.target_item_id, item.item_id);
-        else addDependency(item.item_id, rel.target_item_id);
-
-        if (item.item_id === selected.item_id) addDirectTouchLabel(rel.target_item_id, RELATIONSHIP_LABELS[rel.type]);
-        else if (rel.target_item_id === selected.item_id) addDirectTouchLabel(item.item_id, RELATIONSHIP_LABELS[rel.type]);
-      }
-    }
-
-    for (const [id, labels] of directTouchLabels) {
-      const node = nodes.get(id);
-      if (!node) continue;
-      node.action = `${[...labels].join(" / ")} · ${node.action}`;
-    }
-
-    return { steps: [...nodes.values()] };
-  }, [selected, items, relationshipsDraft]);
-
-  const impact = useMemo(() => {
-    if (!selected) return { upstream: [] as FabricCatalogItem[], downstream: [] as FabricCatalogItem[] };
-    const { forward, backward } = buildImpactGraph(items);
-    const byId = new Map(items.map((i) => [i.item_id, i]));
-    const upstreamIds = reachable(selected.item_id, backward);
-    const downstreamIds = reachable(selected.item_id, forward);
-    return {
-      upstream: [...upstreamIds].map((id) => byId.get(id)).filter((i): i is FabricCatalogItem => !!i),
-      downstream: [...downstreamIds].map((id) => byId.get(id)).filter((i): i is FabricCatalogItem => !!i),
-    };
-  }, [selected, items]);
-
-  function addRelationship(targetId: string) {
-    setRelationshipsDraft((prev) => [...prev, { type: newRelType, target_item_id: targetId }]);
-    setTargetPickerOpen(false);
-    setTargetSearch("");
+  function applyItemPatch(itemId: string, patch: Partial<FabricCatalogItem>) {
+    setItems((prev) => prev.map((i) => (i.item_id === itemId ? { ...i, ...patch } : i)));
   }
 
-  function removeRelationshipDraft(index: number) {
-    setRelationshipsDraft((prev) => prev.filter((_, i) => i !== index));
+  async function handleCanvasAddRelationship(ownerId: string, type: FabricRelationshipType, targetId: string) {
+    setCanvasError(null);
+    try {
+      const updated = await addFabricRelationship(ownerId, type, targetId);
+      applyItemPatch(ownerId, updated);
+    } catch (err) {
+      setCanvasError(err instanceof ApiError ? err.message : "No se pudo guardar la relación.");
+    }
   }
 
-  function handleRemoveEdge(sourceId: string, targetId: string) {
-    if (!selected || !canEdit) return;
-    setEdgeHint(null);
-    const index = relationshipsDraft.findIndex((rel) => {
-      if (rel.type === "writes_to") return sourceId === selected.item_id && targetId === rel.target_item_id;
-      return sourceId === rel.target_item_id && targetId === selected.item_id;
-    });
-    if (index === -1) {
-      setEdgeHint("Esta relación la declara el otro elemento -- edítala desde su propia ficha.");
-      return;
+  async function handleCanvasRemoveRelationship(ownerId: string, type: FabricRelationshipType, targetId: string) {
+    setCanvasError(null);
+    try {
+      const updated = await removeFabricRelationship(ownerId, type, targetId);
+      applyItemPatch(ownerId, updated);
+    } catch (err) {
+      setCanvasError(err instanceof ApiError ? err.message : "No se pudo quitar la relación.");
     }
-    removeRelationshipDraft(index);
+  }
+
+  async function handleCanvasPositionsChange(positions: Record<string, FabricCanvasPosition>) {
+    if (!selected) return;
+    try {
+      await setFabricCanvasPositions(selected.item_id, positions);
+      applyItemPatch(selected.item_id, { canvas_positions: positions });
+    } catch (err) {
+      setCanvasError(err instanceof ApiError ? err.message : "No se pudo guardar la posición.");
+    }
   }
 
   async function handleSave() {
@@ -352,9 +208,14 @@ export function FabricCatalogManager() {
         criticality: criticalityDraft,
         status: statusDraft,
         tags: tagsDraft,
-        relationships: relationshipsDraft,
+        color: colorDraft,
+        icon: iconDraft,
+        // Relationships are edited (and saved immediately) from the
+        // relationship canvas now, not this form -- resend the current
+        // value so this save never wipes them out.
+        relationships: selected.relationships,
       });
-      setItems((prev) => prev.map((i) => (i.item_id === selected.item_id ? { ...i, ...updated } : i)));
+      applyItemPatch(selected.item_id, updated);
       setSaveSuccess("Guardado.");
     } catch (err) {
       setSaveError(err instanceof ApiError ? err.message : "No se pudo guardar.");
@@ -587,123 +448,73 @@ export function FabricCatalogManager() {
                     </div>
                   </div>
 
-                  <div className={formStyles.field}>
-                    <label>Relaciones</label>
-                    <div className={styles.diagramWrap}>
-                      <WorkflowDiagram
-                        steps={neighborDiagram.steps}
-                        actionLabels={{}}
-                        selectedStepId={selected.item_id}
-                        {...(canEdit ? { onRemoveDependency: handleRemoveEdge } : {})}
-                        readOnly={!canEdit}
-                        height={220}
-                        testId="fabric-catalog-relationship-diagram"
-                      />
+                  <div className={styles.fieldRow}>
+                    <div className={formStyles.field}>
+                      <label htmlFor="fc_color">Color</label>
+                      <div className={styles.colorRow}>
+                        <input
+                          id="fc_color"
+                          type="color"
+                          value={colorDraft || "#94a3b8"}
+                          onChange={(e) => setColorDraft(e.target.value)}
+                          disabled={!canEdit}
+                        />
+                        {canEdit && colorDraft && (
+                          <button type="button" className={styles.relType} onClick={() => setColorDraft("")}>
+                            Quitar
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    {edgeHint && <p className={formStyles.hint}>{edgeHint}</p>}
+                    <div className={formStyles.field}>
+                      <label>Icono</label>
+                      <div className={styles.iconGrid}>
+                        {FABRIC_ICON_OPTIONS.map(({ key, label, Icon }) => (
+                          <button
+                            key={key}
+                            type="button"
+                            title={label}
+                            className={iconDraft === key ? styles.iconActive : styles.iconOption}
+                            onClick={() => setIconDraft(key)}
+                            disabled={!canEdit}
+                          >
+                            <Icon size={14} />
+                          </button>
+                        ))}
+                        {canEdit && iconDraft && (
+                          <button
+                            type="button"
+                            title="Quitar icono"
+                            className={styles.iconOption}
+                            onClick={() => setIconDraft("")}
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
 
-                    <div className={styles.grid}>
-                      {relationshipsDraft.map((rel, i) => {
-                        const target = items.find((it) => it.item_id === rel.target_item_id);
-                        return (
-                          <div key={`${rel.type}-${rel.target_item_id}-${i}`} className={styles.relBlock}>
-                            {canEdit && (
-                              <button
-                                type="button"
-                                className={styles.relRemove}
-                                aria-label="Quitar relación"
-                                onClick={() => removeRelationshipDraft(i)}
-                              >
-                                ×
-                              </button>
-                            )}
-                            <strong className={styles.blockName}>{target?.name ?? rel.target_item_id}</strong>
-                            <span className={styles.blockSubtitle}>{RELATIONSHIP_LABELS[rel.type]}</span>
-                          </div>
-                        );
-                      })}
+                  <div className={formStyles.field}>
+                    <div className={styles.detailHead}>
+                      <label style={{ marginBottom: 0 }}>Relaciones</label>
                       {canEdit && (
-                        <button
-                          type="button"
-                          className={styles.addBlock}
-                          onClick={() => setTargetPickerOpen((v) => !v)}
-                        >
-                          + Añadir relación
+                        <button type="button" className={styles.relType} onClick={() => setRelationshipModalOpen(true)}>
+                          Editar relaciones
                         </button>
                       )}
                     </div>
-                    {relationshipsDraft.length === 0 && !targetPickerOpen && (
-                      <p className={formStyles.hint}>Sin relaciones declaradas.</p>
-                    )}
-
-                    {targetPickerOpen && (
-                      <div className={styles.targetPicker}>
-                        <div className={styles.relTypeToggle}>
-                          {Object.entries(RELATIONSHIP_LABELS).map(([key, label]) => (
-                            <button
-                              key={key}
-                              type="button"
-                              className={newRelType === key ? styles.relTypeActive : styles.relType}
-                              onClick={() => setNewRelType(key as FabricRelationshipType)}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                        <input
-                          type="text"
-                          placeholder="Buscar el elemento a relacionar…"
-                          value={targetSearch}
-                          onChange={(e) => setTargetSearch(e.target.value)}
-                          className={styles.search}
-                        />
-                        <div className={styles.grid}>
-                          {targetCandidates.slice(0, 30).map((candidate) => (
-                            <button
-                              key={candidate.item_id}
-                              type="button"
-                              className={styles.block}
-                              onClick={() => addRelationship(candidate.item_id)}
-                            >
-                              <strong className={styles.blockName}>{candidate.name}</strong>
-                              <span className={styles.blockSubtitle}>{candidate.type}</span>
-                            </button>
-                          ))}
-                        </div>
-                        {targetCandidates.length === 0 && <p className={formStyles.hint}>Sin resultados.</p>}
-                      </div>
-                    )}
+                    <div className={styles.diagramWrap}>
+                      <FabricRelationshipCanvas
+                        items={items}
+                        centerId={selected.item_id}
+                        canvasPositions={selected.canvas_positions}
+                        interactive={false}
+                        height={200}
+                        testId="fabric-catalog-relationship-preview"
+                      />
+                    </div>
                   </div>
-
-                  <details className={styles.impactBox} open={impact.upstream.length + impact.downstream.length > 0}>
-                    <summary>
-                      Análisis de impacto ({impact.upstream.length} de las que depende, {impact.downstream.length} que
-                      dependen de este)
-                    </summary>
-                    {impact.upstream.length > 0 && (
-                      <>
-                        <p>Este elemento depende de:</p>
-                        <ul className={styles.impactList}>
-                          {impact.upstream.map((i) => (
-                            <li key={i.item_id}>{i.name}</li>
-                          ))}
-                        </ul>
-                      </>
-                    )}
-                    {impact.downstream.length > 0 && (
-                      <>
-                        <p>Si se modifica, podría afectar a:</p>
-                        <ul className={styles.impactList}>
-                          {impact.downstream.map((i) => (
-                            <li key={i.item_id}>{i.name}</li>
-                          ))}
-                        </ul>
-                      </>
-                    )}
-                    {impact.upstream.length === 0 && impact.downstream.length === 0 && (
-                      <p>Sin relaciones declaradas todavía en ningún sentido.</p>
-                    )}
-                  </details>
                 </div>
 
                 <div className={styles.longDescColumn}>
@@ -722,7 +533,7 @@ export function FabricCatalogManager() {
                   {longDescriptionView === "editar" ? (
                     <textarea
                       id="fc_long_description"
-                      rows={14}
+                      className={styles.mdTextarea}
                       value={longDescriptionDraft}
                       onChange={(e) => setLongDescriptionDraft(e.target.value)}
                       disabled={!canEdit}
@@ -759,6 +570,38 @@ export function FabricCatalogManager() {
                   </button>
                 </>
               )}
+
+              <Modal
+                open={relationshipModalOpen}
+                size="large"
+                eyebrow="Gobernanza de datos"
+                title={`Relaciones de ${selected.name}`}
+                subtitle="Arrastra desde el borde de un bloque a otro para conectarlos. Añade bloques sueltos con “Añadir bloque” y luego conéctalos."
+                onClose={() => setRelationshipModalOpen(false)}
+              >
+                {relationshipModalOpen && (
+                  // Only mounted once the dialog is actually open -- a
+                  // <dialog> without the open attribute is display:none,
+                  // so mounting react-flow inside it earlier would measure
+                  // a zero-size container and fitView would zoom to
+                  // nothing (real bug, caught live: both blocks rendered
+                  // as barely-visible slivers in the corner).
+                  <FabricRelationshipCanvas
+                    items={items}
+                    centerId={selected.item_id}
+                    canvasPositions={selected.canvas_positions}
+                    interactive
+                    height="65vh"
+                    onAddRelationship={(ownerId, type, targetId) => void handleCanvasAddRelationship(ownerId, type, targetId)}
+                    onRemoveRelationship={(ownerId, type, targetId) =>
+                      void handleCanvasRemoveRelationship(ownerId, type, targetId)
+                    }
+                    onPositionsChange={(positions) => void handleCanvasPositionsChange(positions)}
+                    testId="fabric-catalog-relationship-modal-canvas"
+                  />
+                )}
+                {canvasError && <div className={formStyles.errorBanner}>{canvasError}</div>}
+              </Modal>
             </div>
           )}
         </div>

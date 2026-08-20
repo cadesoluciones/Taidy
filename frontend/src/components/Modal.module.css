@@ -13,6 +13,15 @@
   background: rgba(16, 21, 27, 0.45);
 }
 
+.dialogLarge {
+  max-width: 1400px;
+  width: 95vw;
+}
+
+.dialogLarge .body {
+  max-height: 85vh;
+}
+
 .header {
   display: flex;
   align-items: flex-start;

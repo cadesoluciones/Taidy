@@ -15,6 +15,7 @@ import {
   LogOut,
   Menu,
   Network,
+  Radar,
   Settings,
   Shuffle,
   ShieldCheck,
@@ -74,6 +75,7 @@ const OPERATIONAL_SECTIONS_BEFORE_SYNC: NavSection[] = [
     items: [
       { to: "/catalogo-datos", label: "Catálogo de datos", icon: Table2 },
       { to: "/catalogo-datos/gobernanza", label: "Gobernanza de datos", icon: Network },
+      { to: "/catalogo-datos/impacto", label: "Análisis de impacto", icon: Radar },
     ],
   },
 ];

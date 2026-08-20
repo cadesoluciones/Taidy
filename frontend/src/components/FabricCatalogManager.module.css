@@ -46,12 +46,14 @@
 
 /* The general governance fields and the long description live side by
    side as two more columns inside the detail card -- selector + these two
-   reads as "3 columns" overall. Collapses to stacked on narrow viewports. */
+   reads as "3 columns" overall. `stretch` (the grid default) makes both
+   columns match the row's tallest height, so the description column's
+   editor/preview can flex to fill it instead of leaving blank space below
+   a fixed-size box. Collapses to stacked on narrow viewports. */
 .fieldsGrid {
   display: grid;
   grid-template-columns: 1.2fr 1fr;
   gap: var(--space-4);
-  align-items: start;
 }
 
 @media (max-width: 760px) {
@@ -127,9 +129,7 @@
 }
 
 .block,
-.blockActive,
-.relBlock,
-.addBlock {
+.blockActive {
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -140,10 +140,6 @@
   text-align: left;
   font-size: 11px;
   min-height: 32px;
-}
-
-.block,
-.blockActive {
   cursor: pointer;
 }
 
@@ -167,30 +163,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.relBlock {
-  position: relative;
-}
-
-.relRemove {
-  position: absolute;
-  top: 4px;
-  right: 6px;
-  border: none;
-  background: none;
-  cursor: pointer;
-  color: var(--color-text-muted);
-  font-size: 15px;
-  line-height: 1;
-}
-
-.addBlock {
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--color-primary);
-  border-style: dashed;
 }
 
 .addCustomBlock {
@@ -252,22 +224,6 @@
   margin: 2px 0 var(--space-3);
 }
 
-.targetPicker {
-  margin-top: var(--space-2);
-  padding: var(--space-3);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-md);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.relTypeToggle {
-  display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
 .relType,
 .relTypeActive {
   padding: 4px 10px;
@@ -295,19 +251,73 @@
   min-width: 160px;
 }
 
+.colorRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.colorRow input[type="color"] {
+  width: 40px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  cursor: pointer;
+}
+
+.iconGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.iconOption,
+.iconActive {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.iconActive {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-bg));
+  color: var(--color-primary);
+}
+
 .diagramWrap {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   overflow: hidden;
 }
 
+/* The description column stretches to match the general-fields column's
+   height (see .fieldsGrid); the editor/preview inside it grow to fill
+   that instead of stopping at a fixed row count and leaving blank space
+   below on a tall card. */
+.mdTextarea {
+  flex: 1;
+  min-height: 260px;
+  resize: vertical;
+}
+
 .mdPreview {
+  flex: 1;
+  min-height: 260px;
   padding: var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-bg);
   font-size: 13px;
-  min-height: 96px;
+  overflow-y: auto;
 }
 
 .mdPreview h3 {
@@ -327,25 +337,6 @@
 .mdPreview ul {
   margin: 0 0 var(--space-2);
   padding-left: 1.2em;
-}
-
-.impactBox {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-2) var(--space-3);
-  font-size: 12px;
-  color: var(--color-text-muted);
-}
-
-.impactBox summary {
-  cursor: pointer;
-  color: var(--color-text);
-  font-weight: 600;
-}
-
-.impactList {
-  margin: var(--space-2) 0 0;
-  padding-left: 1.1em;
 }
 
 .reviewedHint {

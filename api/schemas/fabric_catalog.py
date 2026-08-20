@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from typing import List
+from typing import Dict, List
 
 from pydantic import BaseModel
 
@@ -14,6 +14,16 @@ class RelationshipIn(BaseModel):
 class RelationshipOut(BaseModel):
     type: str
     target_item_id: str
+
+
+class PositionIn(BaseModel):
+    x: float
+    y: float
+
+
+class PositionOut(BaseModel):
+    x: float
+    y: float
 
 
 class FabricCatalogItemOut(BaseModel):
@@ -31,6 +41,9 @@ class FabricCatalogItemOut(BaseModel):
     reviewed_by: str = ""
     reviewed_at: str = ""
     is_custom: bool = False
+    color: str = ""
+    icon: str = ""
+    canvas_positions: Dict[str, PositionOut] = {}
 
 
 class FabricCatalogListOut(BaseModel):
@@ -45,6 +58,8 @@ class UpdateFabricCatalogItemRequest(BaseModel):
     status: str = ""
     tags: List[str] = []
     relationships: List[RelationshipIn] = []
+    color: str = ""
+    icon: str = ""
 
 
 class CreateCustomFabricItemRequest(BaseModel):
@@ -62,3 +77,19 @@ class UpdateFabricCatalogItemOut(BaseModel):
     relationships: List[RelationshipOut]
     reviewed_by: str
     reviewed_at: str
+    color: str = ""
+    icon: str = ""
+    canvas_positions: Dict[str, PositionOut] = {}
+
+
+class AddRelationshipRequest(BaseModel):
+    type: str
+    target_item_id: str
+
+
+class SetCanvasPositionsRequest(BaseModel):
+    positions: Dict[str, PositionIn]
+
+
+class CanvasPositionsOut(BaseModel):
+    canvas_positions: Dict[str, PositionOut] = {}

@@ -25,9 +25,12 @@ from webapp.users_db import ROLE_ADMIN, ROLE_OPERATOR
 
 from ..dependencies import CurrentUser, get_current_user, require_any_role
 from ..schemas.fabric_catalog import (
+    AddRelationshipRequest,
+    CanvasPositionsOut,
     CreateCustomFabricItemRequest,
     FabricCatalogListOut,
     FabricCatalogItemOut,
+    SetCanvasPositionsRequest,
     UpdateFabricCatalogItemOut,
     UpdateFabricCatalogItemRequest,
 )
@@ -73,6 +76,11 @@ def update_item(
             tags=payload.tags,
             relationships=[r.model_dump() for r in payload.relationships],
             reviewed_by=current.username,
+            color=payload.color,
+            icon=payload.icon,
+            # Not passed: canvas_positions has its own save path (see
+            # /canvas-positions below) and set_metadata() preserves the
+            # existing value when it's omitted.
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
@@ -97,3 +105,44 @@ def delete_custom_item(item_id: str) -> None:
         fabric_catalog.delete_custom_item(item_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.post("/items/{item_id}/relationships", response_model=UpdateFabricCatalogItemOut)
+def add_relationship(
+    item_id: str,
+    payload: AddRelationshipRequest,
+    current: CurrentUser = Depends(get_current_user),
+) -> UpdateFabricCatalogItemOut:
+    """Used by the free-form relationship canvas: a connection drawn between
+    two arbitrary blocks is saved immediately onto whichever one owns it,
+    independent of whatever the item's own edit form might have open."""
+    try:
+        entry = fabric_catalog.add_relationship(
+            item_id, payload.type, payload.target_item_id, reviewed_by=current.username
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return UpdateFabricCatalogItemOut(**entry)
+
+
+@router.delete("/items/{item_id}/relationships", response_model=UpdateFabricCatalogItemOut)
+def remove_relationship(
+    item_id: str,
+    type: str,
+    target_item_id: str,
+    current: CurrentUser = Depends(get_current_user),
+) -> UpdateFabricCatalogItemOut:
+    try:
+        entry = fabric_catalog.remove_relationship(item_id, type, target_item_id, reviewed_by=current.username)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return UpdateFabricCatalogItemOut(**entry)
+
+
+@router.put("/items/{item_id}/canvas-positions", response_model=CanvasPositionsOut)
+def set_canvas_positions(item_id: str, payload: SetCanvasPositionsRequest) -> CanvasPositionsOut:
+    try:
+        entry = fabric_catalog.set_canvas_positions(item_id, {k: v.model_dump() for k, v in payload.positions.items()})
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return CanvasPositionsOut(canvas_positions=entry["canvas_positions"])

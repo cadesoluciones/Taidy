@@ -6,6 +6,7 @@ import { RedirectIfAuthenticated, RequireAuth } from "./auth/RequireAuth";
 import { RequireOperatorOrAdmin } from "./auth/RequireOperatorOrAdmin";
 import { NavShell } from "./components/NavShell";
 import { AccountPage } from "./pages/AccountPage";
+import { AnalisisImpactoPage } from "./pages/AnalisisImpactoPage";
 import { CatalogoDatosPage } from "./pages/CatalogoDatosPage";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { GobernanzaDatosPage } from "./pages/GobernanzaDatosPage";
@@ -64,6 +65,7 @@ export function App() {
                 <Route path="/flujos" element={<WorkflowsPage />} />
                 <Route path="/catalogo-datos" element={<CatalogoDatosPage />} />
                 <Route path="/catalogo-datos/gobernanza" element={<GobernanzaDatosPage />} />
+                <Route path="/catalogo-datos/impacto" element={<AnalisisImpactoPage />} />
                 <Route path="/sincronizacion/comparar" element={<CompararPage />} />
                 <Route path="/programacion" element={<SchedulesPage />} />
                 <Route path="/actividad/tareas-en-curso" element={<RunningTasksPage />} />

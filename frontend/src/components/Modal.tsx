@@ -10,12 +10,16 @@ interface ModalProps {
   subtitle?: string;
   onClose: () => void;
   children: ReactNode;
+  /** "large" gives the dialog much more width/height -- for content that
+   * needs real room (a canvas editor), not the ~760px management panels
+   * this component was originally sized for. */
+  size?: "default" | "large";
 }
 
 /** Generic large dialog (native <dialog>, same focus-trap/Escape behavior as
  * ConfirmDialog) for management panels -- currently the "Gestión de
  * usuarios" directory, opened from the header icon. */
-export function Modal({ open, eyebrow, title, subtitle, onClose, children }: ModalProps) {
+export function Modal({ open, eyebrow, title, subtitle, onClose, children, size = "default" }: ModalProps) {
   const ref = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -29,7 +33,12 @@ export function Modal({ open, eyebrow, title, subtitle, onClose, children }: Mod
   }, [open]);
 
   return (
-    <dialog ref={ref} className={styles.dialog} onCancel={onClose} onClose={onClose}>
+    <dialog
+      ref={ref}
+      className={size === "large" ? `${styles.dialog} ${styles.dialogLarge}` : styles.dialog}
+      onCancel={onClose}
+      onClose={onClose}
+    >
       <div className={styles.header}>
         <div>
           {eyebrow && <div className={styles.eyebrow}>{eyebrow}</div>}

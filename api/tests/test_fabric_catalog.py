@@ -213,3 +213,81 @@ def test_delete_custom_item_rejects_an_unknown_id(isolated_state, client, monkey
 
     resp = client.delete("/fabric-catalog/custom-items/custom:does-not-exist")
     assert resp.status_code == 400
+
+
+def test_update_catalog_item_saves_color_and_icon(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.patch(
+        "/fabric-catalog/items/nb-1",
+        json={**_EMPTY_PAYLOAD, "color": "#3b82f6", "icon": "database"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["color"] == "#3b82f6"
+    assert resp.json()["icon"] == "database"
+
+
+def test_update_rejects_an_invalid_icon(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.patch("/fabric-catalog/items/nb-1", json={**_EMPTY_PAYLOAD, "icon": "not-a-real-icon"})
+    assert resp.status_code == 400
+
+
+def test_update_item_form_save_does_not_wipe_canvas_positions(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    client.put("/fabric-catalog/items/nb-1/canvas-positions", json={"positions": {"pl-1": {"x": 5, "y": 6}}})
+    resp = client.patch("/fabric-catalog/items/nb-1", json={**_EMPTY_PAYLOAD, "short_description": "Facturas"})
+    assert resp.status_code == 200
+    assert resp.json()["canvas_positions"] == {"pl-1": {"x": 5.0, "y": 6.0}}
+
+
+def test_set_canvas_positions_rejects_a_malformed_position(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.put("/fabric-catalog/items/nb-1/canvas-positions", json={"positions": {"pl-1": {"x": "left"}}})
+    assert resp.status_code == 422  # pydantic rejects the non-numeric field before it reaches our validation
+
+
+def test_add_and_remove_relationship_endpoints(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.post("/fabric-catalog/items/pl-1/relationships", json={"type": "reads_from", "target_item_id": "nb-1"})
+    assert resp.status_code == 200
+    assert resp.json()["relationships"] == [{"type": "reads_from", "target_item_id": "nb-1"}]
+
+    resp = client.delete(
+        "/fabric-catalog/items/pl-1/relationships",
+        params={"type": "reads_from", "target_item_id": "nb-1"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["relationships"] == []
+
+
+def test_add_relationship_rejects_an_unknown_type(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.post("/fabric-catalog/items/pl-1/relationships", json={"type": "deletes", "target_item_id": "nb-1"})
+    assert resp.status_code == 400
+
+
+def test_reader_cannot_add_a_relationship(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+
+    resp = client.post("/fabric-catalog/items/pl-1/relationships", json={"type": "reads_from", "target_item_id": "nb-1"})
+    assert resp.status_code == 403

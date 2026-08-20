@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPatch, apiPost } from "./client";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "./client";
 
 export type FabricRelationshipType = "reads_from" | "writes_to" | "triggered_by";
 export type FabricCriticality = "" | "baja" | "media" | "alta";
@@ -7,6 +7,11 @@ export type FabricStatus = "" | "activo" | "en_desuso" | "deprecado";
 export interface FabricRelationship {
   type: FabricRelationshipType;
   target_item_id: string;
+}
+
+export interface FabricCanvasPosition {
+  x: number;
+  y: number;
 }
 
 export interface FabricCatalogItem {
@@ -26,6 +31,11 @@ export interface FabricCatalogItem {
   /** true for a manually-declared block with no live Fabric backing --
    * see webapp/fabric_catalog.py's create_custom_item(). */
   is_custom: boolean;
+  color: string; // hex, e.g. "#3b82f6", or "" for the default styling
+  icon: string; // a key from utils/fabricIcons.ts, or "" for the default icon
+  /** Positions of OTHER items as seen on THIS item's own relationship
+   * canvas -- keyed by the other item's id, never shared across items. */
+  canvas_positions: Record<string, FabricCanvasPosition>;
 }
 
 export interface FabricCatalogItemUpdate {
@@ -36,6 +46,8 @@ export interface FabricCatalogItemUpdate {
   status: FabricStatus;
   tags: string[];
   relationships: FabricRelationship[];
+  color: string;
+  icon: string;
 }
 
 export function fetchFabricCatalog(): Promise<{ items: FabricCatalogItem[] }> {
@@ -55,4 +67,36 @@ export function createCustomFabricItem(name: string, type: string): Promise<Fabr
 
 export function deleteCustomFabricItem(itemId: string): Promise<void> {
   return apiDelete<void>(`/fabric-catalog/custom-items/${encodeURIComponent(itemId)}`);
+}
+
+type RelationshipSaveResult = Pick<FabricCatalogItem, "relationships" | "reviewed_by" | "reviewed_at">;
+
+/** Used by the free-form relationship canvas: saves immediately onto
+ * whichever item owns the new connection, independent of any in-progress
+ * edit of that item's other fields. */
+export function addFabricRelationship(
+  ownerItemId: string,
+  type: FabricRelationshipType,
+  targetItemId: string,
+): Promise<RelationshipSaveResult> {
+  return apiPost(`/fabric-catalog/items/${encodeURIComponent(ownerItemId)}/relationships`, {
+    type,
+    target_item_id: targetItemId,
+  });
+}
+
+export function removeFabricRelationship(
+  ownerItemId: string,
+  type: FabricRelationshipType,
+  targetItemId: string,
+): Promise<RelationshipSaveResult> {
+  const params = new URLSearchParams({ type, target_item_id: targetItemId });
+  return apiDelete(`/fabric-catalog/items/${encodeURIComponent(ownerItemId)}/relationships?${params.toString()}`);
+}
+
+export function setFabricCanvasPositions(
+  itemId: string,
+  positions: Record<string, FabricCanvasPosition>,
+): Promise<{ canvas_positions: Record<string, FabricCanvasPosition> }> {
+  return apiPut(`/fabric-catalog/items/${encodeURIComponent(itemId)}/canvas-positions`, { positions });
 }
