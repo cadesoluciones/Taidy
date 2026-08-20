@@ -8,6 +8,7 @@ import { NavShell } from "./components/NavShell";
 import { AccountPage } from "./pages/AccountPage";
 import { CatalogoDatosPage } from "./pages/CatalogoDatosPage";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
+import { GobernanzaDatosPage } from "./pages/GobernanzaDatosPage";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { SchedulesPage } from "./pages/SchedulesPage";
@@ -62,6 +63,7 @@ export function App() {
                 <Route path="/ejecutar/pipelines" element={<PipelinesPage />} />
                 <Route path="/flujos" element={<WorkflowsPage />} />
                 <Route path="/catalogo-datos" element={<CatalogoDatosPage />} />
+                <Route path="/catalogo-datos/gobernanza" element={<GobernanzaDatosPage />} />
                 <Route path="/sincronizacion/comparar" element={<CompararPage />} />
                 <Route path="/programacion" element={<SchedulesPage />} />
                 <Route path="/actividad/tareas-en-curso" element={<RunningTasksPage />} />

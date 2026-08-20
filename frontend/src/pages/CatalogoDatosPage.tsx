@@ -8,7 +8,6 @@ import {
   type FactorialTableConfig,
   type HubspotTableConfig,
 } from "../api/meta";
-import { FabricCatalogManager } from "../components/FabricCatalogManager";
 import formStyles from "../components/Form.module.css";
 import styles from "./CatalogoDatosPage.module.css";
 
@@ -44,7 +43,8 @@ export function CatalogoDatosPage() {
       <h1>Catálogo de datos</h1>
       <p>
         Qué tablas extrae NEXUS-BDB de cada origen y con qué configuración, en modo solo lectura. Para añadir, editar o
-        borrar tablas, ve a "Conexiones API" (Administración).
+        borrar tablas, ve a "Conexiones API" (Administración). Para documentar y relacionar los objetos de vuestro
+        workspace de Fabric (notebooks, pipelines, lakehouses), ve a "Gobernanza de datos".
       </p>
 
       {error && <div className={formStyles.errorBanner}>{error}</div>}
@@ -145,14 +145,6 @@ export function CatalogoDatosPage() {
               </table>
             </div>
           )}
-
-          <h2>Fabric</h2>
-          <p>
-            Notebooks, pipelines y lakehouses de vuestro workspace de Fabric, descubiertos en vivo -- añade una
-            descripción y relaciones entre ellos (Operator/Admin) para documentar de dónde viene cada uno y qué
-            alimenta.
-          </p>
-          <FabricCatalogManager />
         </>
       )}
     </section>

@@ -29,10 +29,22 @@ def _use_fake_fabric_client(monkeypatch):
     monkeypatch.setattr(fabric_catalog_router, "_client", lambda: _FakeFabricClient())
 
 
-def test_reader_can_list_catalog_items(isolated_state, client, monkeypatch):
+def test_reader_cannot_list_catalog_items(isolated_state, client, monkeypatch):
+    """Gobernanza de datos lives under Catalogo de datos, which is
+    Operator/Admin-only at the route level -- Reader never even sees the
+    nav entry, so the API is gated the same way, not just the write path."""
     _use_fake_fabric_client(monkeypatch)
     make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
     _login(client, "reader1", "ReaderPass2026!")
+
+    resp = client.get("/fabric-catalog/items")
+    assert resp.status_code == 403
+
+
+def test_operator_can_list_catalog_items(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
 
     resp = client.get("/fabric-catalog/items")
     assert resp.status_code == 200

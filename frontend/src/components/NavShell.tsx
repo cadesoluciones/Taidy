@@ -14,6 +14,7 @@ import {
   KeyRound,
   LogOut,
   Menu,
+  Network,
   Settings,
   Shuffle,
   ShieldCheck,
@@ -70,7 +71,10 @@ const OPERATIONAL_SECTIONS_BEFORE_SYNC: NavSection[] = [
   { label: "Flujos", items: [{ to: "/flujos", label: "Flujos", icon: GitFork }] },
   {
     label: "Catálogo de datos",
-    items: [{ to: "/catalogo-datos", label: "Catálogo de datos", icon: Table2 }],
+    items: [
+      { to: "/catalogo-datos", label: "Catálogo de datos", icon: Table2 },
+      { to: "/catalogo-datos/gobernanza", label: "Gobernanza de datos", icon: Network },
+    ],
   },
 ];
 

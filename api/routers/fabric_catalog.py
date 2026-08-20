@@ -7,8 +7,11 @@ discovered live from the real Fabric API, same discipline and credentials
 as /pipelines/{name}/dependencies; only the description/relationships an
 admin or operator adds on top are persisted here.
 
-Viewing is open to any authenticated user (mirrors "Catalogo de datos",
-which this lives inside); editing requires Operator or Admin.
+"Catalogo de datos" (which this lives inside, as its own "Gobernanza de
+datos" page) is Operator/Admin-only at the route level -- Reader never even
+sees the nav entry. Gating this whole router the same way, not just the
+write endpoint, means that's enforced here too, not just by the frontend
+route guard.
 """
 
 from __future__ import annotations
@@ -20,7 +23,7 @@ from src.fabric_pipelines.config import load_settings
 from webapp import fabric_catalog
 from webapp.users_db import ROLE_ADMIN, ROLE_OPERATOR
 
-from ..dependencies import get_current_user, require_any_role
+from ..dependencies import require_any_role
 from ..schemas.fabric_catalog import (
     FabricCatalogListOut,
     FabricCatalogItemOut,
@@ -28,7 +31,11 @@ from ..schemas.fabric_catalog import (
     UpdateFabricCatalogItemRequest,
 )
 
-router = APIRouter(prefix="/fabric-catalog", tags=["fabric-catalog"], dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    prefix="/fabric-catalog",
+    tags=["fabric-catalog"],
+    dependencies=[Depends(require_any_role([ROLE_OPERATOR, ROLE_ADMIN]))],
+)
 
 
 def _client() -> FabricPipelineClient:
@@ -48,11 +55,7 @@ def list_items() -> FabricCatalogListOut:
     return FabricCatalogListOut(items=[FabricCatalogItemOut(**i) for i in items])
 
 
-@router.patch(
-    "/items/{item_id}",
-    response_model=UpdateFabricCatalogItemOut,
-    dependencies=[Depends(require_any_role([ROLE_OPERATOR, ROLE_ADMIN]))],
-)
+@router.patch("/items/{item_id}", response_model=UpdateFabricCatalogItemOut)
 def update_item(item_id: str, payload: UpdateFabricCatalogItemRequest) -> UpdateFabricCatalogItemOut:
     try:
         entry = fabric_catalog.set_metadata(

@@ -4,43 +4,26 @@
   gap: var(--space-4);
 }
 
-.layout {
-  display: grid;
-  grid-template-columns: minmax(260px, 340px) 1fr;
-  gap: var(--space-4);
-}
-
-@media (max-width: 900px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
-}
-
-.listColumn {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
 .search {
   padding: 6px 8px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   font-size: 13px;
+  max-width: 360px;
 }
 
-.tree {
+.groups {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  max-height: 65vh;
+  gap: var(--space-4);
+  max-height: 55vh;
   overflow-y: auto;
 }
 
 .folderGroup {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-2);
 }
 
 .folderLabel {
@@ -49,44 +32,76 @@
   color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.02em;
-  padding: 2px 4px;
 }
 
-.item,
-.itemActive {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+/* The simple block style from "Tareas en curso"'s per-table grid --
+   bordered box, bold name, small muted subtitle underneath. Reused here
+   verbatim (per explicit feedback) instead of a connected-node diagram. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: var(--space-2);
-  width: 100%;
-  padding: 6px var(--space-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg);
-  cursor: pointer;
-  font-size: 13px;
-  text-align: left;
 }
 
-.itemActive {
+.block,
+.blockActive,
+.relBlock,
+.addBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  text-align: left;
+  font-size: 13px;
+  min-height: 56px;
+}
+
+.block,
+.blockActive {
+  cursor: pointer;
+}
+
+.blockActive {
   border-color: var(--color-primary);
   background: color-mix(in srgb, var(--color-primary) 8%, var(--color-bg));
 }
 
-.itemName {
+.blockName {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.itemType {
+.blockSubtitle {
   font-size: 11px;
   color: var(--color-text-muted);
-  flex-shrink: 0;
 }
 
-.detailColumn {
-  min-width: 0;
+.relBlock {
+  position: relative;
+}
+
+.relRemove {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.addBlock {
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--color-primary);
+  border-style: dashed;
 }
 
 .detailHead {
@@ -101,42 +116,34 @@
   margin: 2px 0 var(--space-3);
 }
 
-.relList {
-  list-style: none;
-  margin: 0 0 var(--space-2);
-  padding: 0;
+.targetPicker {
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
-  gap: 4px;
-}
-
-.relItem {
-  display: flex;
-  align-items: center;
   gap: var(--space-2);
-  font-size: 13px;
-  padding: 4px 8px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
 }
 
-.relRemove {
-  margin-left: auto;
-  border: none;
-  background: none;
-  cursor: pointer;
-  color: var(--color-text-muted);
-  font-size: 16px;
-  line-height: 1;
-}
-
-.relAdd {
+.relTypeToggle {
   display: flex;
   gap: var(--space-2);
   flex-wrap: wrap;
-  align-items: center;
 }
 
-.diagramSection h3 {
-  margin-bottom: 2px;
+.relType,
+.relTypeActive {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.relTypeActive {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-bg);
 }
