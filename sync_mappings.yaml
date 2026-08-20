@@ -49,3 +49,28 @@ mappings:
     field: type
     equals: Company
   target_filter: null
+- name: bc_hubspot contactos
+  description: ''
+  source:
+    system: business_central
+    table: bc_contact
+  target:
+    system: hubspot
+    table: hubspot_contacts
+  matching_key:
+    source: email
+    target: email
+  date_field:
+    source: systemModifiedAt
+    target: lastmodifieddate
+  fields:
+  - source: name
+    target: firstname
+  - source: email
+    target: email
+  - source: name2
+    target: lastname
+  source_filter:
+    field: type
+    equals: Company
+  target_filter: null

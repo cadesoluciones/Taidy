@@ -31,6 +31,13 @@ services:
       - ./tables.yaml:/app/tables.yaml:z
       - ./factorial_tables.yaml:/app/factorial_tables.yaml:z
       - ./hubspot_tables.yaml:/app/hubspot_tables.yaml:z
+      # Was missing entirely -- unlike the other *_tables.yaml siblings above,
+      # this one was neither baked into the image nor mounted, so a mapping
+      # created live via "Sincronizacion -> Mapeos" only ever lived in the
+      # container's writable layer and silently vanished on the next
+      # `docker compose up --build` (found live: a real mapping a user had
+      # just created was about to be lost on this exact redeploy).
+      - ./sync_mappings.yaml:/app/sync_mappings.yaml:z
       # Persisted app state (users, schedules, workflows, history, audit) --
       # survives container recreation. See webapp/state_dir.py.
       - taidy_data:/app/data
