@@ -514,11 +514,7 @@ export function FabricCatalogManager() {
                           onClick={() => setAppearanceOpen((v) => !v)}
                           disabled={!canEdit}
                         >
-                          {AppearanceIcon ? (
-                            <AppearanceIcon size={14} color={colorDraft || undefined} />
-                          ) : (
-                            <Palette size={14} />
-                          )}
+                          {AppearanceIcon ? <AppearanceIcon size={14} /> : <Palette size={14} />}
                           <span className={styles.appearanceSwatch} style={{ background: colorDraft || "transparent" }} />
                           Editar
                         </button>

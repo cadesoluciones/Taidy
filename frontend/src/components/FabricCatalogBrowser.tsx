@@ -157,7 +157,7 @@ export function FabricCatalogBrowser({
                                 style={{ background: CRITICALITY_COLORS[item.criticality] }}
                               />
                             )}
-                            {ItemIcon && <ItemIcon size={12} color={item.color || undefined} />}
+                            {ItemIcon && <ItemIcon size={12} />}
                             <strong className={styles.blockName}>{item.name}</strong>
                           </div>
                           <span className={styles.blockSubtitle}>
