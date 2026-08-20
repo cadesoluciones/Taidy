@@ -26,13 +26,21 @@ WORKDIR /app
 # (`apt-get update` fails with "Missing key EE4D7792F748182B"), which is
 # the real Debian version python:3.12-slim currently resolves to, not 12
 # (bookworm). The .deb helper sidesteps needing to track that manually.
+# libgssapi-krb5-2 isn't pulled in automatically here: confirmed live (a
+# deployed container logged "Can't open lib .../libmsodbcsql-18.6.so.2.1 :
+# file not found" from unixODBC even though that exact file WAS present --
+# unixODBC's driver manager reports an unresolved dlopen() dependency with
+# that same misleading "file not found" message; `ldd` on the .so pointed
+# at the real gap, libgssapi_krb5.so.2, which this minimal base image
+# doesn't have by default and msodbcsql18 apparently doesn't declare as a
+# hard dependency here.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl unixodbc-dev \
     && curl -sSL -o /tmp/packages-microsoft-prod.deb https://packages.microsoft.com/config/debian/13/packages-microsoft-prod.deb \
     && dpkg -i /tmp/packages-microsoft-prod.deb \
     && rm /tmp/packages-microsoft-prod.deb \
     && apt-get update \
-    && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 \
+    && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 libgssapi-krb5-2 \
     && apt-get purge -y curl \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
