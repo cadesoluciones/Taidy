@@ -59,6 +59,7 @@ export function WorkflowsPage() {
   const [pendingStopRun, setPendingStopRun] = useState<WorkflowRun | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
+  const [launchSuccess, setLaunchSuccess] = useState<string | null>(null);
   const [notifyByWorkflow, setNotifyByWorkflow] = useState<Record<string, boolean>>({});
   const [readerUsernames, setReaderUsernames] = useState<string[]>([]);
   const [pipelines, setPipelines] = useState<string[]>([]);
@@ -343,8 +344,10 @@ export function WorkflowsPage() {
 
   async function launchWorkflow(id: string) {
     setLaunchError(null);
+    setLaunchSuccess(null);
     try {
-      await runWorkflow(id, notifyByWorkflow[id] ?? false);
+      const run = await runWorkflow(id, notifyByWorkflow[id] ?? false);
+      setLaunchSuccess(`Flujo lanzado (${run.id.slice(0, 8)}). Sigue el progreso en "Flujos en curso / recientes".`);
     } catch (err) {
       setLaunchError(err instanceof ApiError ? err.message : "No se pudo lanzar el flujo.");
     }
@@ -818,6 +821,7 @@ export function WorkflowsPage() {
           {!isAdmin && <p>Diseñar o borrar flujos requiere el rol App.Admin. Puedes consultarlos y lanzarlos abajo.</p>}
 
           <h2>Flujos guardados</h2>
+        {launchSuccess && <div className={formStyles.successBanner}>{launchSuccess}</div>}
         {launchError && <div className={formStyles.errorBanner}>{launchError}</div>}
         {workflows.length === 0 ? (
           <p>Todavía no hay flujos guardados.</p>

@@ -23,14 +23,17 @@ export function ReaderHomePage() {
   const { data, error: pollError, refetch } = usePolling(fetchMyWorkflows, 3000);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
   const [launchError, setLaunchError] = useState<string | null>(null);
+  const [launchSuccess, setLaunchSuccess] = useState<string | null>(null);
 
   const items = data?.items ?? [];
 
   async function handleLaunch(workflowId: string) {
     setLaunchError(null);
+    setLaunchSuccess(null);
     setLaunchingId(workflowId);
     try {
-      await runWorkflow(workflowId);
+      const run = await runWorkflow(workflowId);
+      setLaunchSuccess(`Flujo lanzado (${run.id.slice(0, 8)}). Sigue el progreso abajo.`);
       // Otherwise the button would misleadingly fall back to "Lanzar" (not
       // yet disabled) for up to the full poll interval, since launching
       // itself resolves almost instantly but the next scheduled tick hasn't
@@ -49,6 +52,7 @@ export function ReaderHomePage() {
       <p>Hola, {user?.username}. Aquí puedes lanzar y seguir tus flujos.</p>
 
       {pollError && <div className={formStyles.errorBanner}>No se pudo actualizar el estado. Reintentando…</div>}
+      {launchSuccess && <div className={formStyles.successBanner}>{launchSuccess}</div>}
       {launchError && <div className={formStyles.errorBanner}>{launchError}</div>}
 
       {items.length === 0 ? (
