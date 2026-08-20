@@ -154,3 +154,62 @@ def test_unauthenticated_cannot_list_catalog_items(isolated_state, client, monke
     _use_fake_fabric_client(monkeypatch)
     resp = client.get("/fabric-catalog/items")
     assert resp.status_code == 401
+
+
+def test_operator_can_create_and_list_a_custom_item(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.post("/fabric-catalog/custom-items", json={"name": "Excel de ventas", "type": "Fuente externa"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["name"] == "Excel de ventas"
+    assert body["type"] == "Fuente externa"
+    assert body["folder_path"] == ["Personalizados"]
+    assert body["is_custom"] is True
+    assert body["reviewed_by"] == "operator1"
+    item_id = body["item_id"]
+
+    listed = client.get("/fabric-catalog/items").json()["items"]
+    assert any(i["item_id"] == item_id and i["is_custom"] for i in listed)
+
+
+def test_reader_cannot_create_a_custom_item(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+
+    resp = client.post("/fabric-catalog/custom-items", json={"name": "Excel de ventas", "type": ""})
+    assert resp.status_code == 403
+
+
+def test_create_custom_item_rejects_a_blank_name(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.post("/fabric-catalog/custom-items", json={"name": "   ", "type": ""})
+    assert resp.status_code == 400
+
+
+def test_admin_can_delete_a_custom_item(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    created = client.post("/fabric-catalog/custom-items", json={"name": "Excel de ventas", "type": ""}).json()
+    resp = client.delete(f"/fabric-catalog/custom-items/{created['item_id']}")
+    assert resp.status_code == 204
+
+    listed = client.get("/fabric-catalog/items").json()["items"]
+    assert all(i["item_id"] != created["item_id"] for i in listed)
+
+
+def test_delete_custom_item_rejects_an_unknown_id(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    resp = client.delete("/fabric-catalog/custom-items/custom:does-not-exist")
+    assert resp.status_code == 400

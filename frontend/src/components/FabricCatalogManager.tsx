@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { ChevronDown, Trash2 } from "lucide-react";
+
 import { ROLE_ADMIN, ROLE_OPERATOR } from "../api/auth";
 import { ApiError } from "../api/client";
 import {
+  createCustomFabricItem,
+  deleteCustomFabricItem,
   fetchFabricCatalog,
   updateFabricCatalogItem,
   type FabricCatalogItem,
@@ -13,6 +17,7 @@ import {
 } from "../api/fabricCatalog";
 import { useAuth } from "../auth/AuthContext";
 import { renderMarkdown } from "../utils/markdown";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { type DiagramStep, WorkflowDiagram } from "./WorkflowDiagram";
 import { FreeTagInput } from "./FreeTagInput";
 import styles from "./FabricCatalogManager.module.css";
@@ -102,9 +107,11 @@ export function FabricCatalogManager() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
 
   const [shortDescriptionDraft, setShortDescriptionDraft] = useState("");
   const [longDescriptionDraft, setLongDescriptionDraft] = useState("");
+  const [longDescriptionView, setLongDescriptionView] = useState<"editar" | "vista previa">("editar");
   const [ownersDraft, setOwnersDraft] = useState<string[]>([]);
   const [criticalityDraft, setCriticalityDraft] = useState<FabricCriticality>("");
   const [statusDraft, setStatusDraft] = useState<FabricStatus>("");
@@ -117,6 +124,14 @@ export function FabricCatalogManager() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  const [customFormOpen, setCustomFormOpen] = useState(false);
+  const [customName, setCustomName] = useState("");
+  const [customType, setCustomType] = useState("");
+  const [customError, setCustomError] = useState<string | null>(null);
+  const [isCreatingCustom, setIsCreatingCustom] = useState(false);
+  const [confirmDeleteCustomOpen, setConfirmDeleteCustomOpen] = useState(false);
+  const [isDeletingCustom, setIsDeletingCustom] = useState(false);
 
   async function reload() {
     setIsLoading(true);
@@ -140,6 +155,7 @@ export function FabricCatalogManager() {
   useEffect(() => {
     setShortDescriptionDraft(selected?.short_description ?? "");
     setLongDescriptionDraft(selected?.long_description_markdown ?? "");
+    setLongDescriptionView("editar");
     setOwnersDraft(selected?.owners ?? []);
     setCriticalityDraft(selected?.criticality ?? "");
     setStatusDraft(selected?.status ?? "");
@@ -150,6 +166,7 @@ export function FabricCatalogManager() {
     setTargetPickerOpen(false);
     setTargetSearch("");
     setEdgeHint(null);
+    setConfirmDeleteCustomOpen(false);
     // Only reset the draft when the SELECTED item changes, not on every
     // keystroke (selected is a fresh object each render via items.find()).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -171,6 +188,15 @@ export function FabricCatalogManager() {
     }
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [filteredItems]);
+
+  function toggleFolder(key: string) {
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   const relationshipCountByItem = useMemo(() => {
     const counts = new Map<string, number>();
@@ -337,6 +363,36 @@ export function FabricCatalogManager() {
     }
   }
 
+  async function handleCreateCustom() {
+    setIsCreatingCustom(true);
+    setCustomError(null);
+    try {
+      const created = await createCustomFabricItem(customName, customType);
+      setItems((prev) => [...prev, created]);
+      setSelectedId(created.item_id);
+      setCustomFormOpen(false);
+      setCustomName("");
+      setCustomType("");
+    } catch (err) {
+      setCustomError(err instanceof ApiError ? err.message : "No se pudo crear el bloque.");
+    } finally {
+      setIsCreatingCustom(false);
+    }
+  }
+
+  async function handleDeleteCustom() {
+    if (!selected) return;
+    setIsDeletingCustom(true);
+    try {
+      await deleteCustomFabricItem(selected.item_id);
+      setItems((prev) => prev.filter((i) => i.item_id !== selected.item_id));
+      setSelectedId(null);
+    } finally {
+      setIsDeletingCustom(false);
+      setConfirmDeleteCustomOpen(false);
+    }
+  }
+
   if (isLoading) return <p>Cargando catálogo de Fabric…</p>;
   if (loadError) return <div className={formStyles.errorBanner}>{loadError}</div>;
 
@@ -352,277 +408,371 @@ export function FabricCatalogManager() {
             className={styles.search}
           />
 
+          {canEdit && (
+            <>
+              <button type="button" className={styles.addCustomBlock} onClick={() => setCustomFormOpen((v) => !v)}>
+                + Bloque personalizado
+              </button>
+              {customFormOpen && (
+                <div className={styles.customForm}>
+                  <input
+                    type="text"
+                    placeholder="Nombre"
+                    value={customName}
+                    onChange={(e) => setCustomName(e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Tipo (p. ej. Fuente externa)"
+                    value={customType}
+                    onChange={(e) => setCustomType(e.target.value)}
+                  />
+                  {customError && <div className={formStyles.errorBanner}>{customError}</div>}
+                  <div className={styles.customFormActions}>
+                    <button
+                      type="button"
+                      className={formStyles.submit}
+                      onClick={() => void handleCreateCustom()}
+                      disabled={isCreatingCustom || !customName.trim()}
+                    >
+                      {isCreatingCustom ? "Creando…" : "Crear"}
+                    </button>
+                    <button type="button" onClick={() => setCustomFormOpen(false)}>
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
           <div className={styles.groups}>
-            {grouped.map(([folder, folderItems]) => (
-          <div key={folder} className={styles.folderGroup}>
-            <div className={styles.folderLabel}>{folder}</div>
-            <div className={styles.grid}>
-              {folderItems.map((item) => {
-                const relCount = relationshipCountByItem.get(item.item_id) ?? 0;
-                return (
-                  <button
-                    key={item.item_id}
-                    type="button"
-                    className={item.item_id === selectedId ? styles.blockActive : styles.block}
-                    onClick={() => setSelectedId(item.item_id)}
-                  >
-                    <strong className={styles.blockName}>
-                      {item.criticality && (
-                        <span
-                          className={styles.criticalityDot}
-                          style={{ background: CRITICALITY_COLORS[item.criticality] }}
-                        />
-                      )}
-                      {item.name}
-                    </strong>
-                    <span className={styles.blockSubtitle}>
-                      {item.type}
-                      {item.status && ` · ${STATUS_LABELS[item.status]}`}
-                      {relCount > 0 && ` · ${relCount} relación${relCount === 1 ? "" : "es"}`}
+            {grouped.map(([folder, folderItems]) => {
+              const collapsed = collapsedFolders.has(folder);
+              return (
+                <div key={folder} className={styles.folderGroup}>
+                  <button type="button" className={styles.folderHeader} onClick={() => toggleFolder(folder)}>
+                    <ChevronDown
+                      size={12}
+                      className={collapsed ? `${styles.folderChevron} ${styles.folderChevronCollapsed}` : styles.folderChevron}
+                    />
+                    <span className={styles.folderLabel}>
+                      {folder} ({folderItems.length})
                     </span>
                   </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+                  {!collapsed && (
+                    <div className={styles.grid}>
+                      {folderItems.map((item) => {
+                        const relCount = relationshipCountByItem.get(item.item_id) ?? 0;
+                        return (
+                          <button
+                            key={item.item_id}
+                            type="button"
+                            className={item.item_id === selectedId ? styles.blockActive : styles.block}
+                            onClick={() => setSelectedId(item.item_id)}
+                          >
+                            <strong className={styles.blockName}>
+                              {item.criticality && (
+                                <span
+                                  className={styles.criticalityDot}
+                                  style={{ background: CRITICALITY_COLORS[item.criticality] }}
+                                />
+                              )}
+                              {item.name}
+                            </strong>
+                            <span className={styles.blockSubtitle}>
+                              {item.type}
+                              {relCount > 0 && ` · ${relCount}`}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
             {grouped.length === 0 && <p className={formStyles.hint}>Sin resultados.</p>}
           </div>
         </div>
 
         <div className={styles.detailColumn}>
           {selected && (
-        <div className={`${formStyles.card} ${styles.detailCard}`}>
-          <div className={styles.detailHead}>
-            <strong>{selected.name}</strong>
-            <span className={styles.blockSubtitle}>{selected.type}</span>
-          </div>
-          {selected.folder_path.length > 0 && <p className={styles.breadcrumb}>{selected.folder_path.join(" / ")}</p>}
+            <div className={`${formStyles.card} ${styles.detailCard}`}>
+              <div className={styles.detailHead}>
+                <strong>{selected.name}</strong>
+                <span className={styles.blockSubtitle}>{selected.type}</span>
+                {selected.is_custom && canEdit && (
+                  <button
+                    type="button"
+                    className={styles.deleteCustomButton}
+                    onClick={() => setConfirmDeleteCustomOpen(true)}
+                  >
+                    <Trash2 size={13} /> Eliminar bloque
+                  </button>
+                )}
+              </div>
+              {selected.folder_path.length > 0 && (
+                <p className={styles.breadcrumb}>{selected.folder_path.join(" / ")}</p>
+              )}
 
-          <div className={formStyles.field}>
-            <label htmlFor="fc_short_description">Descripción breve</label>
-            <input
-              id="fc_short_description"
-              type="text"
-              value={shortDescriptionDraft}
-              onChange={(e) => setShortDescriptionDraft(e.target.value)}
-              disabled={!canEdit}
-            />
-          </div>
-
-          <div className={styles.fieldRow}>
-            <div className={formStyles.field}>
-              <label htmlFor="fc_owners">Responsables</label>
-              <FreeTagInput
-                id="fc_owners"
-                selected={ownersDraft}
-                onChange={setOwnersDraft}
-                placeholder="+ Añadir responsable…"
-                emptyHint="Sin responsables asignados"
-              />
-            </div>
-            <div className={formStyles.field}>
-              <label htmlFor="fc_tags">Etiquetas</label>
-              <FreeTagInput
-                id="fc_tags"
-                selected={tagsDraft}
-                onChange={setTagsDraft}
-                placeholder="+ Añadir etiqueta…"
-                emptyHint="Sin etiquetas"
-              />
-            </div>
-          </div>
-
-          <div className={styles.fieldRow}>
-            <div className={formStyles.field}>
-              <label htmlFor="fc_criticality">Criticidad</label>
-              <select
-                id="fc_criticality"
-                value={criticalityDraft}
-                onChange={(e) => setCriticalityDraft(e.target.value as FabricCriticality)}
-                disabled={!canEdit}
-              >
-                <option value="">(sin definir)</option>
-                {Object.entries(CRITICALITY_LABELS).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className={formStyles.field}>
-              <label htmlFor="fc_status">Estado</label>
-              <select
-                id="fc_status"
-                value={statusDraft}
-                onChange={(e) => setStatusDraft(e.target.value as FabricStatus)}
-                disabled={!canEdit}
-              >
-                <option value="">(sin definir)</option>
-                {Object.entries(STATUS_LABELS).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className={formStyles.field}>
-            <label>Relaciones</label>
-            <div className={styles.diagramWrap}>
-              <WorkflowDiagram
-                steps={neighborDiagram.steps}
-                actionLabels={{}}
-                selectedStepId={selected.item_id}
-                {...(canEdit ? { onRemoveDependency: handleRemoveEdge } : {})}
-                readOnly={!canEdit}
-                height={220}
-                testId="fabric-catalog-relationship-diagram"
-              />
-            </div>
-            {edgeHint && <p className={formStyles.hint}>{edgeHint}</p>}
-
-            <div className={styles.grid}>
-              {relationshipsDraft.map((rel, i) => {
-                const target = items.find((it) => it.item_id === rel.target_item_id);
-                return (
-                  <div key={`${rel.type}-${rel.target_item_id}-${i}`} className={styles.relBlock}>
-                    {canEdit && (
-                      <button
-                        type="button"
-                        className={styles.relRemove}
-                        aria-label="Quitar relación"
-                        onClick={() => removeRelationshipDraft(i)}
-                      >
-                        ×
-                      </button>
-                    )}
-                    <strong className={styles.blockName}>{target?.name ?? rel.target_item_id}</strong>
-                    <span className={styles.blockSubtitle}>{RELATIONSHIP_LABELS[rel.type]}</span>
+              <div className={styles.fieldsGrid}>
+                <div className={styles.generalColumn}>
+                  <div className={formStyles.field}>
+                    <label htmlFor="fc_short_description">Descripción breve</label>
+                    <input
+                      id="fc_short_description"
+                      type="text"
+                      value={shortDescriptionDraft}
+                      onChange={(e) => setShortDescriptionDraft(e.target.value)}
+                      disabled={!canEdit}
+                    />
                   </div>
-                );
-              })}
+
+                  <div className={styles.fieldRow}>
+                    <div className={formStyles.field}>
+                      <label htmlFor="fc_owners">Responsables</label>
+                      <FreeTagInput
+                        id="fc_owners"
+                        selected={ownersDraft}
+                        onChange={setOwnersDraft}
+                        placeholder="+ Añadir responsable…"
+                        emptyHint="Sin responsables asignados"
+                      />
+                    </div>
+                    <div className={formStyles.field}>
+                      <label htmlFor="fc_tags">Etiquetas</label>
+                      <FreeTagInput
+                        id="fc_tags"
+                        selected={tagsDraft}
+                        onChange={setTagsDraft}
+                        placeholder="+ Añadir etiqueta…"
+                        emptyHint="Sin etiquetas"
+                      />
+                    </div>
+                  </div>
+
+                  <div className={styles.fieldRow}>
+                    <div className={formStyles.field}>
+                      <label htmlFor="fc_criticality">Criticidad</label>
+                      <select
+                        id="fc_criticality"
+                        value={criticalityDraft}
+                        onChange={(e) => setCriticalityDraft(e.target.value as FabricCriticality)}
+                        disabled={!canEdit}
+                      >
+                        <option value="">(sin definir)</option>
+                        {Object.entries(CRITICALITY_LABELS).map(([key, label]) => (
+                          <option key={key} value={key}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className={formStyles.field}>
+                      <label htmlFor="fc_status">Estado</label>
+                      <select
+                        id="fc_status"
+                        value={statusDraft}
+                        onChange={(e) => setStatusDraft(e.target.value as FabricStatus)}
+                        disabled={!canEdit}
+                      >
+                        <option value="">(sin definir)</option>
+                        {Object.entries(STATUS_LABELS).map(([key, label]) => (
+                          <option key={key} value={key}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className={formStyles.field}>
+                    <label>Relaciones</label>
+                    <div className={styles.diagramWrap}>
+                      <WorkflowDiagram
+                        steps={neighborDiagram.steps}
+                        actionLabels={{}}
+                        selectedStepId={selected.item_id}
+                        {...(canEdit ? { onRemoveDependency: handleRemoveEdge } : {})}
+                        readOnly={!canEdit}
+                        height={220}
+                        testId="fabric-catalog-relationship-diagram"
+                      />
+                    </div>
+                    {edgeHint && <p className={formStyles.hint}>{edgeHint}</p>}
+
+                    <div className={styles.grid}>
+                      {relationshipsDraft.map((rel, i) => {
+                        const target = items.find((it) => it.item_id === rel.target_item_id);
+                        return (
+                          <div key={`${rel.type}-${rel.target_item_id}-${i}`} className={styles.relBlock}>
+                            {canEdit && (
+                              <button
+                                type="button"
+                                className={styles.relRemove}
+                                aria-label="Quitar relación"
+                                onClick={() => removeRelationshipDraft(i)}
+                              >
+                                ×
+                              </button>
+                            )}
+                            <strong className={styles.blockName}>{target?.name ?? rel.target_item_id}</strong>
+                            <span className={styles.blockSubtitle}>{RELATIONSHIP_LABELS[rel.type]}</span>
+                          </div>
+                        );
+                      })}
+                      {canEdit && (
+                        <button
+                          type="button"
+                          className={styles.addBlock}
+                          onClick={() => setTargetPickerOpen((v) => !v)}
+                        >
+                          + Añadir relación
+                        </button>
+                      )}
+                    </div>
+                    {relationshipsDraft.length === 0 && !targetPickerOpen && (
+                      <p className={formStyles.hint}>Sin relaciones declaradas.</p>
+                    )}
+
+                    {targetPickerOpen && (
+                      <div className={styles.targetPicker}>
+                        <div className={styles.relTypeToggle}>
+                          {Object.entries(RELATIONSHIP_LABELS).map(([key, label]) => (
+                            <button
+                              key={key}
+                              type="button"
+                              className={newRelType === key ? styles.relTypeActive : styles.relType}
+                              onClick={() => setNewRelType(key as FabricRelationshipType)}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Buscar el elemento a relacionar…"
+                          value={targetSearch}
+                          onChange={(e) => setTargetSearch(e.target.value)}
+                          className={styles.search}
+                        />
+                        <div className={styles.grid}>
+                          {targetCandidates.slice(0, 30).map((candidate) => (
+                            <button
+                              key={candidate.item_id}
+                              type="button"
+                              className={styles.block}
+                              onClick={() => addRelationship(candidate.item_id)}
+                            >
+                              <strong className={styles.blockName}>{candidate.name}</strong>
+                              <span className={styles.blockSubtitle}>{candidate.type}</span>
+                            </button>
+                          ))}
+                        </div>
+                        {targetCandidates.length === 0 && <p className={formStyles.hint}>Sin resultados.</p>}
+                      </div>
+                    )}
+                  </div>
+
+                  <details className={styles.impactBox} open={impact.upstream.length + impact.downstream.length > 0}>
+                    <summary>
+                      Análisis de impacto ({impact.upstream.length} de las que depende, {impact.downstream.length} que
+                      dependen de este)
+                    </summary>
+                    {impact.upstream.length > 0 && (
+                      <>
+                        <p>Este elemento depende de:</p>
+                        <ul className={styles.impactList}>
+                          {impact.upstream.map((i) => (
+                            <li key={i.item_id}>{i.name}</li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                    {impact.downstream.length > 0 && (
+                      <>
+                        <p>Si se modifica, podría afectar a:</p>
+                        <ul className={styles.impactList}>
+                          {impact.downstream.map((i) => (
+                            <li key={i.item_id}>{i.name}</li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                    {impact.upstream.length === 0 && impact.downstream.length === 0 && (
+                      <p>Sin relaciones declaradas todavía en ningún sentido.</p>
+                    )}
+                  </details>
+                </div>
+
+                <div className={styles.longDescColumn}>
+                  <div className={styles.detailHead}>
+                    <label htmlFor="fc_long_description" style={{ marginBottom: 0 }}>
+                      Descripción detallada
+                    </label>
+                    <button
+                      type="button"
+                      className={styles.relType}
+                      onClick={() => setLongDescriptionView((v) => (v === "editar" ? "vista previa" : "editar"))}
+                    >
+                      {longDescriptionView === "editar" ? "Ver vista previa" : "Volver a editar"}
+                    </button>
+                  </div>
+                  {longDescriptionView === "editar" ? (
+                    <textarea
+                      id="fc_long_description"
+                      rows={14}
+                      value={longDescriptionDraft}
+                      onChange={(e) => setLongDescriptionDraft(e.target.value)}
+                      disabled={!canEdit}
+                      placeholder={"Admite Markdown: # títulos, **negrita**, *cursiva*, - listas, [texto](url)"}
+                    />
+                  ) : (
+                    <div
+                      className={styles.mdPreview}
+                      dangerouslySetInnerHTML={{
+                        __html: renderMarkdown(longDescriptionDraft) || "<p><em>Vacío.</em></p>",
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
+
+              {selected.reviewed_at && (
+                <p className={styles.reviewedHint}>
+                  Última revisión: {selected.reviewed_by} · {new Date(selected.reviewed_at).toLocaleString("es-ES")}
+                </p>
+              )}
+
               {canEdit && (
-                <button
-                  type="button"
-                  className={styles.addBlock}
-                  onClick={() => setTargetPickerOpen((v) => !v)}
-                >
-                  + Añadir relación
-                </button>
+                <>
+                  {saveSuccess && <div className={formStyles.successBanner}>{saveSuccess}</div>}
+                  {saveError && <div className={formStyles.errorBanner}>{saveError}</div>}
+                  <button
+                    type="button"
+                    className={formStyles.submit}
+                    onClick={() => void handleSave()}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? "Guardando…" : "Guardar"}
+                  </button>
+                </>
               )}
             </div>
-            {relationshipsDraft.length === 0 && !targetPickerOpen && (
-              <p className={formStyles.hint}>Sin relaciones declaradas.</p>
-            )}
-
-            {targetPickerOpen && (
-              <div className={styles.targetPicker}>
-                <div className={styles.relTypeToggle}>
-                  {Object.entries(RELATIONSHIP_LABELS).map(([key, label]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      className={newRelType === key ? styles.relTypeActive : styles.relType}
-                      onClick={() => setNewRelType(key as FabricRelationshipType)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <input
-                  type="text"
-                  placeholder="Buscar el elemento a relacionar…"
-                  value={targetSearch}
-                  onChange={(e) => setTargetSearch(e.target.value)}
-                  className={styles.search}
-                />
-                <div className={styles.grid}>
-                  {targetCandidates.slice(0, 30).map((candidate) => (
-                    <button
-                      key={candidate.item_id}
-                      type="button"
-                      className={styles.block}
-                      onClick={() => addRelationship(candidate.item_id)}
-                    >
-                      <strong className={styles.blockName}>{candidate.name}</strong>
-                      <span className={styles.blockSubtitle}>{candidate.type}</span>
-                    </button>
-                  ))}
-                </div>
-                {targetCandidates.length === 0 && <p className={formStyles.hint}>Sin resultados.</p>}
-              </div>
-            )}
-          </div>
-
-          <details className={styles.impactBox} open={impact.upstream.length + impact.downstream.length > 0}>
-            <summary>
-              Análisis de impacto ({impact.upstream.length} de las que depende, {impact.downstream.length} que
-              dependen de este)
-            </summary>
-            {impact.upstream.length > 0 && (
-              <>
-                <p>Este elemento depende de:</p>
-                <ul className={styles.impactList}>
-                  {impact.upstream.map((i) => (
-                    <li key={i.item_id}>{i.name}</li>
-                  ))}
-                </ul>
-              </>
-            )}
-            {impact.downstream.length > 0 && (
-              <>
-                <p>Si se modifica, podría afectar a:</p>
-                <ul className={styles.impactList}>
-                  {impact.downstream.map((i) => (
-                    <li key={i.item_id}>{i.name}</li>
-                  ))}
-                </ul>
-              </>
-            )}
-            {impact.upstream.length === 0 && impact.downstream.length === 0 && (
-              <p>Sin relaciones declaradas todavía en ningún sentido.</p>
-            )}
-          </details>
-
-          <div className={formStyles.field}>
-            <label htmlFor="fc_long_description">Descripción detallada</label>
-            <div className={styles.mdEditorRow}>
-              <textarea
-                id="fc_long_description"
-                rows={10}
-                value={longDescriptionDraft}
-                onChange={(e) => setLongDescriptionDraft(e.target.value)}
-                disabled={!canEdit}
-                placeholder={"Admite Markdown: # títulos, **negrita**, *cursiva*, - listas, [texto](url)"}
-              />
-              <div
-                className={styles.mdPreview}
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(longDescriptionDraft) || "<p><em>Vacío.</em></p>" }}
-              />
-            </div>
-          </div>
-
-          {selected.reviewed_at && (
-            <p className={styles.reviewedHint}>
-              Última revisión: {selected.reviewed_by} · {new Date(selected.reviewed_at).toLocaleString("es-ES")}
-            </p>
           )}
-
-          {canEdit && (
-            <>
-              {saveSuccess && <div className={formStyles.successBanner}>{saveSuccess}</div>}
-              {saveError && <div className={formStyles.errorBanner}>{saveError}</div>}
-              <button type="button" className={formStyles.submit} onClick={() => void handleSave()} disabled={isSaving}>
-                {isSaving ? "Guardando…" : "Guardar"}
-              </button>
-            </>
-          )}
-        </div>
-      )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmDeleteCustomOpen}
+        title="Eliminar bloque personalizado"
+        description={`"${selected?.name ?? ""}" se eliminará del catálogo. Esta acción no se puede deshacer.`}
+        confirmLabel="Eliminar"
+        busy={isDeletingCustom}
+        onConfirm={() => void handleDeleteCustom()}
+        onCancel={() => setConfirmDeleteCustomOpen(false)}
+      />
     </div>
   );
 }

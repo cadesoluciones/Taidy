@@ -75,6 +75,7 @@ def test_list_catalog_items_merges_live_structure_with_stored_metadata(isolated_
     assert pipeline["short_description"] == ""
     assert pipeline["relationships"] == []
     assert pipeline["tags"] == []
+    assert pipeline["is_custom"] is False
 
 
 def test_set_metadata_persists_and_round_trips_all_fields(isolated_state):
@@ -118,6 +119,9 @@ def test_get_metadata_for_unknown_item_returns_fully_shaped_empty_entry(isolated
         "relationships": [],
         "reviewed_by": "",
         "reviewed_at": "",
+        "is_custom": False,
+        "name": "",
+        "type": "",
     }
 
 
@@ -144,6 +148,58 @@ def test_set_metadata_rejects_an_unknown_criticality(isolated_state):
 def test_set_metadata_rejects_an_unknown_status(isolated_state):
     with pytest.raises(ValueError, match="[Ee]stado"):
         _set("nb-1", status="no_existe")
+
+
+def test_create_custom_item_persists_and_appears_in_the_listing(isolated_state):
+    client = _FakeFabricClient(
+        items=[{"id": "nb-1", "type": "Notebook", "displayName": "silver_facturas"}],
+        folders=[],
+    )
+    created = fabric_catalog.create_custom_item("Excel de ventas", "Fuente externa", created_by="admin1")
+    assert created["item_id"].startswith(fabric_catalog.CUSTOM_ID_PREFIX)
+    assert created["name"] == "Excel de ventas"
+    assert created["type"] == "Fuente externa"
+    assert created["folder_path"] == ["Personalizados"]
+    assert created["is_custom"] is True
+    assert created["reviewed_by"] == "admin1"
+
+    items = fabric_catalog.list_catalog_items(client)
+    assert len(items) == 2
+    custom = next(i for i in items if i["is_custom"])
+    assert custom["item_id"] == created["item_id"]
+    assert custom["name"] == "Excel de ventas"
+    assert custom["folder_path"] == ["Personalizados"]
+
+
+def test_create_custom_item_defaults_type_when_blank(isolated_state):
+    created = fabric_catalog.create_custom_item("Proceso manual", "  ", created_by="admin1")
+    assert created["type"] == "Personalizado"
+
+
+def test_create_custom_item_rejects_a_blank_name(isolated_state):
+    with pytest.raises(ValueError):
+        fabric_catalog.create_custom_item("   ", "algo", created_by="admin1")
+
+
+def test_delete_custom_item_removes_it(isolated_state):
+    created = fabric_catalog.create_custom_item("Excel de ventas", "Fuente externa", created_by="admin1")
+    fabric_catalog.delete_custom_item(created["item_id"])
+    assert fabric_catalog.get_metadata(created["item_id"])["name"] == ""
+
+
+def test_delete_custom_item_rejects_an_unknown_id(isolated_state):
+    with pytest.raises(ValueError):
+        fabric_catalog.delete_custom_item("custom:does-not-exist")
+
+
+def test_delete_custom_item_refuses_to_delete_a_real_items_metadata(isolated_state):
+    """delete_custom_item is only for entries this module invented -- a real
+    Fabric item's metadata (even without is_custom set) must go through
+    delete_metadata(), never silently vanish via this path."""
+    _set("nb-1", short_description="algo")
+    with pytest.raises(ValueError):
+        fabric_catalog.delete_custom_item("nb-1")
+    assert fabric_catalog.get_metadata("nb-1")["short_description"] == "algo"
 
 
 def test_folder_path_handles_a_deeply_nested_folder(isolated_state):

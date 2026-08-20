@@ -25,6 +25,7 @@ from webapp.users_db import ROLE_ADMIN, ROLE_OPERATOR
 
 from ..dependencies import CurrentUser, get_current_user, require_any_role
 from ..schemas.fabric_catalog import (
+    CreateCustomFabricItemRequest,
     FabricCatalogListOut,
     FabricCatalogItemOut,
     UpdateFabricCatalogItemOut,
@@ -76,3 +77,23 @@ def update_item(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     return UpdateFabricCatalogItemOut(**entry)
+
+
+@router.post("/custom-items", response_model=FabricCatalogItemOut)
+def create_custom_item(
+    payload: CreateCustomFabricItemRequest,
+    current: CurrentUser = Depends(get_current_user),
+) -> FabricCatalogItemOut:
+    try:
+        entry = fabric_catalog.create_custom_item(payload.name, payload.type, created_by=current.username)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return FabricCatalogItemOut(**entry)
+
+
+@router.delete("/custom-items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_custom_item(item_id: str) -> None:
+    try:
+        fabric_catalog.delete_custom_item(item_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))

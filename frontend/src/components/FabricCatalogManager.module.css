@@ -9,15 +9,16 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   font-size: 13px;
-  max-width: 360px;
 }
 
 /* Side-by-side: the item list on the left, the selected item's detail
    panel on the right -- collapses to a single column on narrow viewports,
-   where a side-by-side layout would squeeze both into uselessness. */
+   where a side-by-side layout would squeeze both into uselessness. The
+   selector column is deliberately narrow (roughly half its first-draft
+   width) since the compact blocks below need much less room per item. */
 .layout {
   display: grid;
-  grid-template-columns: minmax(280px, 380px) 1fr;
+  grid-template-columns: minmax(150px, 190px) 1fr;
   gap: var(--space-4);
   align-items: start;
 }
@@ -31,7 +32,7 @@
 .listColumn {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
   min-width: 0;
 }
 
@@ -43,18 +44,70 @@
   max-width: none;
 }
 
+/* The general governance fields and the long description live side by
+   side as two more columns inside the detail card -- selector + these two
+   reads as "3 columns" overall. Collapses to stacked on narrow viewports. */
+.fieldsGrid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+@media (max-width: 760px) {
+  .fieldsGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.generalColumn,
+.longDescColumn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* Independently scrollable so a long item list never depends on the whole
+   page scrolling to reach items below the fold -- capped relative to the
+   viewport, not to the (variable-height) content above it. */
 .groups {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  max-height: 70vh;
+  gap: var(--space-3);
+  max-height: calc(100vh - 220px);
   overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
 }
 
 .folderGroup {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-1);
+}
+
+.folderHeader {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  padding: 2px 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.folderChevron {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  transition: transform 0.15s ease;
+}
+
+.folderChevronCollapsed {
+  transform: rotate(-90deg);
 }
 
 .folderLabel {
@@ -65,13 +118,12 @@
   letter-spacing: 0.02em;
 }
 
-/* The simple block style from "Tareas en curso"'s per-table grid --
-   bordered box, bold name, small muted subtitle underneath. Reused here
-   verbatim (per explicit feedback) instead of a connected-node diagram. */
+/* Compact blocks -- about half the size of the first draft, so more of
+   the workspace's items are visible without scrolling. */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 6px;
 }
 
 .block,
@@ -80,14 +132,14 @@
 .addBlock {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: var(--space-2) var(--space-3);
+  gap: 1px;
+  padding: 4px 6px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: var(--color-bg);
   text-align: left;
-  font-size: 13px;
-  min-height: 56px;
+  font-size: 11px;
+  min-height: 32px;
 }
 
 .block,
@@ -104,11 +156,17 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.2;
 }
 
 .blockSubtitle {
-  font-size: 11px;
+  font-size: 9px;
+  line-height: 1.2;
   color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .relBlock {
@@ -135,10 +193,57 @@
   border-style: dashed;
 }
 
+.addCustomBlock {
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: 6px 8px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-primary);
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+}
+
+.customForm {
+  padding: var(--space-3);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.customForm input {
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.customFormActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
 .detailHead {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+.deleteCustomButton {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  color: var(--color-danger);
+  cursor: pointer;
+  font-size: 12px;
 }
 
 .breadcrumb {
@@ -196,26 +301,7 @@
   overflow: hidden;
 }
 
-.mdEditorRow {
-  display: flex;
-  gap: var(--space-3);
-  align-items: stretch;
-}
-
-.mdEditorRow > textarea {
-  flex: 1;
-  min-width: 0;
-}
-
-@media (max-width: 700px) {
-  .mdEditorRow {
-    flex-direction: column;
-  }
-}
-
 .mdPreview {
-  flex: 1;
-  min-width: 0;
   padding: var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);

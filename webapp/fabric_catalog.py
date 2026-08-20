@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import threading
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -30,6 +31,13 @@ RELATIONSHIP_TYPES = {"reads_from", "writes_to", "triggered_by"}
 CRITICALITY_LEVELS = {"baja", "media", "alta"}
 STATUS_VALUES = {"activo", "en_desuso", "deprecado"}
 
+# Custom items exist ONLY in this local store -- there's no live Fabric
+# record to fall back to, so (unlike a real item) their name/type live here
+# too, and they're the one kind of entry this module actually lets you
+# delete outright rather than just clear the metadata on.
+CUSTOM_ID_PREFIX = "custom:"
+CUSTOM_FOLDER_PATH = ["Personalizados"]
+
 _EMPTY_ENTRY: dict = {
     "short_description": "",
     "long_description_markdown": "",
@@ -40,6 +48,9 @@ _EMPTY_ENTRY: dict = {
     "relationships": [],
     "reviewed_by": "",
     "reviewed_at": "",
+    "is_custom": False,
+    "name": "",
+    "type": "",
 }
 
 
@@ -136,6 +147,42 @@ def delete_metadata(item_id: str) -> None:
             _write(data)
 
 
+def create_custom_item(name: str, type_: str, *, created_by: str) -> dict:
+    """A manually-declared catalog entry for something outside Fabric (an
+    external system, a manual process, ...) that still needs to show up in
+    the lineage/relationship picture. Usable as a relationship source or
+    target exactly like a real item -- set_metadata() never checks that a
+    target_item_id actually exists."""
+    name = name.strip()
+    if not name:
+        raise ValueError("El bloque personalizado necesita un nombre.")
+
+    item_id = f"{CUSTOM_ID_PREFIX}{uuid.uuid4()}"
+    entry = {
+        **_EMPTY_ENTRY,
+        "is_custom": True,
+        "name": name,
+        "type": type_.strip() or "Personalizado",
+        "reviewed_by": created_by,
+        "reviewed_at": datetime.now(timezone.utc).isoformat(),
+    }
+    with _LOCK:
+        data = _read()
+        data[item_id] = entry
+        _write(data)
+    return {"item_id": item_id, "folder_path": CUSTOM_FOLDER_PATH, **entry}
+
+
+def delete_custom_item(item_id: str) -> None:
+    with _LOCK:
+        data = _read()
+        entry = data.get(item_id)
+        if entry is None or not entry.get("is_custom"):
+            raise ValueError("Ese bloque personalizado no existe.")
+        del data[item_id]
+        _write(data)
+
+
 def _folder_path(folder_id: Optional[str], folders_by_id: Dict[str, dict]) -> List[str]:
     path: List[str] = []
     seen = set()
@@ -152,7 +199,8 @@ def _folder_path(folder_id: Optional[str], folders_by_id: Dict[str, dict]) -> Li
 
 
 def list_catalog_items(client: Any) -> List[dict]:
-    """Live Fabric items + folders, merged with locally-stored metadata.
+    """Live Fabric items + folders, merged with locally-stored metadata,
+    plus any custom items (which have no live Fabric backing at all).
     `client` is a FabricPipelineClient (passed in rather than constructed
     here so tests can inject a fake)."""
     items = client.list_items()
@@ -179,6 +227,30 @@ def list_catalog_items(client: Any) -> List[dict]:
                 "relationships": meta["relationships"],
                 "reviewed_by": meta["reviewed_by"],
                 "reviewed_at": meta["reviewed_at"],
+                "is_custom": False,
+            }
+        )
+
+    for item_id, raw_meta in metadata.items():
+        if not raw_meta.get("is_custom"):
+            continue
+        meta = {**_EMPTY_ENTRY, **raw_meta}
+        result.append(
+            {
+                "item_id": item_id,
+                "name": meta["name"],
+                "type": meta["type"],
+                "folder_path": CUSTOM_FOLDER_PATH,
+                "short_description": meta["short_description"],
+                "long_description_markdown": meta["long_description_markdown"],
+                "owners": meta["owners"],
+                "criticality": meta["criticality"],
+                "status": meta["status"],
+                "tags": meta["tags"],
+                "relationships": meta["relationships"],
+                "reviewed_by": meta["reviewed_by"],
+                "reviewed_at": meta["reviewed_at"],
+                "is_custom": True,
             }
         )
     return result

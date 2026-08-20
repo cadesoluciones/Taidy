@@ -30,6 +30,7 @@ class FabricCatalogItemOut(BaseModel):
     relationships: List[RelationshipOut] = []
     reviewed_by: str = ""
     reviewed_at: str = ""
+    is_custom: bool = False
 
 
 class FabricCatalogListOut(BaseModel):
@@ -44,6 +45,11 @@ class UpdateFabricCatalogItemRequest(BaseModel):
     status: str = ""
     tags: List[str] = []
     relationships: List[RelationshipIn] = []
+
+
+class CreateCustomFabricItemRequest(BaseModel):
+    name: str
+    type: str = ""
 
 
 class UpdateFabricCatalogItemOut(BaseModel):
