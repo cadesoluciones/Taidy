@@ -42,6 +42,11 @@ const STATUS_LABELS: Record<Exclude<FabricStatus, "">, string> = {
   deprecado: "Deprecado",
 };
 
+// How many hops (in either direction) around the selected item the
+// relationship canvas shows -- bounded so it stays a readable "local
+// neighborhood" instead of the whole (106-item) catalog graph.
+const NEIGHBORHOOD_HOPS = 2;
+
 function folderKey(path: string[]): string {
   return path.length > 0 ? path.join(" / ") : "(raíz del workspace)";
 }
@@ -100,7 +105,6 @@ export function FabricCatalogManager() {
 
   const [shortDescriptionDraft, setShortDescriptionDraft] = useState("");
   const [longDescriptionDraft, setLongDescriptionDraft] = useState("");
-  const [longDescriptionView, setLongDescriptionView] = useState<"editar" | "vista previa">("editar");
   const [ownersDraft, setOwnersDraft] = useState<string[]>([]);
   const [criticalityDraft, setCriticalityDraft] = useState<FabricCriticality>("");
   const [statusDraft, setStatusDraft] = useState<FabricStatus>("");
@@ -136,7 +140,6 @@ export function FabricCatalogManager() {
   useEffect(() => {
     setShortDescriptionDraft(selected?.short_description ?? "");
     setLongDescriptionDraft(selected?.long_description_markdown ?? "");
-    setLongDescriptionView("editar");
     setOwnersDraft(selected?.owners ?? []);
     setCriticalityDraft(selected?.criticality ?? "");
     setStatusDraft(selected?.status ?? "");
@@ -190,38 +193,49 @@ export function FabricCatalogManager() {
     });
   }, [items, selected, targetSearch]);
 
-  // The relationship canvas is scoped to direct neighbors of the selected
-  // item only (matches the requested mockup) -- it reflects the in-progress
-  // draft, not just what's saved, so adding/removing a relationship below
-  // updates the picture immediately.
+  // The relationship canvas shows the selected item's local neighborhood
+  // (up to 2 hops in either direction), not a strict hub-and-spoke -- a
+  // chain or merge between two OTHER items shows up as a direct edge
+  // between them even when neither is the selected item, exactly like it
+  // would look browsing the same items from either end. It reflects the
+  // in-progress draft (relationshipsDraft), not just what's saved, so
+  // adding/removing a relationship below updates the picture immediately.
   const neighborDiagram = useMemo(() => {
     if (!selected) return { steps: [] as DiagramStep[] };
-    const nodes = new Map<string, DiagramStep>();
-    const labelsByNeighbor = new Map<string, Set<string>>();
-    nodes.set(selected.item_id, {
-      id: selected.item_id,
-      label: selected.name,
-      action: `${selected.type} · seleccionado`,
-      depends_on: [],
-      trigger_rule: "all_success",
-    });
+    const itemsForGraph = items.map((i) =>
+      i.item_id === selected.item_id ? { ...i, relationships: relationshipsDraft } : i,
+    );
+    const byId = new Map(itemsForGraph.map((i) => [i.item_id, i]));
+    const { forward, backward } = buildImpactGraph(itemsForGraph);
 
-    function ensureNode(itemId: string) {
-      if (nodes.has(itemId)) return;
-      const found = items.find((i) => i.item_id === itemId);
-      nodes.set(itemId, {
-        id: itemId,
-        label: found?.name ?? itemId,
-        action: found?.type ?? "?",
+    // Undirected BFS just to decide which nodes are "close enough" to show
+    // -- direction is only meaningful once we draw the actual edges below.
+    const distance = new Map<string, number>([[selected.item_id, 0]]);
+    let frontier = [selected.item_id];
+    for (let hop = 0; hop < NEIGHBORHOOD_HOPS && frontier.length > 0; hop++) {
+      const next: string[] = [];
+      for (const id of frontier) {
+        const neighborIds = new Set([...(forward.get(id) ?? []), ...(backward.get(id) ?? [])]);
+        for (const neighborId of neighborIds) {
+          if (!distance.has(neighborId)) {
+            distance.set(neighborId, hop + 1);
+            next.push(neighborId);
+          }
+        }
+      }
+      frontier = next;
+    }
+
+    const nodes = new Map<string, DiagramStep>();
+    for (const id of distance.keys()) {
+      const found = byId.get(id);
+      nodes.set(id, {
+        id,
+        label: found?.name ?? id,
+        action: id === selected.item_id ? `${selected.type} · seleccionado` : found?.type ?? "?",
         depends_on: [],
         trigger_rule: "all_success",
       });
-    }
-
-    function addLabel(itemId: string, label: string) {
-      const set = labelsByNeighbor.get(itemId) ?? new Set<string>();
-      set.add(label);
-      labelsByNeighbor.set(itemId, set);
     }
 
     function addDependency(dependentId: string, dependsOnId: string) {
@@ -230,28 +244,34 @@ export function FabricCatalogManager() {
       if (!node.depends_on.includes(dependsOnId)) node.depends_on = [...node.depends_on, dependsOnId];
     }
 
-    for (const rel of relationshipsDraft) {
-      ensureNode(rel.target_item_id);
-      addLabel(rel.target_item_id, RELATIONSHIP_LABELS[rel.type]);
-      if (rel.type === "writes_to") addDependency(rel.target_item_id, selected.item_id);
-      else addDependency(selected.item_id, rel.target_item_id);
+    // Only relationships directly touching the selected item get a
+    // "Lee de / Escribe en / ..." label on the OTHER node -- that's the
+    // actionable one; a 2nd-hop node just shows its Fabric type.
+    const directTouchLabels = new Map<string, Set<string>>();
+    function addDirectTouchLabel(itemId: string, label: string) {
+      const set = directTouchLabels.get(itemId) ?? new Set<string>();
+      set.add(label);
+      directTouchLabels.set(itemId, set);
     }
 
-    for (const other of items) {
-      if (other.item_id === selected.item_id) continue;
-      for (const rel of other.relationships) {
-        if (rel.target_item_id !== selected.item_id) continue;
-        ensureNode(other.item_id);
-        addLabel(other.item_id, RELATIONSHIP_LABELS[rel.type]);
-        if (rel.type === "writes_to") addDependency(selected.item_id, other.item_id);
-        else addDependency(other.item_id, selected.item_id);
+    // Draw every relationship whose BOTH ends made it into the gathered
+    // neighborhood -- including ones between two non-selected items.
+    for (const item of itemsForGraph) {
+      if (!nodes.has(item.item_id)) continue;
+      for (const rel of item.relationships) {
+        if (!nodes.has(rel.target_item_id)) continue;
+        if (rel.type === "writes_to") addDependency(rel.target_item_id, item.item_id);
+        else addDependency(item.item_id, rel.target_item_id);
+
+        if (item.item_id === selected.item_id) addDirectTouchLabel(rel.target_item_id, RELATIONSHIP_LABELS[rel.type]);
+        else if (rel.target_item_id === selected.item_id) addDirectTouchLabel(item.item_id, RELATIONSHIP_LABELS[rel.type]);
       }
     }
 
-    for (const [id, node] of nodes) {
-      if (id === selected.item_id) continue;
-      const labels = [...(labelsByNeighbor.get(id) ?? [])].join(" / ");
-      node.action = labels ? `${labels} · ${node.action}` : node.action;
+    for (const [id, labels] of directTouchLabels) {
+      const node = nodes.get(id);
+      if (!node) continue;
+      node.action = `${[...labels].join(" / ")} · ${node.action}`;
     }
 
     return { steps: [...nodes.values()] };
@@ -322,16 +342,18 @@ export function FabricCatalogManager() {
 
   return (
     <div className={styles.wrapper}>
-      <input
-        type="text"
-        placeholder="Buscar por nombre o tipo…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className={styles.search}
-      />
+      <div className={styles.layout}>
+        <div className={styles.listColumn}>
+          <input
+            type="text"
+            placeholder="Buscar por nombre o tipo…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className={styles.search}
+          />
 
-      <div className={styles.groups}>
-        {grouped.map(([folder, folderItems]) => (
+          <div className={styles.groups}>
+            {grouped.map(([folder, folderItems]) => (
           <div key={folder} className={styles.folderGroup}>
             <div className={styles.folderLabel}>{folder}</div>
             <div className={styles.grid}>
@@ -364,11 +386,13 @@ export function FabricCatalogManager() {
             </div>
           </div>
         ))}
-        {grouped.length === 0 && <p className={formStyles.hint}>Sin resultados.</p>}
-      </div>
+            {grouped.length === 0 && <p className={formStyles.hint}>Sin resultados.</p>}
+          </div>
+        </div>
 
-      {selected && (
-        <div className={formStyles.card}>
+        <div className={styles.detailColumn}>
+          {selected && (
+        <div className={`${formStyles.card} ${styles.detailCard}`}>
           <div className={styles.detailHead}>
             <strong>{selected.name}</strong>
             <span className={styles.blockSubtitle}>{selected.type}</span>
@@ -563,38 +587,21 @@ export function FabricCatalogManager() {
           </details>
 
           <div className={formStyles.field}>
-            <div className={styles.detailHead}>
-              <label htmlFor="fc_long_description" style={{ marginBottom: 0 }}>
-                Descripción detallada
-              </label>
-              <div className={styles.relTypeToggle}>
-                {(["editar", "vista previa"] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    className={longDescriptionView === mode ? styles.relTypeActive : styles.relType}
-                    onClick={() => setLongDescriptionView(mode)}
-                  >
-                    {mode === "editar" ? "Editar" : "Vista previa"}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {longDescriptionView === "editar" ? (
+            <label htmlFor="fc_long_description">Descripción detallada</label>
+            <div className={styles.mdEditorRow}>
               <textarea
                 id="fc_long_description"
-                rows={8}
+                rows={10}
                 value={longDescriptionDraft}
                 onChange={(e) => setLongDescriptionDraft(e.target.value)}
                 disabled={!canEdit}
                 placeholder={"Admite Markdown: # títulos, **negrita**, *cursiva*, - listas, [texto](url)"}
               />
-            ) : (
               <div
                 className={styles.mdPreview}
                 dangerouslySetInnerHTML={{ __html: renderMarkdown(longDescriptionDraft) || "<p><em>Vacío.</em></p>" }}
               />
-            )}
+            </div>
           </div>
 
           {selected.reviewed_at && (
@@ -614,6 +621,8 @@ export function FabricCatalogManager() {
           )}
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -12,11 +12,42 @@
   max-width: 360px;
 }
 
+/* Side-by-side: the item list on the left, the selected item's detail
+   panel on the right -- collapses to a single column on narrow viewports,
+   where a side-by-side layout would squeeze both into uselessness. */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.listColumn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.detailColumn {
+  min-width: 0;
+}
+
+.detailCard {
+  max-width: none;
+}
+
 .groups {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  max-height: 55vh;
+  max-height: 70vh;
   overflow-y: auto;
 }
 
@@ -165,7 +196,26 @@
   overflow: hidden;
 }
 
+.mdEditorRow {
+  display: flex;
+  gap: var(--space-3);
+  align-items: stretch;
+}
+
+.mdEditorRow > textarea {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 700px) {
+  .mdEditorRow {
+    flex-direction: column;
+  }
+}
+
 .mdPreview {
+  flex: 1;
+  min-width: 0;
   padding: var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
