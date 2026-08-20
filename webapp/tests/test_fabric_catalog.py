@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-webapp/fabric_catalog.py -- Fabric structure is always live (via whatever
-client is passed in), only the governance metadata (descriptions, owners,
-criticality/status, tags, relationships) persists locally.
+webapp/fabric_catalog.py -- Fabric/BC/HubSpot structure is always live/static
+config (never cached here for Fabric, read fresh from tables.yaml/
+hubspot_tables.yaml for the other two), only the governance metadata
+(descriptions, roles, criticality/status, tags, relationships, ...)
+persists locally.
 """
 
 from __future__ import annotations
@@ -14,7 +16,10 @@ from webapp import fabric_catalog
 _EMPTY_KWARGS = dict(
     short_description="",
     long_description_markdown="",
-    owners=[],
+    data_owner=[],
+    data_steward=[],
+    data_custodian=[],
+    data_consumer=[],
     criticality="",
     status="",
     tags=[],
@@ -45,7 +50,19 @@ class _FakeFabricClient:
         return self._folders
 
 
-def test_list_catalog_items_merges_live_structure_with_stored_metadata(isolated_state):
+_EMPTY_CLIENT = _FakeFabricClient(items=[], folders=[])
+
+
+def _no_bc_or_hubspot_tables(monkeypatch):
+    """Most tests only care about Fabric/custom items -- silence the
+    other two sources so list_catalog_items() output stays predictable
+    without every test needing to know about tables.yaml/hubspot_tables.yaml."""
+    monkeypatch.setattr(fabric_catalog.table_configs, "list_bc_tables_full", lambda: [])
+    monkeypatch.setattr(fabric_catalog.table_configs, "list_hubspot_tables_full", lambda: [])
+
+
+def test_list_catalog_items_merges_live_structure_with_stored_metadata(isolated_state, monkeypatch):
+    _no_bc_or_hubspot_tables(monkeypatch)
     client = _FakeFabricClient(
         items=[
             {"id": "nb-1", "type": "Notebook", "displayName": "silver_facturas", "folderId": "f-silver"},
@@ -56,7 +73,7 @@ def test_list_catalog_items_merges_live_structure_with_stored_metadata(isolated_
             {"id": "f-silver", "displayName": "silver", "parentFolderId": "f-root"},
         ],
     )
-    _set("nb-1", short_description="Facturas consolidadas", owners=["jose"], criticality="alta")
+    _set("nb-1", short_description="Facturas consolidadas", data_owner=["jose"], criticality="alta")
 
     items = fabric_catalog.list_catalog_items(client)
     assert len(items) == 2
@@ -64,14 +81,14 @@ def test_list_catalog_items_merges_live_structure_with_stored_metadata(isolated_
     notebook = next(i for i in items if i["item_id"] == "nb-1")
     assert notebook["name"] == "silver_facturas"
     assert notebook["type"] == "Notebook"
-    assert notebook["folder_path"] == ["ETLs Medallion", "silver"]
+    assert notebook["folder_path"] == ["Fabric", "ETLs Medallion", "silver"]
     assert notebook["short_description"] == "Facturas consolidadas"
-    assert notebook["owners"] == ["jose"]
+    assert notebook["data_owner"] == ["jose"]
     assert notebook["criticality"] == "alta"
     assert notebook["reviewed_by"] == ""
 
     pipeline = next(i for i in items if i["item_id"] == "pl-1")
-    assert pipeline["folder_path"] == []  # workspace root -- no folderId at all
+    assert pipeline["folder_path"] == ["Fabric"]  # workspace root -- no folderId at all
     assert pipeline["short_description"] == ""
     assert pipeline["relationships"] == []
     assert pipeline["tags"] == []
@@ -79,6 +96,47 @@ def test_list_catalog_items_merges_live_structure_with_stored_metadata(isolated_
     assert pipeline["color"] == ""
     assert pipeline["icon"] == ""
     assert pipeline["canvas_positions"] == {}
+    assert pipeline["is_favorite"] is False
+    assert pipeline["is_hidden"] is False
+
+
+def test_list_catalog_items_merges_bc_and_hubspot_static_tables(isolated_state, monkeypatch):
+    monkeypatch.setattr(
+        fabric_catalog.table_configs,
+        "list_bc_tables_full",
+        lambda: [{"name": "bc_customer", "description": "Customer API", "url": "...", "incremental": True}],
+    )
+    monkeypatch.setattr(
+        fabric_catalog.table_configs,
+        "list_hubspot_tables_full",
+        lambda: [{"name": "hubspot_contacts", "description": "HubSpot contacts", "object_type": "contacts"}],
+    )
+    items = fabric_catalog.list_catalog_items(_EMPTY_CLIENT)
+    assert len(items) == 2
+
+    bc_item = next(i for i in items if i["item_id"] == "bc:bc_customer")
+    assert bc_item["name"] == "bc_customer"
+    assert bc_item["folder_path"] == ["Business Central"]
+    assert bc_item["is_custom"] is False
+
+    hs_item = next(i for i in items if i["item_id"] == "hubspot:hubspot_contacts")
+    assert hs_item["name"] == "hubspot_contacts"
+    assert hs_item["folder_path"] == ["HubSpot"]
+
+
+def test_list_catalog_items_bc_table_keeps_its_saved_metadata(isolated_state, monkeypatch):
+    monkeypatch.setattr(
+        fabric_catalog.table_configs,
+        "list_bc_tables_full",
+        lambda: [{"name": "bc_customer"}],
+    )
+    monkeypatch.setattr(fabric_catalog.table_configs, "list_hubspot_tables_full", lambda: [])
+    _set("bc:bc_customer", short_description="Clientes de BC", data_steward=["ana"])
+
+    items = fabric_catalog.list_catalog_items(_EMPTY_CLIENT)
+    bc_item = next(i for i in items if i["item_id"] == "bc:bc_customer")
+    assert bc_item["short_description"] == "Clientes de BC"
+    assert bc_item["data_steward"] == ["ana"]
 
 
 def test_set_metadata_persists_and_round_trips_all_fields(isolated_state):
@@ -86,7 +144,10 @@ def test_set_metadata_persists_and_round_trips_all_fields(isolated_state):
         "nb-1",
         short_description="Facturas",
         long_description_markdown="# Facturas\nSe construye desde **bronze_facturas.csv**",
-        owners=["jose", "ana"],
+        data_owner=["jose"],
+        data_steward=["ana"],
+        data_custodian=["it-team"],
+        data_consumer=["comercial"],
         criticality="media",
         status="activo",
         tags=["finanzas", "diario"],
@@ -96,7 +157,10 @@ def test_set_metadata_persists_and_round_trips_all_fields(isolated_state):
     stored = fabric_catalog.get_metadata("nb-1")
     assert stored["short_description"] == "Facturas"
     assert stored["long_description_markdown"] == "# Facturas\nSe construye desde **bronze_facturas.csv**"
-    assert stored["owners"] == ["jose", "ana"]
+    assert stored["data_owner"] == ["jose"]
+    assert stored["data_steward"] == ["ana"]
+    assert stored["data_custodian"] == ["it-team"]
+    assert stored["data_consumer"] == ["comercial"]
     assert stored["criticality"] == "media"
     assert stored["status"] == "activo"
     assert stored["tags"] == ["finanzas", "diario"]
@@ -105,9 +169,9 @@ def test_set_metadata_persists_and_round_trips_all_fields(isolated_state):
     assert stored["reviewed_at"] != ""
 
 
-def test_set_metadata_dedupes_and_strips_owners_and_tags(isolated_state):
-    entry = _set("nb-1", owners=[" jose ", "jose", "ana"], tags=["a", "", " a ", "b"])
-    assert entry["owners"] == ["jose", "ana"]
+def test_set_metadata_dedupes_and_strips_role_lists_and_tags(isolated_state):
+    entry = _set("nb-1", data_owner=[" jose ", "jose", "ana"], tags=["a", "", " a ", "b"])
+    assert entry["data_owner"] == ["jose", "ana"]
     assert entry["tags"] == ["a", "b"]
 
 
@@ -115,7 +179,10 @@ def test_get_metadata_for_unknown_item_returns_fully_shaped_empty_entry(isolated
     assert fabric_catalog.get_metadata("does-not-exist") == {
         "short_description": "",
         "long_description_markdown": "",
-        "owners": [],
+        "data_owner": [],
+        "data_steward": [],
+        "data_custodian": [],
+        "data_consumer": [],
         "criticality": "",
         "status": "",
         "tags": [],
@@ -128,6 +195,8 @@ def test_get_metadata_for_unknown_item_returns_fully_shaped_empty_entry(isolated
         "color": "",
         "icon": "",
         "canvas_positions": {},
+        "is_favorite": False,
+        "is_hidden": False,
     }
 
 
@@ -172,19 +241,41 @@ def test_set_canvas_positions_only_touches_positions(isolated_state):
 
 def test_update_item_form_save_does_not_wipe_canvas_positions(isolated_state):
     """The general edit form (PATCH /items/{id}) never sends canvas
-    positions -- api/routers/fabric_catalog.py must read the existing ones
-    and pass them straight through, not silently clear the canvas."""
+    positions -- set_metadata() must preserve the existing ones when the
+    caller omits the argument, not silently clear the canvas."""
     fabric_catalog.set_canvas_positions("nb-1", {"pl-1": {"x": 5, "y": 6}})
     _set("nb-1", short_description="Facturas")
     assert fabric_catalog.get_metadata("nb-1")["canvas_positions"] == {"pl-1": {"x": 5, "y": 6}}
 
 
+def test_set_favorite_and_hidden_do_not_touch_other_fields_or_stamp_reviewed(isolated_state):
+    _set("nb-1", short_description="Facturas", reviewed_by="admin1")
+    entry = fabric_catalog.set_favorite("nb-1", True)
+    assert entry["is_favorite"] is True
+    assert entry["short_description"] == "Facturas"
+    assert entry["reviewed_by"] == "admin1"  # unchanged -- bookmarking isn't a review
+
+    entry = fabric_catalog.set_hidden("nb-1", True)
+    assert entry["is_hidden"] is True
+    assert entry["is_favorite"] is True  # the earlier flag survives too
+    assert entry["short_description"] == "Facturas"
+
+
+def test_update_item_form_save_does_not_wipe_favorite_or_hidden_flags(isolated_state):
+    fabric_catalog.set_favorite("nb-1", True)
+    fabric_catalog.set_hidden("nb-1", True)
+    _set("nb-1", short_description="Facturas")
+    stored = fabric_catalog.get_metadata("nb-1")
+    assert stored["is_favorite"] is True
+    assert stored["is_hidden"] is True
+
+
 def test_add_relationship_appends_without_touching_other_fields(isolated_state):
-    _set("nb-1", short_description="Facturas", owners=["jose"])
+    _set("nb-1", short_description="Facturas", data_owner=["jose"])
     entry = fabric_catalog.add_relationship("nb-1", "reads_from", "lh-bronze", reviewed_by="admin1")
     assert entry["relationships"] == [{"type": "reads_from", "target_item_id": "lh-bronze"}]
     assert entry["short_description"] == "Facturas"
-    assert entry["owners"] == ["jose"]
+    assert entry["data_owner"] == ["jose"]
     assert entry["reviewed_by"] == "admin1"
 
 
@@ -204,20 +295,10 @@ def test_set_metadata_preserves_a_custom_items_identity(isolated_state):
     """A regression guard: set_metadata() (the general edit-form save) must
     not silently strip is_custom/name/type when saving a custom item's
     other fields -- that would make it vanish from list_catalog_items()
-    entirely (it's neither a live Fabric item nor recognized as custom)."""
+    entirely (it's neither a live source item nor recognized as custom)."""
     created = fabric_catalog.create_custom_item("Excel de ventas", "Fuente externa", created_by="admin1")
     item_id = created["item_id"]
-    fabric_catalog.set_metadata(
-        item_id,
-        short_description="Datos de ventas mensuales",
-        long_description_markdown="",
-        owners=[],
-        criticality="",
-        status="",
-        tags=[],
-        relationships=[],
-        reviewed_by="admin2",
-    )
+    _set(item_id, short_description="Datos de ventas mensuales", reviewed_by="admin2")
     stored = fabric_catalog.get_metadata(item_id)
     assert stored["is_custom"] is True
     assert stored["name"] == "Excel de ventas"
@@ -250,7 +331,8 @@ def test_set_metadata_rejects_an_unknown_status(isolated_state):
         _set("nb-1", status="no_existe")
 
 
-def test_create_custom_item_persists_and_appears_in_the_listing(isolated_state):
+def test_create_custom_item_persists_and_appears_in_the_listing(isolated_state, monkeypatch):
+    _no_bc_or_hubspot_tables(monkeypatch)
     client = _FakeFabricClient(
         items=[{"id": "nb-1", "type": "Notebook", "displayName": "silver_facturas"}],
         folders=[],
@@ -294,7 +376,7 @@ def test_delete_custom_item_rejects_an_unknown_id(isolated_state):
 
 def test_delete_custom_item_refuses_to_delete_a_real_items_metadata(isolated_state):
     """delete_custom_item is only for entries this module invented -- a real
-    Fabric item's metadata (even without is_custom set) must go through
+    item's metadata (even without is_custom set) must go through
     delete_metadata(), never silently vanish via this path."""
     _set("nb-1", short_description="algo")
     with pytest.raises(ValueError):
@@ -302,7 +384,8 @@ def test_delete_custom_item_refuses_to_delete_a_real_items_metadata(isolated_sta
     assert fabric_catalog.get_metadata("nb-1")["short_description"] == "algo"
 
 
-def test_folder_path_handles_a_deeply_nested_folder(isolated_state):
+def test_folder_path_handles_a_deeply_nested_folder(isolated_state, monkeypatch):
+    _no_bc_or_hubspot_tables(monkeypatch)
     client = _FakeFabricClient(
         items=[{"id": "nb-1", "type": "Notebook", "displayName": "x", "folderId": "f3"}],
         folders=[
@@ -312,13 +395,14 @@ def test_folder_path_handles_a_deeply_nested_folder(isolated_state):
         ],
     )
     items = fabric_catalog.list_catalog_items(client)
-    assert items[0]["folder_path"] == ["Sandbox", "EDA", "sub"]
+    assert items[0]["folder_path"] == ["Fabric", "Sandbox", "EDA", "sub"]
 
 
-def test_folder_path_does_not_infinite_loop_on_a_cyclic_parent_reference(isolated_state):
+def test_folder_path_does_not_infinite_loop_on_a_cyclic_parent_reference(isolated_state, monkeypatch):
     """Fabric shouldn't ever produce this, but a defensive guard here is
     cheap and turns a hypothetical bad response into a truncated path
     instead of a hung request."""
+    _no_bc_or_hubspot_tables(monkeypatch)
     client = _FakeFabricClient(
         items=[{"id": "nb-1", "type": "Notebook", "displayName": "x", "folderId": "f1"}],
         folders=[
@@ -327,4 +411,4 @@ def test_folder_path_does_not_infinite_loop_on_a_cyclic_parent_reference(isolate
         ],
     )
     items = fabric_catalog.list_catalog_items(client)
-    assert items[0]["folder_path"] == ["B", "A"]
+    assert items[0]["folder_path"] == ["Fabric", "B", "A"]

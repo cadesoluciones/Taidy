@@ -11,7 +11,10 @@ function item(id: string, relationships: FabricCatalogItem["relationships"] = []
     folder_path: [],
     short_description: "",
     long_description_markdown: "",
-    owners: [],
+    data_owner: [],
+    data_steward: [],
+    data_custodian: [],
+    data_consumer: [],
     criticality: "",
     status: "",
     tags: [],
@@ -22,6 +25,8 @@ function item(id: string, relationships: FabricCatalogItem["relationships"] = []
     color: "",
     icon: "",
     canvas_positions: {},
+    is_favorite: false,
+    is_hidden: false,
   };
 }
 

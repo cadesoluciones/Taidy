@@ -30,7 +30,10 @@ from ..schemas.fabric_catalog import (
     CreateCustomFabricItemRequest,
     FabricCatalogListOut,
     FabricCatalogItemOut,
+    FlagOut,
     SetCanvasPositionsRequest,
+    SetFavoriteRequest,
+    SetHiddenRequest,
     UpdateFabricCatalogItemOut,
     UpdateFabricCatalogItemRequest,
 )
@@ -70,7 +73,10 @@ def update_item(
             item_id,
             short_description=payload.short_description,
             long_description_markdown=payload.long_description_markdown,
-            owners=payload.owners,
+            data_owner=payload.data_owner,
+            data_steward=payload.data_steward,
+            data_custodian=payload.data_custodian,
+            data_consumer=payload.data_consumer,
             criticality=payload.criticality,
             status=payload.status,
             tags=payload.tags,
@@ -146,3 +152,15 @@ def set_canvas_positions(item_id: str, payload: SetCanvasPositionsRequest) -> Ca
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     return CanvasPositionsOut(canvas_positions=entry["canvas_positions"])
+
+
+@router.put("/items/{item_id}/favorite", response_model=FlagOut)
+def set_favorite(item_id: str, payload: SetFavoriteRequest) -> FlagOut:
+    entry = fabric_catalog.set_favorite(item_id, payload.is_favorite)
+    return FlagOut(is_favorite=entry["is_favorite"], is_hidden=entry["is_hidden"])
+
+
+@router.put("/items/{item_id}/hidden", response_model=FlagOut)
+def set_hidden(item_id: str, payload: SetHiddenRequest) -> FlagOut:
+    entry = fabric_catalog.set_hidden(item_id, payload.is_hidden)
+    return FlagOut(is_favorite=entry["is_favorite"], is_hidden=entry["is_hidden"])

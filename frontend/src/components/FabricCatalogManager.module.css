@@ -4,11 +4,40 @@
   gap: var(--space-4);
 }
 
+.searchRow {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
 .search {
   padding: 6px 8px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   font-size: 13px;
+  flex: 1;
+  min-width: 0;
+}
+
+.showHiddenToggle,
+.showHiddenToggleActive {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.showHiddenToggleActive {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-bg));
+  color: var(--color-primary);
 }
 
 /* Side-by-side: the item list on the left, the selected item's detail
@@ -66,7 +95,7 @@
 .longDescColumn {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
   min-width: 0;
 }
 
@@ -121,31 +150,47 @@
 }
 
 /* Compact blocks -- about half the size of the first draft, so more of
-   the workspace's items are visible without scrolling. */
+   the workspace's items are visible without scrolling. The colored strip
+   on the left (set inline from the item's own `color`) and the small icon
+   mirror the relationship canvas's node styling, so the same block reads
+   the same way in both places. */
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   gap: 6px;
 }
 
+.blockWrapper {
+  position: relative;
+}
+
 .block,
 .blockActive {
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding: 4px 6px;
+  padding: 4px 6px 4px 8px;
   border: 1px solid var(--color-border);
+  border-left: 3px solid transparent;
   border-radius: var(--radius-sm);
   background: var(--color-bg);
   text-align: left;
   font-size: 11px;
-  min-height: 32px;
+  min-height: 36px;
   cursor: pointer;
 }
 
 .blockActive {
   border-color: var(--color-primary);
+  border-left-color: var(--color-primary);
   background: color-mix(in srgb, var(--color-primary) 8%, var(--color-bg));
+}
+
+.blockNameRow {
+  display: flex;
+  align-items: center;
+  gap: 3px;
 }
 
 .blockName {
@@ -163,6 +208,38 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.blockQuickActions {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: flex;
+  gap: 1px;
+}
+
+.blockQuickAction,
+.blockQuickActionOn {
+  width: 15px;
+  height: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  opacity: 0.5;
+}
+
+.blockQuickAction:hover {
+  opacity: 1;
+}
+
+.blockQuickActionOn {
+  opacity: 1;
+  color: #d9a441;
 }
 
 .addCustomBlock {
@@ -206,6 +283,22 @@
   gap: var(--space-2);
 }
 
+.headToggle,
+.headToggleOn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.headToggleOn {
+  color: #d9a441;
+}
+
 .deleteCustomButton {
   margin-left: auto;
   display: inline-flex;
@@ -220,8 +313,8 @@
 
 .breadcrumb {
   color: var(--color-text-muted);
-  font-size: 12px;
-  margin: 2px 0 var(--space-3);
+  font-size: 11px;
+  margin: 0 0 var(--space-2);
 }
 
 .relType,
@@ -240,31 +333,93 @@
   color: var(--color-bg);
 }
 
+/* Compact field primitives -- deliberately NOT reusing Form.module.css's
+   .field (its margin-bottom stacks with a flex gap here, which was a real
+   chunk of the wasted vertical space reported live) for the fields that
+   need to be tight: the four role fields, criticidad/estado, apariencia. */
+.compactField {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.compactLabel {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.compactLabel[title] {
+  cursor: help;
+  border-bottom: 1px dotted var(--color-text-muted);
+  width: fit-content;
+}
+
+.compactField select {
+  padding: 5px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.roleGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2) var(--space-3);
+}
+
 .fieldRow {
   display: flex;
   gap: var(--space-3);
-  flex-wrap: wrap;
 }
 
 .fieldRow > * {
   flex: 1;
-  min-width: 160px;
+  min-width: 0;
 }
 
-.colorRow {
+.appearanceWrap {
+  position: relative;
+}
+
+.appearancePreview {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-}
-
-.colorRow input[type="color"] {
-  width: 40px;
-  height: 32px;
-  padding: 2px;
+  gap: 5px;
+  width: 100%;
+  padding: 4px 8px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-bg);
   cursor: pointer;
+  font-size: 12px;
+  color: var(--color-text);
+}
+
+.appearanceSwatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.appearancePopover {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 240px;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
 .iconGrid {
@@ -275,8 +430,8 @@
 
 .iconOption,
 .iconActive {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -291,6 +446,32 @@
   border-color: var(--color-primary);
   background: color-mix(in srgb, var(--color-primary) 12%, var(--color-bg));
   color: var(--color-primary);
+}
+
+.colorPickRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.colorPickRow input[type="color"] {
+  width: 32px;
+  height: 26px;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  cursor: pointer;
+}
+
+.recentSwatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  padding: 0;
 }
 
 .diagramWrap {

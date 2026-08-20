@@ -1,0 +1,101 @@
+.content {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.content h3 {
+  font-size: 15px;
+  margin: var(--space-5) 0 var(--space-2);
+}
+
+.content h3:first-child {
+  margin-top: 0;
+}
+
+.content h4 {
+  font-size: 13px;
+  margin: var(--space-3) 0 var(--space-1);
+}
+
+.roleList {
+  margin: 0 0 var(--space-3);
+  padding-left: 1.2em;
+}
+
+.roleList li {
+  margin-bottom: 4px;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  margin-bottom: var(--space-3);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.table th,
+.table td {
+  border: 1px solid var(--color-border);
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.table th {
+  background: var(--color-bg-soft);
+  font-weight: 600;
+}
+
+.table td:not(:first-child),
+.table th:not(:first-child) {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.example {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.exampleIntro {
+  color: var(--color-text-muted);
+  margin: 0 0 var(--space-2);
+}
+
+.roleBlock {
+  margin-bottom: var(--space-2);
+}
+
+.roleBlock strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.roleBlock ul {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+.legend {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin: 0 0 var(--space-3);
+}
+
+.legend div {
+  margin-bottom: 2px;
+}
+
+.mnemonic {
+  font-weight: 600;
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--color-primary);
+  background: var(--color-bg-soft);
+  border-radius: var(--radius-sm);
+}

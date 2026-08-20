@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from webapp import users_db
+from webapp import fabric_catalog, users_db
 from webapp.tests.conftest import make_user
 
 from api.routers import fabric_catalog as fabric_catalog_router
@@ -9,7 +9,10 @@ from api.routers import fabric_catalog as fabric_catalog_router
 _EMPTY_PAYLOAD = {
     "short_description": "",
     "long_description_markdown": "",
-    "owners": [],
+    "data_owner": [],
+    "data_steward": [],
+    "data_custodian": [],
+    "data_consumer": [],
     "criticality": "",
     "status": "",
     "tags": [],
@@ -37,6 +40,11 @@ class _FakeFabricClient:
 
 def _use_fake_fabric_client(monkeypatch):
     monkeypatch.setattr(fabric_catalog_router, "_client", lambda: _FakeFabricClient())
+    # Isolate from the project's real tables.yaml/hubspot_tables.yaml so
+    # item-count/item-id assertions here stay about the two Fabric items
+    # this fake client returns, not whatever's really configured.
+    monkeypatch.setattr(fabric_catalog.table_configs, "list_bc_tables_full", lambda: [])
+    monkeypatch.setattr(fabric_catalog.table_configs, "list_hubspot_tables_full", lambda: [])
 
 
 def test_reader_cannot_list_catalog_items(isolated_state, client, monkeypatch):
@@ -61,11 +69,30 @@ def test_operator_can_list_catalog_items(isolated_state, client, monkeypatch):
     items = resp.json()["items"]
     assert {i["item_id"] for i in items} == {"nb-1", "pl-1"}
     notebook = next(i for i in items if i["item_id"] == "nb-1")
-    assert notebook["folder_path"] == ["ETLs Medallion", "silver"]
+    assert notebook["folder_path"] == ["Fabric", "ETLs Medallion", "silver"]
     assert notebook["short_description"] == ""
-    assert notebook["owners"] == []
+    assert notebook["data_owner"] == []
     assert notebook["tags"] == []
     assert notebook["reviewed_by"] == ""
+
+
+def test_list_catalog_items_includes_bc_and_hubspot_tables(isolated_state, client, monkeypatch):
+    monkeypatch.setattr(fabric_catalog_router, "_client", lambda: _FakeFabricClient())
+    monkeypatch.setattr(
+        fabric_catalog.table_configs, "list_bc_tables_full", lambda: [{"name": "bc_customer"}]
+    )
+    monkeypatch.setattr(
+        fabric_catalog.table_configs, "list_hubspot_tables_full", lambda: [{"name": "hubspot_contacts"}]
+    )
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    items = client.get("/fabric-catalog/items").json()["items"]
+    assert {i["item_id"] for i in items} == {"nb-1", "pl-1", "bc:bc_customer", "hubspot:hubspot_contacts"}
+    bc_item = next(i for i in items if i["item_id"] == "bc:bc_customer")
+    assert bc_item["folder_path"] == ["Business Central"]
+    hs_item = next(i for i in items if i["item_id"] == "hubspot:hubspot_contacts")
+    assert hs_item["folder_path"] == ["HubSpot"]
 
 
 def test_reader_cannot_update_catalog_item(isolated_state, client, monkeypatch):
@@ -88,7 +115,8 @@ def test_operator_can_update_catalog_item(isolated_state, client, monkeypatch):
             **_EMPTY_PAYLOAD,
             "short_description": "Facturas consolidadas desde bronze",
             "long_description_markdown": "# Facturas\nConsolidado **diario**.",
-            "owners": ["jose"],
+            "data_owner": ["jose"],
+            "data_steward": ["ana"],
             "criticality": "alta",
             "status": "activo",
             "tags": ["finanzas"],
@@ -99,7 +127,8 @@ def test_operator_can_update_catalog_item(isolated_state, client, monkeypatch):
     body = resp.json()
     assert body["short_description"] == "Facturas consolidadas desde bronze"
     assert body["long_description_markdown"] == "# Facturas\nConsolidado **diario**."
-    assert body["owners"] == ["jose"]
+    assert body["data_owner"] == ["jose"]
+    assert body["data_steward"] == ["ana"]
     assert body["criticality"] == "alta"
     assert body["status"] == "activo"
     assert body["tags"] == ["finanzas"]
@@ -290,4 +319,32 @@ def test_reader_cannot_add_a_relationship(isolated_state, client, monkeypatch):
     _login(client, "reader1", "ReaderPass2026!")
 
     resp = client.post("/fabric-catalog/items/pl-1/relationships", json={"type": "reads_from", "target_item_id": "nb-1"})
+    assert resp.status_code == 403
+
+
+def test_set_favorite_and_hidden_endpoints(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.put("/fabric-catalog/items/nb-1/favorite", json={"is_favorite": True})
+    assert resp.status_code == 200
+    assert resp.json() == {"is_favorite": True, "is_hidden": False}
+
+    resp = client.put("/fabric-catalog/items/nb-1/hidden", json={"is_hidden": True})
+    assert resp.status_code == 200
+    assert resp.json() == {"is_favorite": True, "is_hidden": True}
+
+    listed = client.get("/fabric-catalog/items").json()["items"]
+    notebook = next(i for i in listed if i["item_id"] == "nb-1")
+    assert notebook["is_favorite"] is True
+    assert notebook["is_hidden"] is True
+
+
+def test_reader_cannot_set_favorite(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+
+    resp = client.put("/fabric-catalog/items/nb-1/favorite", json={"is_favorite": True})
     assert resp.status_code == 403

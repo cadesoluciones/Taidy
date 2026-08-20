@@ -343,7 +343,7 @@ export function NavShell() {
                     <NavLink
                       key={item.to}
                       to={item.to}
-                      end={item.to === "/"}
+                      end
                       className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ""}`}
                     >
                       <item.icon size={16} aria-hidden="true" />

@@ -3,6 +3,9 @@ import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "./client";
 export type FabricRelationshipType = "reads_from" | "writes_to" | "triggered_by";
 export type FabricCriticality = "" | "baja" | "media" | "alta";
 export type FabricStatus = "" | "activo" | "en_desuso" | "deprecado";
+export type DataRoleField = "data_owner" | "data_steward" | "data_custodian" | "data_consumer";
+
+export const DATA_ROLE_FIELDS: DataRoleField[] = ["data_owner", "data_steward", "data_custodian", "data_consumer"];
 
 export interface FabricRelationship {
   type: FabricRelationshipType;
@@ -17,18 +20,21 @@ export interface FabricCanvasPosition {
 export interface FabricCatalogItem {
   item_id: string;
   name: string;
-  type: string; // Notebook | DataPipeline | Lakehouse | Warehouse | Report | ...
+  type: string; // Notebook | DataPipeline | Lakehouse | Warehouse | Report | Tabla | ...
   folder_path: string[];
   short_description: string;
   long_description_markdown: string;
-  owners: string[];
+  data_owner: string[];
+  data_steward: string[];
+  data_custodian: string[];
+  data_consumer: string[];
   criticality: FabricCriticality;
   status: FabricStatus;
   tags: string[];
   relationships: FabricRelationship[];
   reviewed_by: string;
   reviewed_at: string;
-  /** true for a manually-declared block with no live Fabric backing --
+  /** true for a manually-declared block with no live upstream backing --
    * see webapp/fabric_catalog.py's create_custom_item(). */
   is_custom: boolean;
   color: string; // hex, e.g. "#3b82f6", or "" for the default styling
@@ -36,12 +42,17 @@ export interface FabricCatalogItem {
   /** Positions of OTHER items as seen on THIS item's own relationship
    * canvas -- keyed by the other item's id, never shared across items. */
   canvas_positions: Record<string, FabricCanvasPosition>;
+  is_favorite: boolean;
+  is_hidden: boolean;
 }
 
 export interface FabricCatalogItemUpdate {
   short_description: string;
   long_description_markdown: string;
-  owners: string[];
+  data_owner: string[];
+  data_steward: string[];
+  data_custodian: string[];
+  data_consumer: string[];
   criticality: FabricCriticality;
   status: FabricStatus;
   tags: string[];
@@ -99,4 +110,14 @@ export function setFabricCanvasPositions(
   positions: Record<string, FabricCanvasPosition>,
 ): Promise<{ canvas_positions: Record<string, FabricCanvasPosition> }> {
   return apiPut(`/fabric-catalog/items/${encodeURIComponent(itemId)}/canvas-positions`, { positions });
+}
+
+type FlagsResult = Pick<FabricCatalogItem, "is_favorite" | "is_hidden">;
+
+export function setFabricFavorite(itemId: string, isFavorite: boolean): Promise<FlagsResult> {
+  return apiPut(`/fabric-catalog/items/${encodeURIComponent(itemId)}/favorite`, { is_favorite: isFavorite });
+}
+
+export function setFabricHidden(itemId: string, isHidden: boolean): Promise<FlagsResult> {
+  return apiPut(`/fabric-catalog/items/${encodeURIComponent(itemId)}/hidden`, { is_hidden: isHidden });
 }

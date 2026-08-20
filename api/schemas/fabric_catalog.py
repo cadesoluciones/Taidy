@@ -33,7 +33,10 @@ class FabricCatalogItemOut(BaseModel):
     folder_path: List[str]
     short_description: str = ""
     long_description_markdown: str = ""
-    owners: List[str] = []
+    data_owner: List[str] = []
+    data_steward: List[str] = []
+    data_custodian: List[str] = []
+    data_consumer: List[str] = []
     criticality: str = ""  # "" | "baja" | "media" | "alta"
     status: str = ""  # "" | "activo" | "en_desuso" | "deprecado"
     tags: List[str] = []
@@ -44,6 +47,8 @@ class FabricCatalogItemOut(BaseModel):
     color: str = ""
     icon: str = ""
     canvas_positions: Dict[str, PositionOut] = {}
+    is_favorite: bool = False
+    is_hidden: bool = False
 
 
 class FabricCatalogListOut(BaseModel):
@@ -53,7 +58,10 @@ class FabricCatalogListOut(BaseModel):
 class UpdateFabricCatalogItemRequest(BaseModel):
     short_description: str = ""
     long_description_markdown: str = ""
-    owners: List[str] = []
+    data_owner: List[str] = []
+    data_steward: List[str] = []
+    data_custodian: List[str] = []
+    data_consumer: List[str] = []
     criticality: str = ""
     status: str = ""
     tags: List[str] = []
@@ -70,7 +78,10 @@ class CreateCustomFabricItemRequest(BaseModel):
 class UpdateFabricCatalogItemOut(BaseModel):
     short_description: str
     long_description_markdown: str
-    owners: List[str]
+    data_owner: List[str]
+    data_steward: List[str]
+    data_custodian: List[str]
+    data_consumer: List[str]
     criticality: str
     status: str
     tags: List[str]
@@ -80,6 +91,8 @@ class UpdateFabricCatalogItemOut(BaseModel):
     color: str = ""
     icon: str = ""
     canvas_positions: Dict[str, PositionOut] = {}
+    is_favorite: bool = False
+    is_hidden: bool = False
 
 
 class AddRelationshipRequest(BaseModel):
@@ -93,3 +106,16 @@ class SetCanvasPositionsRequest(BaseModel):
 
 class CanvasPositionsOut(BaseModel):
     canvas_positions: Dict[str, PositionOut] = {}
+
+
+class SetFavoriteRequest(BaseModel):
+    is_favorite: bool
+
+
+class SetHiddenRequest(BaseModel):
+    is_hidden: bool
+
+
+class FlagOut(BaseModel):
+    is_favorite: bool
+    is_hidden: bool
