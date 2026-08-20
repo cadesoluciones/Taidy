@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { ChevronDown, Eye, EyeOff, Palette, Star, Trash2, X } from "lucide-react";
+import { Eye, EyeOff, Palette, Printer, Star, Trash2, X } from "lucide-react";
 
 import { ROLE_ADMIN, ROLE_OPERATOR } from "../api/auth";
 import { ApiError } from "../api/client";
@@ -27,7 +27,8 @@ import { renderMarkdown } from "../utils/markdown";
 import { FABRIC_ICON_OPTIONS, fabricIconFor } from "../utils/fabricIcons";
 import { DATA_ROLE_INFO } from "../utils/dataRoles";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { FabricRelationshipCanvas } from "./FabricRelationshipCanvas";
+import { FabricCatalogBrowser } from "./FabricCatalogBrowser";
+import { FabricRelationshipCanvas, RELATIONSHIP_LABELS } from "./FabricRelationshipCanvas";
 import { FreeTagInput } from "./FreeTagInput";
 import { Modal } from "./Modal";
 import styles from "./FabricCatalogManager.module.css";
@@ -37,12 +38,6 @@ const CRITICALITY_LABELS: Record<Exclude<FabricCriticality, "">, string> = {
   baja: "Baja",
   media: "Media",
   alta: "Alta",
-};
-
-const CRITICALITY_COLORS: Record<Exclude<FabricCriticality, "">, string> = {
-  baja: "#8a9a5b",
-  media: "#d9a441",
-  alta: "#c0392b",
 };
 
 const STATUS_LABELS: Record<Exclude<FabricStatus, "">, string> = {
@@ -58,10 +53,6 @@ const EMPTY_ROLE_DRAFTS: Record<DataRoleField, string[]> = {
   data_consumer: [],
 };
 
-function folderKey(path: string[]): string {
-  return path.length > 0 ? path.join(" / ") : "(raíz del workspace)";
-}
-
 function arraysEqual(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i]);
 }
@@ -74,10 +65,6 @@ export function FabricCatalogManager() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [showHidden, setShowHidden] = useState(false);
-  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
-  const hasAutoCollapsedRef = useRef(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const [shortDescriptionDraft, setShortDescriptionDraft] = useState("");
@@ -175,47 +162,6 @@ export function FabricCatalogManager() {
     );
   }, [selected, shortDescriptionDraft, longDescriptionDraft, criticalityDraft, statusDraft, colorDraft, iconDraft, tagsDraft, roleDrafts]);
 
-  const filteredItems = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return items.filter((item) => {
-      if (item.is_hidden && !showHidden) return false;
-      if (!q) return true;
-      return item.name.toLowerCase().includes(q) || item.type.toLowerCase().includes(q);
-    });
-  }, [items, search, showHidden]);
-
-  const grouped = useMemo(() => {
-    const map = new Map<string, FabricCatalogItem[]>();
-    for (const item of filteredItems) {
-      const key = folderKey(item.folder_path);
-      const bucket = map.get(key);
-      if (bucket) bucket.push(item);
-      else map.set(key, [item]);
-    }
-    const sorted = Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
-    const favorites = filteredItems.filter((i) => i.is_favorite);
-    return favorites.length > 0 ? ([["★ Favoritos", favorites], ...sorted] as [string, FabricCatalogItem[]][]) : sorted;
-  }, [filteredItems]);
-
-  // First load only: start every group collapsed so the sidebar opens
-  // short instead of dumping every item at once -- later toggles (by the
-  // user, or a group appearing/disappearing as favorites change) are left
-  // alone.
-  useEffect(() => {
-    if (hasAutoCollapsedRef.current || grouped.length === 0) return;
-    hasAutoCollapsedRef.current = true;
-    setCollapsedFolders(new Set(grouped.map(([key]) => key)));
-  }, [grouped]);
-
-  function toggleFolder(key: string) {
-    setCollapsedFolders((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }
-
   // Colors already assigned to some block, most-used first -- lets a new
   // pick reuse what's already out there instead of every block drifting to
   // its own one-off shade. Not "recently clicked": a color someone picked
@@ -228,16 +174,7 @@ export function FabricCatalogManager() {
     return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([color]) => color).slice(0, 8);
   }, [items]);
 
-  const relationshipCountByItem = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const item of items) {
-      counts.set(item.item_id, (counts.get(item.item_id) ?? 0) + item.relationships.length);
-      for (const rel of item.relationships) {
-        counts.set(rel.target_item_id, (counts.get(rel.target_item_id) ?? 0) + 1);
-      }
-    }
-    return counts;
-  }, [items]);
+  const itemsById = useMemo(() => new Map(items.map((i) => [i.item_id, i])), [items]);
 
   function applyItemPatch(itemId: string, patch: Partial<FabricCatalogItem>) {
     setItems((prev) => prev.map((i) => (i.item_id === itemId ? { ...i, ...patch } : i)));
@@ -364,143 +301,57 @@ export function FabricCatalogManager() {
   return (
     <div className={styles.wrapper}>
       <div className={styles.layout}>
-        <div className={styles.listColumn}>
-          <div className={styles.searchRow}>
-            <input
-              type="text"
-              placeholder="Buscar por nombre o tipo…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className={styles.search}
-            />
-            <button
-              type="button"
-              className={showHidden ? styles.showHiddenToggleActive : styles.showHiddenToggle}
-              onClick={() => setShowHidden((v) => !v)}
-              title={showHidden ? "Ocultar los elementos marcados como ocultos" : "Mostrar los elementos ocultos"}
-              aria-label="Mostrar/ocultar elementos ocultos"
-            >
-              {showHidden ? <Eye size={14} /> : <EyeOff size={14} />}
-            </button>
-          </div>
-
-          {actionError && <div className={formStyles.errorBanner}>{actionError}</div>}
-
-          {canEdit && (
-            <>
-              <button type="button" className={styles.addCustomBlock} onClick={() => setCustomFormOpen((v) => !v)}>
-                + Bloque personalizado
-              </button>
-              {customFormOpen && (
-                <div className={styles.customForm}>
-                  <input
-                    type="text"
-                    placeholder="Nombre"
-                    value={customName}
-                    onChange={(e) => setCustomName(e.target.value)}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Tipo (p. ej. Fuente externa)"
-                    value={customType}
-                    onChange={(e) => setCustomType(e.target.value)}
-                  />
-                  {customError && <div className={formStyles.errorBanner}>{customError}</div>}
-                  <div className={styles.customFormActions}>
-                    <button
-                      type="button"
-                      className={formStyles.submit}
-                      onClick={() => void handleCreateCustom()}
-                      disabled={isCreatingCustom || !customName.trim()}
-                    >
-                      {isCreatingCustom ? "Creando…" : "Crear"}
-                    </button>
-                    <button type="button" onClick={() => setCustomFormOpen(false)}>
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-
-          <div className={styles.groups}>
-            {grouped.map(([folder, folderItems]) => {
-              const collapsed = collapsedFolders.has(folder);
-              return (
-                <div key={folder} className={styles.folderGroup}>
-                  <button type="button" className={styles.folderHeader} onClick={() => toggleFolder(folder)}>
-                    <ChevronDown
-                      size={12}
-                      className={collapsed ? `${styles.folderChevron} ${styles.folderChevronCollapsed}` : styles.folderChevron}
+        <FabricCatalogBrowser
+          items={items}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          onToggleFavorite={(item) => void handleToggleFavorite(item)}
+          onToggleHidden={(item) => void handleToggleHidden(item)}
+          actionError={actionError}
+          headerExtra={
+            canEdit && (
+              <>
+                <button type="button" className={styles.addCustomBlock} onClick={() => setCustomFormOpen((v) => !v)}>
+                  + Bloque personalizado
+                </button>
+                {customFormOpen && (
+                  <div className={styles.customForm}>
+                    <input
+                      type="text"
+                      placeholder="Nombre"
+                      value={customName}
+                      onChange={(e) => setCustomName(e.target.value)}
                     />
-                    <span className={styles.folderLabel}>
-                      {folder} ({folderItems.length})
-                    </span>
-                  </button>
-                  {!collapsed && (
-                    <div className={styles.grid}>
-                      {folderItems.map((item) => {
-                        const relCount = relationshipCountByItem.get(item.item_id) ?? 0;
-                        const ItemIcon = item.icon ? fabricIconFor(item.icon) : null;
-                        return (
-                          <div key={item.item_id} className={styles.blockWrapper}>
-                            <button
-                              type="button"
-                              className={item.item_id === selectedId ? styles.blockActive : styles.block}
-                              style={item.color ? { borderLeftColor: item.color } : undefined}
-                              onClick={() => setSelectedId(item.item_id)}
-                            >
-                              <div className={styles.blockNameRow}>
-                                {item.criticality && (
-                                  <span
-                                    className={styles.criticalityDot}
-                                    style={{ background: CRITICALITY_COLORS[item.criticality] }}
-                                  />
-                                )}
-                                {ItemIcon && <ItemIcon size={10} style={item.color ? { color: item.color } : undefined} />}
-                                <strong className={styles.blockName}>{item.name}</strong>
-                              </div>
-                              <span className={styles.blockSubtitle}>
-                                {item.type}
-                                {relCount > 0 && ` · ${relCount}`}
-                              </span>
-                            </button>
-                            <div className={styles.blockQuickActions}>
-                              <button
-                                type="button"
-                                className={item.is_favorite ? styles.blockQuickActionOn : styles.blockQuickAction}
-                                onClick={() => void handleToggleFavorite(item)}
-                                title="Marcar como favorito"
-                                aria-label="Marcar como favorito"
-                              >
-                                <Star size={9} fill={item.is_favorite ? "currentColor" : "none"} />
-                              </button>
-                              <button
-                                type="button"
-                                className={item.is_hidden ? styles.blockQuickActionOn : styles.blockQuickAction}
-                                onClick={() => void handleToggleHidden(item)}
-                                title={item.is_hidden ? "Mostrar" : "Ocultar"}
-                                aria-label="Ocultar o mostrar"
-                              >
-                                {item.is_hidden ? <EyeOff size={9} /> : <Eye size={9} />}
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
+                    <input
+                      type="text"
+                      placeholder="Tipo (p. ej. Fuente externa)"
+                      value={customType}
+                      onChange={(e) => setCustomType(e.target.value)}
+                    />
+                    {customError && <div className={formStyles.errorBanner}>{customError}</div>}
+                    <div className={styles.customFormActions}>
+                      <button
+                        type="button"
+                        className={formStyles.submit}
+                        onClick={() => void handleCreateCustom()}
+                        disabled={isCreatingCustom || !customName.trim()}
+                      >
+                        {isCreatingCustom ? "Creando…" : "Crear"}
+                      </button>
+                      <button type="button" onClick={() => setCustomFormOpen(false)}>
+                        Cancelar
+                      </button>
                     </div>
-                  )}
-                </div>
-              );
-            })}
-            {grouped.length === 0 && <p className={formStyles.hint}>Sin resultados.</p>}
-          </div>
-        </div>
+                  </div>
+                )}
+              </>
+            )
+          }
+        />
 
         <div className={styles.detailColumn}>
           {selected && (
-            <div className={`${formStyles.card} ${styles.detailCard}`}>
+            <div className={`${formStyles.card} ${styles.detailCard} print-area`}>
               <div className={styles.detailHead}>
                 <strong>{selected.name}</strong>
                 <span className={styles.blockSubtitle}>{selected.type}</span>
@@ -508,14 +359,14 @@ export function FabricCatalogManager() {
                   <>
                     <button
                       type="button"
-                      className={selected.is_favorite ? styles.headToggleOn : styles.headToggle}
+                      className={`${selected.is_favorite ? styles.headToggleOn : styles.headToggle} no-print`}
                       onClick={() => void handleToggleFavorite(selected)}
                     >
                       <Star size={13} fill={selected.is_favorite ? "currentColor" : "none"} /> Favorito
                     </button>
                     <button
                       type="button"
-                      className={selected.is_hidden ? styles.headToggleOn : styles.headToggle}
+                      className={`${selected.is_hidden ? styles.headToggleOn : styles.headToggle} no-print`}
                       onClick={() => void handleToggleHidden(selected)}
                     >
                       {selected.is_hidden ? <EyeOff size={13} /> : <Eye size={13} />}
@@ -523,10 +374,13 @@ export function FabricCatalogManager() {
                     </button>
                   </>
                 )}
+                <button type="button" className={`${styles.headToggle} no-print`} onClick={() => window.print()}>
+                  <Printer size={13} /> Imprimir
+                </button>
                 {selected.is_custom && canEdit && (
                   <button
                     type="button"
-                    className={styles.deleteCustomButton}
+                    className={`${styles.deleteCustomButton} no-print`}
                     onClick={() => setConfirmDeleteCustomOpen(true)}
                   >
                     <Trash2 size={13} /> Eliminar bloque
@@ -537,7 +391,51 @@ export function FabricCatalogManager() {
                 <p className={styles.breadcrumb}>{selected.folder_path.join(" / ")}</p>
               )}
 
-              <div className={styles.fieldsGrid}>
+              <div className={`${styles.printOnlySummary} print-only`}>
+                {selected.short_description && <p>{selected.short_description}</p>}
+                <dl className={styles.printDl}>
+                  {DATA_ROLE_FIELDS.map((field) => (
+                    <div key={field}>
+                      <dt>{DATA_ROLE_INFO[field].label}</dt>
+                      <dd>{selected[field].length > 0 ? selected[field].join(", ") : "Sin asignar"}</dd>
+                    </div>
+                  ))}
+                  <div>
+                    <dt>Criticidad</dt>
+                    <dd>{selected.criticality ? CRITICALITY_LABELS[selected.criticality] : "Sin definir"}</dd>
+                  </div>
+                  <div>
+                    <dt>Estado</dt>
+                    <dd>{selected.status ? STATUS_LABELS[selected.status] : "Sin definir"}</dd>
+                  </div>
+                  <div>
+                    <dt>Etiquetas</dt>
+                    <dd>{selected.tags.length > 0 ? selected.tags.join(", ") : "Sin etiquetas"}</dd>
+                  </div>
+                </dl>
+                <h4>Descripción detallada</h4>
+                <div
+                  dangerouslySetInnerHTML={{
+                    __html: renderMarkdown(selected.long_description_markdown) || "<p><em>Vacío.</em></p>",
+                  }}
+                />
+                <h4>Relaciones</h4>
+                <ul>
+                  {selected.relationships.length === 0 && <li>Sin relaciones registradas.</li>}
+                  {selected.relationships.map((rel) => (
+                    <li key={`${rel.type}|${rel.target_item_id}`}>
+                      {RELATIONSHIP_LABELS[rel.type]} {itemsById.get(rel.target_item_id)?.name ?? rel.target_item_id}
+                    </li>
+                  ))}
+                </ul>
+                {selected.reviewed_at && (
+                  <p>
+                    Última revisión: {selected.reviewed_by} · {new Date(selected.reviewed_at).toLocaleString("es-ES")}
+                  </p>
+                )}
+              </div>
+
+              <div className={`${styles.fieldsGrid} no-print`}>
                 <div className={styles.generalColumn}>
                   <div className={formStyles.field}>
                     <label htmlFor="fc_short_description">Descripción breve</label>
@@ -627,7 +525,11 @@ export function FabricCatalogManager() {
                           onClick={() => setAppearanceOpen((v) => !v)}
                           disabled={!canEdit}
                         >
-                          {AppearanceIcon ? <AppearanceIcon size={14} /> : <Palette size={14} />}
+                          {AppearanceIcon ? (
+                            <AppearanceIcon size={14} color={colorDraft || undefined} />
+                          ) : (
+                            <Palette size={14} />
+                          )}
                           <span className={styles.appearanceSwatch} style={{ background: colorDraft || "transparent" }} />
                           Editar
                         </button>
@@ -713,14 +615,32 @@ export function FabricCatalogManager() {
                     <label htmlFor="fc_long_description" style={{ marginBottom: 0 }}>
                       Descripción detallada
                     </label>
-                    <button
-                      type="button"
-                      className={styles.relType}
-                      onClick={() => setLongDescriptionView((v) => (v === "editar" ? "vista previa" : "editar"))}
-                    >
-                      {longDescriptionView === "editar" ? "Ver vista previa" : "Volver a editar"}
-                    </button>
+                    <div className={styles.longDescActions}>
+                      <button
+                        type="button"
+                        className={styles.relType}
+                        onClick={() => setLongDescriptionView((v) => (v === "editar" ? "vista previa" : "editar"))}
+                      >
+                        {longDescriptionView === "editar" ? "Ver vista previa" : "Volver a editar"}
+                      </button>
+                      {canEdit && (
+                        <button
+                          type="button"
+                          className={formStyles.submit}
+                          onClick={() => void handleSave()}
+                          disabled={isSaving || !isDirty}
+                        >
+                          {isSaving ? "Guardando…" : "Guardar"}
+                        </button>
+                      )}
+                    </div>
                   </div>
+                  {(saveSuccess || saveError) && (
+                    <div>
+                      {saveSuccess && <div className={formStyles.successBanner}>{saveSuccess}</div>}
+                      {saveError && <div className={formStyles.errorBanner}>{saveError}</div>}
+                    </div>
+                  )}
                   {longDescriptionView === "editar" ? (
                     <textarea
                       id="fc_long_description"
@@ -742,24 +662,9 @@ export function FabricCatalogManager() {
               </div>
 
               {selected.reviewed_at && (
-                <p className={styles.reviewedHint}>
+                <p className={`${styles.reviewedHint} no-print`}>
                   Última revisión: {selected.reviewed_by} · {new Date(selected.reviewed_at).toLocaleString("es-ES")}
                 </p>
-              )}
-
-              {canEdit && (
-                <>
-                  {saveSuccess && <div className={formStyles.successBanner}>{saveSuccess}</div>}
-                  {saveError && <div className={formStyles.errorBanner}>{saveError}</div>}
-                  <button
-                    type="button"
-                    className={formStyles.submit}
-                    onClick={() => void handleSave()}
-                    disabled={isSaving || !isDirty}
-                  >
-                    {isSaving ? "Guardando…" : "Guardar"}
-                  </button>
-                </>
               )}
 
               <Modal

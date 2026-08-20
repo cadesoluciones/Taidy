@@ -1,0 +1,37 @@
+/* Printing a single "ficha" (e.g. the Fabric governance detail card) without
+   fighting the rest of the app's layout: hide everything under #root, then
+   reveal only the element marked .print-area (and its descendants), pulled
+   out of the page's normal flow so the space its now-hidden siblings would
+   have occupied doesn't leave a blank page. Anything inside a print-area
+   that's still screen-only chrome (buttons, editing widgets) opts back out
+   with .no-print. */
+@media print {
+  #root * {
+    visibility: hidden;
+  }
+
+  /* Needs to be at least as specific as "#root *" above (an ID selector)
+     for the override to actually win -- a bare ".print-area *" class
+     selector loses to it and everything stays hidden. */
+  #root .print-area,
+  #root .print-area * {
+    visibility: visible;
+  }
+
+  .print-area {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}
+
+@media not print {
+  .print-only {
+    display: none;
+  }
+}

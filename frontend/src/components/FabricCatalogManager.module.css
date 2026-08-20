@@ -283,6 +283,17 @@
   gap: var(--space-2);
 }
 
+.longDescActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.longDescActions button {
+  margin-top: 0;
+}
+
 .headToggle,
 .headToggleOn {
   display: inline-flex;
@@ -523,6 +534,32 @@
 .reviewedHint {
   font-size: 11px;
   color: var(--color-text-muted);
+}
+
+/* Only ever shown on the printed page (see src/styles/print.css's
+   .print-only toggle) -- a clean read-only summary of the fields that are
+   otherwise buried inside form controls (inputs/selects/textarea), which
+   print poorly or not at all when disabled. */
+.printOnlySummary h4 {
+  margin: var(--space-2) 0 4px;
+  font-size: 13px;
+}
+
+.printDl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2) var(--space-3);
+  margin: 0;
+}
+
+.printDl dt {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.printDl dd {
+  margin: 0;
+  font-size: 12px;
 }
 
 .criticalityDot {
