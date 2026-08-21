@@ -89,6 +89,7 @@ export function FabricCatalogManager() {
   const [canvasError, setCanvasError] = useState<string | null>(null);
 
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewItemId, setPreviewItemId] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewData, setPreviewData] = useState<FabricTablePreview | null>(null);
@@ -239,14 +240,16 @@ export function FabricCatalogManager() {
     }
   }
 
-  async function handlePreview() {
-    if (!selected) return;
+  async function handlePreview(itemId?: string) {
+    const targetId = itemId ?? selected?.item_id;
+    if (!targetId) return;
+    setPreviewItemId(targetId);
     setPreviewOpen(true);
     setPreviewLoading(true);
     setPreviewError(null);
     setPreviewData(null);
     try {
-      const result = await fetchFabricTablePreview(selected.item_id);
+      const result = await fetchFabricTablePreview(targetId);
       setPreviewData(result);
     } catch (err) {
       setPreviewError(err instanceof ApiError ? err.message : "No se pudo previsualizar la tabla.");
@@ -714,6 +717,7 @@ export function FabricCatalogManager() {
                       void handleCanvasRemoveRelationship(ownerId, type, targetId)
                     }
                     onPositionsChange={(positions) => void handleCanvasPositionsChange(positions)}
+                    onPreviewItem={(itemId) => void handlePreview(itemId)}
                     testId="fabric-catalog-relationship-modal-canvas"
                   />
                 )}
@@ -722,8 +726,9 @@ export function FabricCatalogManager() {
 
               <Modal
                 open={previewOpen}
+                size="large"
                 eyebrow="Gobernanza de datos"
-                title={`Vista previa de ${selected.name}`}
+                title={`Vista previa de ${items.find((i) => i.item_id === previewItemId)?.name ?? ""}`}
                 subtitle="SELECT TOP 10 * -- solo para ver la estructura, no es una exportación de datos."
                 onClose={() => setPreviewOpen(false)}
               >

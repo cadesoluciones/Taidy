@@ -14,10 +14,11 @@ import {
   type OnConnect,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Plus, X } from "lucide-react";
+import { Plus, Table2, X } from "lucide-react";
 
 import {
   BACKWARD_RELATIONSHIP_TYPES,
+  LAKEHOUSE_TABLE_ID_PREFIX,
   type FabricCatalogItem,
   type FabricCanvasPosition,
   type FabricRelationshipType,
@@ -41,6 +42,8 @@ type BlockNodeData = Record<string, unknown> & {
   isCenter: boolean;
   canRemove: boolean;
   onRemove?: (id: string) => void;
+  canPreview: boolean;
+  onPreview?: ((id: string) => void) | undefined;
 };
 type BlockFlowNode = Node<BlockNodeData, "block">;
 
@@ -73,6 +76,20 @@ function BlockNode({ id, data, selected }: NodeProps<BlockFlowNode>) {
         <span className={styles.nodeLabel}>{data.label}</span>
       </div>
       <div className={styles.nodeType}>{data.typeLabel}</div>
+      {data.canPreview && (
+        <button
+          type="button"
+          className={styles.previewButton}
+          aria-label="Vista previa de la tabla"
+          title="Vista previa de la tabla (SELECT TOP 10)"
+          onClick={(e) => {
+            e.stopPropagation();
+            data.onPreview?.(id);
+          }}
+        >
+          <Table2 size={11} />
+        </button>
+      )}
       <Handle type="source" position={Position.Bottom} className={styles.handle} />
     </div>
   );
@@ -264,6 +281,10 @@ interface FabricRelationshipCanvasProps {
   onAddRelationship?: (ownerId: string, type: FabricRelationshipType, targetId: string) => void;
   onRemoveRelationship?: (ownerId: string, type: FabricRelationshipType, targetId: string) => void;
   onPositionsChange?: (positions: Record<string, FabricCanvasPosition>) => void;
+  /** Shows a small preview button on any node backed by a Lakehouse table
+   * (see LAKEHOUSE_TABLE_ID_PREFIX) -- omitted entirely (no button on any
+   * node) where it isn't passed, e.g. the read-only impact-analysis graph. */
+  onPreviewItem?: (itemId: string) => void;
   testId?: string;
 }
 
@@ -278,6 +299,7 @@ export function FabricRelationshipCanvas({
   onAddRelationship,
   onRemoveRelationship,
   onPositionsChange,
+  onPreviewItem,
   testId,
 }: FabricRelationshipCanvasProps) {
   const [extraNodeIds, setExtraNodeIds] = useState<string[]>([]);
@@ -341,10 +363,12 @@ export function FabricRelationshipCanvas({
             isCenter,
             canRemove: interactive && !isCenter,
             onRemove: handleRemoveNode,
+            canPreview: !!onPreviewItem && !!found?.item_id.startsWith(LAKEHOUSE_TABLE_ID_PREFIX),
+            onPreview: onPreviewItem,
           },
         };
       }),
-    [depth, itemsById, centerId, canvasPositions, autoPositions, interactive, handleRemoveNode],
+    [depth, itemsById, centerId, canvasPositions, autoPositions, interactive, handleRemoveNode, onPreviewItem],
   );
 
   const edges: Edge[] = useMemo(
