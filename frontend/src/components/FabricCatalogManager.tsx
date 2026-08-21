@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { Eye, EyeOff, Palette, Printer, Star, Trash2, X } from "lucide-react";
+import { Eye, EyeOff, Palette, Printer, Star, Table2, Trash2, X } from "lucide-react";
 
 import { ROLE_ADMIN, ROLE_OPERATOR } from "../api/auth";
 import { ApiError } from "../api/client";
 import {
   DATA_ROLE_FIELDS,
+  LAKEHOUSE_TABLE_ID_PREFIX,
   addFabricRelationship,
   createCustomFabricItem,
   deleteCustomFabricItem,
   fetchFabricCatalog,
+  fetchFabricTablePreview,
   removeFabricRelationship,
   setFabricCanvasPositions,
   setFabricFavorite,
@@ -21,6 +23,7 @@ import {
   type FabricCriticality,
   type FabricRelationshipType,
   type FabricStatus,
+  type FabricTablePreview,
 } from "../api/fabricCatalog";
 import { useAuth } from "../auth/AuthContext";
 import { renderMarkdown } from "../utils/markdown";
@@ -85,6 +88,11 @@ export function FabricCatalogManager() {
   const [relationshipModalOpen, setRelationshipModalOpen] = useState(false);
   const [canvasError, setCanvasError] = useState<string | null>(null);
 
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewData, setPreviewData] = useState<FabricTablePreview | null>(null);
+
   const [customFormOpen, setCustomFormOpen] = useState(false);
   const [customName, setCustomName] = useState("");
   const [customType, setCustomType] = useState("");
@@ -143,6 +151,9 @@ export function FabricCatalogManager() {
     setCanvasError(null);
     setRelationshipModalOpen(false);
     setConfirmDeleteCustomOpen(false);
+    setPreviewOpen(false);
+    setPreviewError(null);
+    setPreviewData(null);
     // Only reset the draft when the SELECTED item changes, not on every
     // keystroke (selected is a fresh object each render via items.find()).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -225,6 +236,22 @@ export function FabricCatalogManager() {
       applyItemPatch(selected.item_id, { canvas_positions: positions });
     } catch (err) {
       setCanvasError(err instanceof ApiError ? err.message : "No se pudo guardar la posición.");
+    }
+  }
+
+  async function handlePreview() {
+    if (!selected) return;
+    setPreviewOpen(true);
+    setPreviewLoading(true);
+    setPreviewError(null);
+    setPreviewData(null);
+    try {
+      const result = await fetchFabricTablePreview(selected.item_id);
+      setPreviewData(result);
+    } catch (err) {
+      setPreviewError(err instanceof ApiError ? err.message : "No se pudo previsualizar la tabla.");
+    } finally {
+      setPreviewLoading(false);
     }
   }
 
@@ -375,6 +402,11 @@ export function FabricCatalogManager() {
                 <button type="button" className={`${styles.headToggle} no-print`} onClick={() => window.print()}>
                   <Printer size={13} /> Imprimir
                 </button>
+                {selected.item_id.startsWith(LAKEHOUSE_TABLE_ID_PREFIX) && (
+                  <button type="button" className={`${styles.headToggle} no-print`} onClick={() => void handlePreview()}>
+                    <Table2 size={13} /> Vista previa
+                  </button>
+                )}
                 {selected.is_custom && canEdit && (
                   <button
                     type="button"
@@ -686,6 +718,44 @@ export function FabricCatalogManager() {
                   />
                 )}
                 {canvasError && <div className={formStyles.errorBanner}>{canvasError}</div>}
+              </Modal>
+
+              <Modal
+                open={previewOpen}
+                eyebrow="Gobernanza de datos"
+                title={`Vista previa de ${selected.name}`}
+                subtitle="SELECT TOP 10 * -- solo para ver la estructura, no es una exportación de datos."
+                onClose={() => setPreviewOpen(false)}
+              >
+                {previewLoading && <p>Consultando la tabla…</p>}
+                {previewError && <div className={formStyles.errorBanner}>{previewError}</div>}
+                {previewData && (
+                  <div className={styles.previewTableWrap}>
+                    <table className={styles.previewTable}>
+                      <thead>
+                        <tr>
+                          {previewData.columns.map((col) => (
+                            <th key={col}>{col}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {previewData.rows.map((row, i) => (
+                          <tr key={i}>
+                            {row.map((value, j) => (
+                              <td key={j}>{value}</td>
+                            ))}
+                          </tr>
+                        ))}
+                        {previewData.rows.length === 0 && (
+                          <tr>
+                            <td colSpan={previewData.columns.length || 1}>La tabla no tiene filas.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </Modal>
             </div>
           )}

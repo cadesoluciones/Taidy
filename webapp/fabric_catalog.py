@@ -4,16 +4,16 @@ A documentation/context layer over the workspace's own structure -- NOT
 another way to run or manage anything already covered by src/fabric_pipelines
 (that's orchestration; this is pure annotation).
 
-Fabric/BC/HubSpot are the source of truth for *structure* (which
+Fabric/BC/HubSpot/Factorial are the source of truth for *structure* (which
 notebooks/pipelines/tables exist): Fabric's discovered live via
 FabricPipelineClient.list_items()/list_folders() (plus, per Lakehouse,
 list_lakehouse_tables() for its own bronze./gold. tables -- those aren't
-Fabric workspace items, so they don't show up in list_items()); BC/HubSpot
-come from the same static tables.yaml/hubspot_tables.yaml the extraction
-jobs already read. This module only stores the human-curated layer on top:
-descriptions, governance roles, and typed relationships between items,
-keyed by each item's stable id so a rename upstream doesn't orphan the
-metadata.
+Fabric workspace items, so they don't show up in list_items()); BC/HubSpot/
+Factorial come from the same static tables.yaml/hubspot_tables.yaml/
+factorial_tables.yaml the extraction jobs already read. This module only
+stores the human-curated layer on top: descriptions, governance roles, and
+typed relationships between items, keyed by each item's stable id so a
+rename upstream doesn't orphan the metadata.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from webapp import table_configs
 from webapp.state_dir import state_path
@@ -32,7 +32,7 @@ from webapp.state_dir import state_path
 _CATALOG_PATH = state_path("fabric_catalog.json", Path(__file__).resolve().parent)
 _LOCK = threading.Lock()
 
-RELATIONSHIP_TYPES = {"reads_from", "writes_to", "triggered_by"}
+RELATIONSHIP_TYPES = {"reads_from", "writes_to", "triggered_by", "generates", "updates"}
 CRITICALITY_LEVELS = {"baja", "media", "alta"}
 STATUS_VALUES = {"activo", "en_desuso", "deprecado"}
 
@@ -75,8 +75,10 @@ CUSTOM_FOLDER_PATH = ["Personalizados"]
 # table's own stable `name`), not a random uuid like a custom item's.
 BC_ID_PREFIX = "bc:"
 HUBSPOT_ID_PREFIX = "hubspot:"
+FACTORIAL_ID_PREFIX = "factorial:"
 BC_FOLDER_PATH = ["Business Central"]
 HUBSPOT_FOLDER_PATH = ["HubSpot"]
+FACTORIAL_FOLDER_PATH = ["Factorial"]
 FABRIC_FOLDER_LABEL = "Fabric"
 
 # A Lakehouse's own tables (bronze.*, gold.*, ... -- discovered live via its
@@ -432,16 +434,16 @@ def _shape_item(item_id: str, name: str, type_: str, folder_path: List[str], met
 
 
 def list_catalog_items(client: Any) -> List[dict]:
-    """Merges five sources into one flat list, each item shaped identically:
+    """Merges six sources into one flat list, each item shaped identically:
     live Fabric items+folders (nested one level under "Fabric" so it reads
     as its own system alongside the others), each Lakehouse's own tables
     (nested one level further under the Lakehouse's own name, discovered
     live via its SQL analytics endpoint -- there's no Fabric workspace item
-    per table), the static BC/HubSpot table configs (flat, one level under
-    "Business Central"/"HubSpot"), and any custom items (under
-    "Personalizados") -- all merged with locally-stored governance
-    metadata. `client` is a FabricPipelineClient (passed in rather than
-    constructed here so tests can inject a fake)."""
+    per table), the static BC/HubSpot/Factorial table configs (flat, one
+    level under "Business Central"/"HubSpot"/"Factorial"), and any custom
+    items (under "Personalizados") -- all merged with locally-stored
+    governance metadata. `client` is a FabricPipelineClient (passed in
+    rather than constructed here so tests can inject a fake)."""
     fabric_items = client.list_items()
     folders = client.list_folders()
     folders_by_id = {f["id"]: f for f in folders}
@@ -474,9 +476,45 @@ def list_catalog_items(client: Any) -> List[dict]:
         meta = {**_EMPTY_ENTRY, **metadata.get(item_id, {})}
         result.append(_shape_item(item_id, table.get("name", ""), "Tabla", HUBSPOT_FOLDER_PATH, meta, is_custom=False))
 
+    for table in table_configs.list_factorial_tables_full():
+        item_id = f"{FACTORIAL_ID_PREFIX}{table.get('name', '')}"
+        meta = {**_EMPTY_ENTRY, **metadata.get(item_id, {})}
+        result.append(_shape_item(item_id, table.get("name", ""), "Tabla", FACTORIAL_FOLDER_PATH, meta, is_custom=False))
+
     for item_id, raw_meta in metadata.items():
         if not raw_meta.get("is_custom"):
             continue
         meta = {**_EMPTY_ENTRY, **raw_meta}
         result.append(_shape_item(item_id, meta["name"], meta["type"], CUSTOM_FOLDER_PATH, meta, is_custom=True))
     return result
+
+
+def parse_lakehouse_table_id(item_id: str) -> Optional[Tuple[str, str, str]]:
+    """Splits "lakehouse-table:{lakehouseId}:{schema}.{table}" back into
+    (lakehouse_id, schema, table), or None if item_id isn't one of these
+    (the only kind of catalog item a structure preview makes sense for --
+    everything else is a REST-discovered Fabric item, a static BC/HubSpot/
+    Factorial table, or a custom item, none of which are SQL-queryable)."""
+    if not item_id.startswith(LAKEHOUSE_TABLE_ID_PREFIX):
+        return None
+    rest = item_id[len(LAKEHOUSE_TABLE_ID_PREFIX) :]
+    lakehouse_id, _, table_name = rest.partition(":")
+    schema, _, table = table_name.partition(".")
+    if not lakehouse_id or not schema or not table:
+        return None
+    return lakehouse_id, schema, table
+
+
+def preview_lakehouse_table(client: Any, item_id: str, *, limit: int = 10) -> Dict[str, Any]:
+    """Runs a `SELECT TOP {limit} *` against the real table a
+    "lakehouse-table:..." catalog item stands for -- just enough to see its
+    actual columns and a few sample rows. `client` is a FabricPipelineClient
+    (passed in rather than constructed here so tests can inject a fake, same
+    as list_catalog_items())."""
+    parsed = parse_lakehouse_table_id(item_id)
+    if parsed is None:
+        raise ValueError(f"'{item_id}' no es una tabla de Lakehouse previsualizable.")
+    lakehouse_id, schema, table = parsed
+    lakehouse_item = client.get_item(lakehouse_id)
+    display_name = lakehouse_item.get("displayName", "")
+    return client.preview_lakehouse_table(lakehouse_id, display_name, schema, table, limit=limit)

@@ -24,7 +24,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 import src.fabric_pipelines.api as api_module  # noqa: E402
-from src.fabric_pipelines.api import FabricPipelineClient  # noqa: E402
+from src.fabric_pipelines.api import FabricPipelineClient, FabricPipelineError  # noqa: E402
 from src.fabric_pipelines.config import Settings  # noqa: E402
 
 
@@ -155,3 +155,64 @@ def test_list_lakehouse_tables_returns_empty_on_a_pyodbc_connection_error(settin
     monkeypatch.setattr(api_module.pyodbc, "connect", raise_pyodbc_error)
 
     assert client.list_lakehouse_tables("lh-1", "Lakehouse") == []
+
+
+class _FakePreviewCursor:
+    def __init__(self, description, rows):
+        self.description = description
+        self._rows = rows
+        self.executed_sql = None
+
+    def execute(self, sql):
+        self.executed_sql = sql
+
+    def fetchall(self):
+        return self._rows
+
+
+def test_preview_lakehouse_table_returns_columns_and_stringified_rows(settings, monkeypatch):
+    """Preview is a on-demand, user-triggered action (unlike the catalog
+    listing's non-fatal-by-design list_lakehouse_tables) -- it should
+    surface a real value on success: exact column names, and every value
+    stringified (None -> "") since native pyodbc values (datetime, Decimal,
+    ...) aren't all JSON-serializable as-is and this is just for eyeballing
+    structure, not a data export."""
+    session = _ScriptedSession([_FakeResponse(200, _SUCCESSFUL_PROPERTIES)])
+    client = _client(settings, session)
+
+    description = [("id", None), ("name", None), ("amount", None)]
+    rows = [(1, "Alice", None), (2, "Bob", 42)]
+    fake_cursor = _FakePreviewCursor(description, rows)
+    fake_conn = types.SimpleNamespace(cursor=lambda: fake_cursor, close=lambda: None)
+    monkeypatch.setattr(api_module.pyodbc, "connect", lambda *a, **k: fake_conn)
+
+    result = client.preview_lakehouse_table("lh-1", "Lakehouse", "bronze", "bc_customer_list", limit=10)
+
+    assert result == {
+        "columns": ["id", "name", "amount"],
+        "rows": [["1", "Alice", ""], ["2", "Bob", "42"]],
+    }
+    assert "TOP 10" in fake_cursor.executed_sql
+    assert "[bronze].[bc_customer_list]" in fake_cursor.executed_sql
+
+
+def test_preview_lakehouse_table_rejects_an_invalid_identifier_without_connecting(settings, monkeypatch):
+    """schema/table are meant to come from this same client's own
+    list_lakehouse_tables(), but T-SQL has no parameter placeholder for
+    identifiers -- anything that isn't a plain [A-Za-z0-9_]+ name is
+    rejected before it ever reaches a query string."""
+    client = _client(settings, _ScriptedSession([]))
+    monkeypatch.setattr(api_module.pyodbc, "connect", lambda *a, **k: pytest.fail("should not connect"))
+
+    with pytest.raises(FabricPipelineError, match="válido"):
+        client.preview_lakehouse_table("lh-1", "Lakehouse", "bronze; DROP TABLE x", "bc_customer_list")
+
+
+def test_preview_lakehouse_table_raises_when_it_cannot_connect(settings, monkeypatch):
+    session = _ScriptedSession(
+        [_FakeResponse(200, {"properties": {"sqlEndpointProperties": {"provisioningStatus": "InProgress"}}})]
+    )
+    client = _client(settings, session)
+
+    with pytest.raises(FabricPipelineError, match="conectar"):
+        client.preview_lakehouse_table("lh-1", "Lakehouse", "bronze", "bc_customer_list")

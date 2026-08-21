@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import struct
 import time
 from typing import Any, Dict, List, Optional
@@ -39,6 +40,11 @@ _FABRIC_SCOPE = "https://api.fabric.microsoft.com/.default"
 # different token audience (SQL, not the Fabric REST API).
 _SQL_SCOPE = "https://database.windows.net/.default"
 _SQL_COPT_SS_ACCESS_TOKEN = 1256
+
+# T-SQL has no parameter placeholder for identifiers (only for values), so
+# a schema/table name headed into a raw SELECT is validated against this
+# instead of interpolated on trust -- see preview_lakehouse_table().
+_SQL_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9_]+$")
 
 # Terminal job statuses per the Fabric API; anything else means still running.
 TERMINAL_STATUSES = {"Completed", "Failed", "Cancelled", "Deduped"}
@@ -157,6 +163,17 @@ class FabricPipelineClient:
             params = {"continuationToken": token}
         return results
 
+    def get_item(self, item_id: str) -> Dict[str, Any]:
+        """A single item's own id/type/displayName/description/folderId --
+        cheaper than list_items() when only one item's basic metadata is
+        needed (e.g. a Lakehouse's displayName, needed as the SQL
+        connection's DATABASE= before previewing one of its tables)."""
+        url = f"{_FABRIC_API_BASE}/workspaces/{self._settings.workspace_id}/items/{item_id}"
+        response = self._request("GET", url, headers=self._headers())
+        if response.status_code != 200:
+            raise FabricPipelineError(f"No se pudo leer el elemento {item_id} (HTTP {response.status_code}): {response.text}")
+        return response.json()
+
     def list_folders(self) -> List[Dict[str, Any]]:
         """Every folder in the workspace (id/displayName/parentFolderId --
         root folders have no parentFolderId), paginated. Combined with
@@ -199,6 +216,47 @@ class FabricPipelineClient:
         token_bytes = token.encode("utf-16-le")
         return struct.pack("=i", len(token_bytes)) + token_bytes
 
+    def _connect_to_lakehouse_sql(self, item_id: str, display_name: str) -> Optional["pyodbc.Connection"]:
+        """Shared by list_lakehouse_tables() and preview_lakehouse_table():
+        looks up the Lakehouse's SQL analytics endpoint and opens an
+        AAD-token-authenticated connection to it. Returns None (never
+        raises) if the detail request fails, the endpoint isn't
+        provisioned, or the connection itself fails -- callers decide what
+        "no connection" means for them (empty list vs. an error to show)."""
+        url = f"{_FABRIC_API_BASE}/workspaces/{self._settings.workspace_id}/lakehouses/{item_id}"
+        try:
+            response = self._request("GET", url, headers=self._headers())
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            logger.warning("No se pudo contactar con Fabric para el Lakehouse %s: %s", item_id, exc)
+            return None
+        if response.status_code != 200:
+            logger.warning(
+                "No se pudieron leer las propiedades del Lakehouse %s (HTTP %s): %s",
+                item_id,
+                response.status_code,
+                response.text,
+            )
+            return None
+        properties = response.json().get("properties", {}) or {}
+        endpoint = properties.get("sqlEndpointProperties", {}) or {}
+        server = endpoint.get("connectionString", "")
+        if not server or endpoint.get("provisioningStatus") != "Success":
+            return None
+
+        conn_str = (
+            f"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={server};DATABASE={display_name};"
+            "Encrypt=yes;TrustServerCertificate=no"
+        )
+        try:
+            return pyodbc.connect(
+                conn_str,
+                attrs_before={_SQL_COPT_SS_ACCESS_TOKEN: self._sql_access_token_struct()},
+                timeout=15,
+            )
+        except pyodbc.Error as exc:
+            logger.warning("No se pudo conectar al endpoint SQL del Lakehouse %s (%s): %s", display_name, item_id, exc)
+            return None
+
     def list_lakehouse_tables(self, item_id: str, display_name: str) -> List[Dict[str, str]]:
         """Every table in a Lakehouse's SQL analytics endpoint, as
         [{"schema": ..., "table": ...}, ...] -- this is how bronze./gold.
@@ -208,45 +266,57 @@ class FabricPipelineClient:
         provisioned yet, or that this service principal can't reach, just
         contributes no tables instead of failing the whole catalog listing
         -- one unreachable Lakehouse shouldn't hide every other item."""
-        url = f"{_FABRIC_API_BASE}/workspaces/{self._settings.workspace_id}/lakehouses/{item_id}"
+        conn = self._connect_to_lakehouse_sql(item_id, display_name)
+        if conn is None:
+            return []
         try:
-            response = self._request("GET", url, headers=self._headers())
-            if response.status_code != 200:
-                logger.warning(
-                    "No se pudieron leer las propiedades del Lakehouse %s (HTTP %s): %s",
-                    item_id,
-                    response.status_code,
-                    response.text,
-                )
-                return []
-            properties = response.json().get("properties", {}) or {}
-            endpoint = properties.get("sqlEndpointProperties", {}) or {}
-            server = endpoint.get("connectionString", "")
-            if not server or endpoint.get("provisioningStatus") != "Success":
-                return []
-
-            conn_str = (
-                f"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={server};DATABASE={display_name};"
-                "Encrypt=yes;TrustServerCertificate=no"
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT s.name AS schema_name, t.name AS table_name "
+                "FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id "
+                "ORDER BY s.name, t.name"
             )
-            conn = pyodbc.connect(
-                conn_str,
-                attrs_before={_SQL_COPT_SS_ACCESS_TOKEN: self._sql_access_token_struct()},
-                timeout=15,
-            )
-            try:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT s.name AS schema_name, t.name AS table_name "
-                    "FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id "
-                    "ORDER BY s.name, t.name"
-                )
-                return [{"schema": row.schema_name, "table": row.table_name} for row in cursor.fetchall()]
-            finally:
-                conn.close()
-        except (requests.ConnectionError, requests.Timeout, pyodbc.Error) as exc:
+            return [{"schema": row.schema_name, "table": row.table_name} for row in cursor.fetchall()]
+        except pyodbc.Error as exc:
             logger.warning("No se pudieron leer las tablas del Lakehouse %s (%s): %s", display_name, item_id, exc)
             return []
+        finally:
+            conn.close()
+
+    def preview_lakehouse_table(
+        self, item_id: str, display_name: str, schema: str, table: str, *, limit: int = 10
+    ) -> Dict[str, Any]:
+        """`SELECT TOP {limit} * FROM [schema].[table]` against a Lakehouse's
+        SQL endpoint -- just enough to see a table's real column names and a
+        few sample rows, not a general query tool. schema/table come from
+        this same client's own list_lakehouse_tables() (via the catalog's
+        deterministic item id), but are still re-validated here as plain
+        identifiers before being interpolated into SQL: T-SQL has no
+        parameter placeholder for identifiers (only for values), so
+        anything reaching this point that isn't [A-Za-z0-9_]+ is rejected
+        rather than quoted-and-hoped-safe."""
+        if not _SQL_IDENTIFIER_RE.match(schema) or not _SQL_IDENTIFIER_RE.match(table):
+            raise FabricPipelineError(f"Nombre de esquema o tabla no válido: {schema}.{table}")
+
+        conn = self._connect_to_lakehouse_sql(item_id, display_name)
+        if conn is None:
+            raise FabricPipelineError(
+                f"No se pudo conectar al endpoint SQL del Lakehouse '{display_name}' para previsualizar la tabla."
+            )
+        try:
+            cursor = conn.cursor()
+            cursor.execute(f"SELECT TOP {int(limit)} * FROM [{schema}].[{table}]")
+            columns = [col[0] for col in cursor.description]
+            # Stringified rather than kept as native Python types: this is a
+            # human-facing structure preview, not a data export, and native
+            # pyodbc/T-SQL values (datetime, Decimal, bytes, ...) aren't all
+            # JSON-serializable as-is.
+            rows = [["" if v is None else str(v) for v in row] for row in cursor.fetchall()]
+            return {"columns": columns, "rows": rows}
+        except pyodbc.Error as exc:
+            raise FabricPipelineError(f"No se pudo consultar la tabla {schema}.{table}: {exc}")
+        finally:
+            conn.close()
 
     def get_definition(self, item_id: str) -> Dict[str, Any]:
         """Fetches a Data Pipeline item's definition (its activities and

@@ -1,6 +1,18 @@
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "./client";
 
-export type FabricRelationshipType = "reads_from" | "writes_to" | "triggered_by";
+export type FabricRelationshipType = "reads_from" | "writes_to" | "triggered_by" | "generates" | "updates";
+
+/** A relationship is always stored in the literal order it was drawn
+ * (owner = the block dragged FROM, target = the block dropped ON) -- these
+ * are the types whose own wording runs the OTHER way regardless: "Se
+ * lanza tras" ("launched after") describes the owner as coming after the
+ * target, so the target is what actually triggers it and is upstream, not
+ * the owner. Every other type reads at face value from the owner's
+ * perspective (owner writes/generates/updates/is-read-at the target), so
+ * the owner is upstream for those. Shared between the relationship-editor
+ * canvas and the impact-analysis graph so the two can never disagree
+ * about which end of a relationship is upstream.*/
+export const BACKWARD_RELATIONSHIP_TYPES: ReadonlySet<FabricRelationshipType> = new Set(["triggered_by"]);
 export type FabricCriticality = "" | "baja" | "media" | "alta";
 export type FabricStatus = "" | "activo" | "en_desuso" | "deprecado";
 export type DataRoleField = "data_owner" | "data_steward" | "data_custodian" | "data_consumer";
@@ -120,4 +132,20 @@ export function setFabricFavorite(itemId: string, isFavorite: boolean): Promise<
 
 export function setFabricHidden(itemId: string, isHidden: boolean): Promise<FlagsResult> {
   return apiPut(`/fabric-catalog/items/${encodeURIComponent(itemId)}/hidden`, { is_hidden: isHidden });
+}
+
+/** Same id prefix webapp/fabric_catalog.py builds for a Lakehouse's own
+ * tables (see LAKEHOUSE_TABLE_ID_PREFIX there) -- only these are backed by
+ * a real SQL-queryable table, so only they get a structure-preview button. */
+export const LAKEHOUSE_TABLE_ID_PREFIX = "lakehouse-table:";
+
+export interface FabricTablePreview {
+  columns: string[];
+  rows: string[][];
+}
+
+/** `SELECT TOP 10 *` against the real table a "lakehouse-table:..." item
+ * stands for -- just to see its columns and a few sample rows. */
+export function fetchFabricTablePreview(itemId: string): Promise<FabricTablePreview> {
+  return apiGet(`/fabric-catalog/items/${encodeURIComponent(itemId)}/preview`);
 }

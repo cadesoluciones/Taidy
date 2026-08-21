@@ -34,6 +34,7 @@ from ..schemas.fabric_catalog import (
     SetCanvasPositionsRequest,
     SetFavoriteRequest,
     SetHiddenRequest,
+    TablePreviewOut,
     UpdateFabricCatalogItemOut,
     UpdateFabricCatalogItemRequest,
 )
@@ -164,3 +165,19 @@ def set_favorite(item_id: str, payload: SetFavoriteRequest) -> FlagOut:
 def set_hidden(item_id: str, payload: SetHiddenRequest) -> FlagOut:
     entry = fabric_catalog.set_hidden(item_id, payload.is_hidden)
     return FlagOut(is_favorite=entry["is_favorite"], is_hidden=entry["is_hidden"])
+
+
+@router.get("/items/{item_id}/preview", response_model=TablePreviewOut)
+def preview_table(item_id: str) -> TablePreviewOut:
+    """`SELECT TOP 10 *` against the real Lakehouse table a
+    "lakehouse-table:..." catalog item stands for -- just to see its
+    columns and a few sample rows, not a general query tool. 400 for any
+    item this doesn't apply to (only Lakehouse tables are SQL-queryable);
+    502 if Fabric/the SQL endpoint can't actually be reached right now."""
+    try:
+        result = fabric_catalog.preview_lakehouse_table(_client(), item_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except FabricPipelineError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    return TablePreviewOut(**result)

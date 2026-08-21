@@ -118,6 +118,18 @@
   gap: var(--space-1);
 }
 
+/* Nested sub-groups (a system's own subfolders) indented under their
+   top-level system group, with a thin rule to keep the nesting visible
+   even when collapsed states make the vertical rhythm irregular. */
+.subGroups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-left: 10px;
+  margin-left: 4px;
+  border-left: 1px solid var(--color-border);
+}
+
 .folderHeader {
   display: flex;
   align-items: center;
@@ -560,6 +572,29 @@
 .printDl dd {
   margin: 0;
   font-size: 12px;
+}
+
+.previewTableWrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.previewTable {
+  border-collapse: collapse;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.previewTable th,
+.previewTable td {
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.previewTable th {
+  background: var(--color-bg-soft);
+  font-weight: 600;
 }
 
 .criticalityDot {

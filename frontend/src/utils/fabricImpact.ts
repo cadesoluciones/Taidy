@@ -1,11 +1,11 @@
-import type { FabricCatalogItem } from "../api/fabricCatalog";
+import { BACKWARD_RELATIONSHIP_TYPES, type FabricCatalogItem } from "../api/fabricCatalog";
 
 /** Directed producer -> consumer adjacency over the WHOLE catalog, used for
  * impact analysis (what does this depend on / what would a change to it
  * affect). A relationship always points from whoever produces/triggers to
  * whoever consumes/is triggered, regardless of which of the two items
- * declared it: "writes_to" is declared forward (owner -> target);
- * "reads_from" and "triggered_by" are declared backward (target -> owner). */
+ * declared it -- see BACKWARD_RELATIONSHIP_TYPES for which types (just
+ * "triggered_by") point from target to owner instead of owner to target. */
 export function buildImpactGraph(items: FabricCatalogItem[]): {
   forward: Map<string, Set<string>>;
   backward: Map<string, Set<string>>;
@@ -20,8 +20,8 @@ export function buildImpactGraph(items: FabricCatalogItem[]): {
   }
   for (const item of items) {
     for (const rel of item.relationships) {
-      if (rel.type === "writes_to") addEdge(item.item_id, rel.target_item_id);
-      else addEdge(rel.target_item_id, item.item_id);
+      if (BACKWARD_RELATIONSHIP_TYPES.has(rel.type)) addEdge(rel.target_item_id, item.item_id);
+      else addEdge(item.item_id, rel.target_item_id);
     }
   }
   return { forward, backward };

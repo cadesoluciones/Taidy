@@ -37,14 +37,22 @@ class _FakeFabricClient:
             {"id": "f-silver", "displayName": "silver", "parentFolderId": "f-root"},
         ]
 
+    def get_item(self, item_id):
+        return {"id": "lh-1", "type": "Lakehouse", "displayName": "Lakehouse"}
+
+    def preview_lakehouse_table(self, item_id, display_name, schema, table, limit=10):
+        return {"columns": ["id", "name"], "rows": [["1", "Alice"], ["2", "Bob"]]}
+
 
 def _use_fake_fabric_client(monkeypatch):
     monkeypatch.setattr(fabric_catalog_router, "_client", lambda: _FakeFabricClient())
-    # Isolate from the project's real tables.yaml/hubspot_tables.yaml so
-    # item-count/item-id assertions here stay about the two Fabric items
-    # this fake client returns, not whatever's really configured.
+    # Isolate from the project's real tables.yaml/hubspot_tables.yaml/
+    # factorial_tables.yaml so item-count/item-id assertions here stay
+    # about the two Fabric items this fake client returns, not whatever's
+    # really configured.
     monkeypatch.setattr(fabric_catalog.table_configs, "list_bc_tables_full", lambda: [])
     monkeypatch.setattr(fabric_catalog.table_configs, "list_hubspot_tables_full", lambda: [])
+    monkeypatch.setattr(fabric_catalog.table_configs, "list_factorial_tables_full", lambda: [])
 
 
 def test_reader_cannot_list_catalog_items(isolated_state, client, monkeypatch):
@@ -84,6 +92,7 @@ def test_list_catalog_items_includes_bc_and_hubspot_tables(isolated_state, clien
     monkeypatch.setattr(
         fabric_catalog.table_configs, "list_hubspot_tables_full", lambda: [{"name": "hubspot_contacts"}]
     )
+    monkeypatch.setattr(fabric_catalog.table_configs, "list_factorial_tables_full", lambda: [])
     make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
     _login(client, "operator1", "OperatorPass2026!")
 
@@ -93,6 +102,20 @@ def test_list_catalog_items_includes_bc_and_hubspot_tables(isolated_state, clien
     assert bc_item["folder_path"] == ["Business Central"]
     hs_item = next(i for i in items if i["item_id"] == "hubspot:hubspot_contacts")
     assert hs_item["folder_path"] == ["HubSpot"]
+
+
+def test_list_catalog_items_includes_factorial_tables(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    monkeypatch.setattr(
+        fabric_catalog.table_configs, "list_factorial_tables_full", lambda: [{"name": "employees"}]
+    )
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    items = client.get("/fabric-catalog/items").json()["items"]
+    assert {i["item_id"] for i in items} == {"nb-1", "pl-1", "factorial:employees"}
+    fa_item = next(i for i in items if i["item_id"] == "factorial:employees")
+    assert fa_item["folder_path"] == ["Factorial"]
 
 
 def test_reader_cannot_update_catalog_item(isolated_state, client, monkeypatch):
@@ -349,4 +372,32 @@ def test_reader_cannot_set_favorite(isolated_state, client, monkeypatch):
     _login(client, "reader1", "ReaderPass2026!")
 
     resp = client.put("/fabric-catalog/items/nb-1/favorite", json={"is_favorite": True})
+    assert resp.status_code == 403
+
+
+def test_operator_can_preview_a_lakehouse_table(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.get("/fabric-catalog/items/lakehouse-table:lh-1:bronze.bc_cuentas_contables/preview")
+    assert resp.status_code == 200
+    assert resp.json() == {"columns": ["id", "name"], "rows": [["1", "Alice"], ["2", "Bob"]]}
+
+
+def test_preview_rejects_a_non_lakehouse_table_item(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.get("/fabric-catalog/items/nb-1/preview")
+    assert resp.status_code == 400
+
+
+def test_reader_cannot_preview_a_table(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+
+    resp = client.get("/fabric-catalog/items/lakehouse-table:lh-1:bronze.bc_cuentas_contables/preview")
     assert resp.status_code == 403

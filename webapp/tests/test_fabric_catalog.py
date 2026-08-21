@@ -54,14 +54,26 @@ class _FakeFabricClient:
     def list_lakehouse_tables(self, item_id, display_name):
         return self._lakehouse_tables.get(item_id, [])
 
+    def get_item(self, item_id):
+        return next(i for i in self._items if i["id"] == item_id)
+
+    def preview_lakehouse_table(self, item_id, display_name, schema, table, limit=10):
+        return {
+            "columns": ["id", "name"],
+            "rows": [["1", "a"]],
+            "_called_with": (item_id, display_name, schema, table, limit),
+        }
+
 
 _EMPTY_CLIENT = _FakeFabricClient(items=[], folders=[])
 
 
 def _no_bc_or_hubspot_tables(monkeypatch):
     """Most tests only care about Fabric/custom items -- silence the
-    other two sources so list_catalog_items() output stays predictable
-    without every test needing to know about tables.yaml/hubspot_tables.yaml."""
+    other three sources so list_catalog_items() output stays predictable
+    without every test needing to know about
+    tables.yaml/hubspot_tables.yaml/factorial_tables.yaml."""
+    monkeypatch.setattr(fabric_catalog.table_configs, "list_factorial_tables_full", lambda: [])
     monkeypatch.setattr(fabric_catalog.table_configs, "list_bc_tables_full", lambda: [])
     monkeypatch.setattr(fabric_catalog.table_configs, "list_hubspot_tables_full", lambda: [])
 
@@ -106,6 +118,7 @@ def test_list_catalog_items_merges_live_structure_with_stored_metadata(isolated_
 
 
 def test_list_catalog_items_merges_bc_and_hubspot_static_tables(isolated_state, monkeypatch):
+    monkeypatch.setattr(fabric_catalog.table_configs, "list_factorial_tables_full", lambda: [])
     monkeypatch.setattr(
         fabric_catalog.table_configs,
         "list_bc_tables_full",
@@ -127,6 +140,38 @@ def test_list_catalog_items_merges_bc_and_hubspot_static_tables(isolated_state, 
     hs_item = next(i for i in items if i["item_id"] == "hubspot:hubspot_contacts")
     assert hs_item["name"] == "hubspot_contacts"
     assert hs_item["folder_path"] == ["HubSpot"]
+
+
+def test_list_catalog_items_merges_factorial_static_tables(isolated_state, monkeypatch):
+    monkeypatch.setattr(fabric_catalog.table_configs, "list_bc_tables_full", lambda: [])
+    monkeypatch.setattr(fabric_catalog.table_configs, "list_hubspot_tables_full", lambda: [])
+    monkeypatch.setattr(
+        fabric_catalog.table_configs,
+        "list_factorial_tables_full",
+        lambda: [{"name": "employees", "description": "Empleados", "path": "/employees"}],
+    )
+    items = fabric_catalog.list_catalog_items(_EMPTY_CLIENT)
+    assert len(items) == 1
+
+    fa_item = next(i for i in items if i["item_id"] == "factorial:employees")
+    assert fa_item["name"] == "employees"
+    assert fa_item["type"] == "Tabla"
+    assert fa_item["folder_path"] == ["Factorial"]
+    assert fa_item["is_custom"] is False
+
+
+def test_list_catalog_items_factorial_table_keeps_its_saved_metadata(isolated_state, monkeypatch):
+    monkeypatch.setattr(fabric_catalog.table_configs, "list_bc_tables_full", lambda: [])
+    monkeypatch.setattr(fabric_catalog.table_configs, "list_hubspot_tables_full", lambda: [])
+    monkeypatch.setattr(
+        fabric_catalog.table_configs, "list_factorial_tables_full", lambda: [{"name": "employees"}]
+    )
+    _set("factorial:employees", short_description="Plantilla de la empresa", data_owner=["rrhh"])
+
+    items = fabric_catalog.list_catalog_items(_EMPTY_CLIENT)
+    fa_item = next(i for i in items if i["item_id"] == "factorial:employees")
+    assert fa_item["short_description"] == "Plantilla de la empresa"
+    assert fa_item["data_owner"] == ["rrhh"]
 
 
 def test_list_catalog_items_merges_lakehouse_tables_nested_under_the_lakehouse(isolated_state, monkeypatch):
@@ -184,6 +229,31 @@ def test_list_catalog_items_lakehouse_table_keeps_its_saved_metadata(isolated_st
     assert table["data_owner"] == ["ana"]
 
 
+def test_parse_lakehouse_table_id_round_trips():
+    parsed = fabric_catalog.parse_lakehouse_table_id("lakehouse-table:lh-1:bronze.bc_cuentas_contables")
+    assert parsed == ("lh-1", "bronze", "bc_cuentas_contables")
+
+
+@pytest.mark.parametrize("item_id", ["bc:bc_customer", "hubspot:hubspot_contacts", "custom:abc", "nb-1", ""])
+def test_parse_lakehouse_table_id_returns_none_for_anything_else(item_id):
+    assert fabric_catalog.parse_lakehouse_table_id(item_id) is None
+
+
+def test_preview_lakehouse_table_rejects_a_non_lakehouse_table_id(isolated_state):
+    with pytest.raises(ValueError, match="previsualizable"):
+        fabric_catalog.preview_lakehouse_table(_EMPTY_CLIENT, "bc:bc_customer")
+
+
+def test_preview_lakehouse_table_looks_up_the_lakehouses_display_name_and_delegates(isolated_state):
+    client = _FakeFabricClient(
+        items=[{"id": "lh-1", "type": "Lakehouse", "displayName": "Lakehouse"}],
+        folders=[],
+    )
+    result = fabric_catalog.preview_lakehouse_table(client, "lakehouse-table:lh-1:bronze.bc_cuentas_contables")
+    assert result["columns"] == ["id", "name"]
+    assert result["_called_with"] == ("lh-1", "Lakehouse", "bronze", "bc_cuentas_contables", 10)
+
+
 def test_list_catalog_items_bc_table_keeps_its_saved_metadata(isolated_state, monkeypatch):
     monkeypatch.setattr(
         fabric_catalog.table_configs,
@@ -191,6 +261,7 @@ def test_list_catalog_items_bc_table_keeps_its_saved_metadata(isolated_state, mo
         lambda: [{"name": "bc_customer"}],
     )
     monkeypatch.setattr(fabric_catalog.table_configs, "list_hubspot_tables_full", lambda: [])
+    monkeypatch.setattr(fabric_catalog.table_configs, "list_factorial_tables_full", lambda: [])
     _set("bc:bc_customer", short_description="Clientes de BC", data_steward=["ana"])
 
     items = fabric_catalog.list_catalog_items(_EMPTY_CLIENT)
@@ -379,6 +450,15 @@ def test_set_metadata_preserves_a_custom_items_identity(isolated_state):
     assert stored["name"] == "Excel de ventas"
     assert stored["type"] == "Fuente externa"
     assert stored["short_description"] == "Datos de ventas mensuales"
+
+
+def test_add_relationship_accepts_generates_and_updates(isolated_state):
+    entry = fabric_catalog.add_relationship("nb-1", "generates", "lh-gold", reviewed_by="admin1")
+    entry = fabric_catalog.add_relationship("nb-1", "updates", "lh-silver", reviewed_by="admin1")
+    assert entry["relationships"] == [
+        {"type": "generates", "target_item_id": "lh-gold"},
+        {"type": "updates", "target_item_id": "lh-silver"},
+    ]
 
 
 def test_set_metadata_rejects_an_unknown_relationship_type(isolated_state):

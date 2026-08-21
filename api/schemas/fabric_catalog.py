@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 
 class RelationshipIn(BaseModel):
-    type: str  # "reads_from" | "writes_to" | "triggered_by"
+    type: str  # "reads_from" | "writes_to" | "triggered_by" | "generates" | "updates"
     target_item_id: str
 
 
@@ -119,3 +119,8 @@ class SetHiddenRequest(BaseModel):
 class FlagOut(BaseModel):
     is_favorite: bool
     is_hidden: bool
+
+
+class TablePreviewOut(BaseModel):
+    columns: List[str]
+    rows: List[List[str]]
