@@ -37,6 +37,18 @@ def test_add_bc_table_then_list_round_trips():
     ]
 
 
+def test_write_never_creates_a_sibling_tmp_file(tmp_path):
+    """Regression guard: tables.yaml/hubspot_tables.yaml/factorial_tables.yaml
+    are each individually bind-mounted single files in production (see
+    docker-compose.yml) -- writing to a sibling .tmp file and renaming it
+    over the real target fails there with "OSError: [Errno 16] Device or
+    resource busy" (confirmed live). _write() must write straight into the
+    target path instead, never via a .tmp + rename dance."""
+    table_configs.add_bc_table("bc_new_table", "https://example/odata/NewTable")
+    assert not (tmp_path / "tables.tmp").exists()
+    assert (tmp_path / "tables.yaml").is_file()
+
+
 def test_add_bc_table_rejects_duplicate_name():
     table_configs.add_bc_table("bc_dup", "https://example/odata/A")
     with pytest.raises(ValueError, match="Ya existe"):

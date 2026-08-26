@@ -69,6 +69,22 @@ def test_admin_can_create_list_and_delete_mapping(isolated_state, client):
     assert client.get("/sync/mappings").json()["items"] == []
 
 
+def test_creating_a_mapping_never_creates_a_sibling_tmp_file(isolated_state, client, tmp_path):
+    """Regression guard: sync_mappings.yaml is an individually bind-mounted
+    single file in production (see docker-compose.yml) -- writing to a
+    sibling .tmp file and renaming it over the real target fails there with
+    "OSError: [Errno 16] Device or resource busy" (confirmed live, same bug
+    fixed for table_configs.py's tables.yaml/etc). _write() must write
+    straight into the target path instead."""
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    assert client.post("/sync/mappings", json=_payload()).status_code == 200
+
+    assert not (tmp_path / "sync_mappings.tmp").exists()
+    assert (tmp_path / "sync_mappings.yaml").is_file()
+
+
 def test_admin_can_update_mapping(isolated_state, client):
     make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
     _login(client, "admin2", "AdminPass2026!")

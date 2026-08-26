@@ -112,8 +112,12 @@ export function fetchBcTableFields(name: string): Promise<{ items: string[] }> {
   return apiGet<{ items: string[] }>(`/meta/bc-tables/${encodeURIComponent(name)}/fields`);
 }
 
-export function fetchBcAvailableTables(): Promise<{ items: AvailableProperty[] }> {
-  return apiGet<{ items: AvailableProperty[] }>("/meta/bc-tables/available-tables");
+export function fetchBcAvailableOdataTables(): Promise<{ items: AvailableProperty[] }> {
+  return apiGet<{ items: AvailableProperty[] }>("/meta/bc-tables/available-odata-tables");
+}
+
+export function fetchBcAvailableCustomApiTables(): Promise<{ items: AvailableProperty[] }> {
+  return apiGet<{ items: AvailableProperty[] }>("/meta/bc-tables/available-custom-api-tables");
 }
 
 export interface FactorialTableConfig {

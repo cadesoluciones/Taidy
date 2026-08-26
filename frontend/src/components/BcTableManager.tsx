@@ -3,7 +3,8 @@ import { Pencil, Plus, Trash2, X } from "lucide-react";
 import {
   createBcTable,
   deleteBcTable,
-  fetchBcAvailableTables,
+  fetchBcAvailableCustomApiTables,
+  fetchBcAvailableOdataTables,
   fetchBcTablesFull,
   updateBcTable,
   type BcTableConfig,
@@ -28,7 +29,8 @@ const EMPTY_FORM: BcForm = { name: "", url: "", description: "", incremental: fa
  * entity id, e.g. "APIabc" or "Proyecto/recursos" for a Custom APIs entry)
  * is NOT the value that fills the form -- that's "label" instead (the
  * full, ready-to-save URL, too long to be the picker's bold primary text).
- * See BusinessCentralClient.list_available_tables. */
+ * See BusinessCentralClient.list_available_odata_tables/
+ * list_available_custom_api_tables. */
 function suggestBcTableName(shortName: string): string {
   return `bc_${shortName.toLowerCase().replace(/\//g, "_")}`;
 }
@@ -51,6 +53,14 @@ export function BcTableManager() {
       return { input: { name: f.name.trim(), url: f.url, description: f.description, incremental: f.incremental } };
     },
   });
+
+  function pickTable(property: { name: string; label: string }) {
+    mgr.setForm((f) => ({
+      ...f,
+      url: property.label,
+      name: f.name.trim() ? f.name : suggestBcTableName(property.name),
+    }));
+  }
 
   return (
     <div className={styles.layout}>
@@ -99,21 +109,22 @@ export function BcTableManager() {
               value={mgr.form.url}
               onChange={(e) => mgr.setForm((f) => ({ ...f, url: e.target.value }))}
             />
-            <AvailablePropertiesPicker
-              buttonLabel="Ver tablas disponibles"
-              fetchProperties={() => fetchBcAvailableTables()}
-              onPick={(property) =>
-                mgr.setForm((f) => ({
-                  ...f,
-                  url: property.label,
-                  name: f.name.trim() ? f.name : suggestBcTableName(property.name),
-                }))
-              }
-            />
+            <div className={styles.pickerRow}>
+              <AvailablePropertiesPicker
+                buttonLabel="Ver tablas OData estándar"
+                fetchProperties={() => fetchBcAvailableOdataTables()}
+                onPick={pickTable}
+              />
+              <AvailablePropertiesPicker
+                buttonLabel="Ver tablas de Custom APIs"
+                fetchProperties={() => fetchBcAvailableCustomApiTables()}
+                onPick={pickTable}
+              />
+            </div>
             <p className={formStyles.hint}>
-              Incluye tanto el API OData estándar como los grupos de "Custom APIs" (api/publisher/grupo/versión) ya
-              usados por alguna tabla existente -- un grupo completamente nuevo aún necesita una primera tabla con la
-              URL escrita a mano antes de aparecer aquí.
+              "OData estándar" son las tablas tipo Company/APIxxxxx…; "Custom APIs" son los grupos
+              (api/publisher/grupo/versión, p. ej. Proyecto o CRM) ya usados por alguna tabla existente -- un grupo
+              completamente nuevo aún necesita una primera tabla con la URL escrita a mano antes de aparecer aquí.
             </p>
           </div>
           <div className={formStyles.field}>

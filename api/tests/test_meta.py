@@ -117,14 +117,14 @@ def test_create_bc_table_rejects_duplicate_name(isolated_state, client):
     assert resp.status_code == 400
 
 
-def test_operator_cannot_call_bc_available_tables(isolated_state, client):
+def test_operator_cannot_call_bc_available_odata_tables(isolated_state, client):
     make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
     _login(client, "operator1", "OperatorPass2026!")
-    resp = client.get("/meta/bc-tables/available-tables")
+    resp = client.get("/meta/bc-tables/available-odata-tables")
     assert resp.status_code == 403
 
 
-def test_admin_can_fetch_bc_available_tables(isolated_state, client, monkeypatch):
+def _patch_fake_bc_client(monkeypatch, *, odata_tables=None, custom_api_tables=None):
     import types
 
     from src.bc_client import api as bc_api
@@ -135,23 +135,55 @@ def test_admin_can_fetch_bc_available_tables(isolated_state, client, monkeypatch
         def __init__(self, *, settings, token_provider):
             pass
 
-        def list_available_tables(self):
-            return [{"name": "APIabc", "label": "https://example/odata/Company('X')/APIabc"}]
+        def list_available_odata_tables(self):
+            return odata_tables if odata_tables is not None else []
+
+        def list_available_custom_api_tables(self):
+            return custom_api_tables if custom_api_tables is not None else []
 
     fake_settings = types.SimpleNamespace(token_url="", client_id="", client_secret="", scope="")
     monkeypatch.setattr(bc_config, "load_settings", lambda: fake_settings)
     monkeypatch.setattr(bc_auth, "OAuthTokenProvider", lambda **kwargs: object())
     monkeypatch.setattr(bc_api, "BusinessCentralClient", _FakeClient)
 
+
+def test_admin_can_fetch_bc_available_odata_tables(isolated_state, client, monkeypatch):
+    _patch_fake_bc_client(
+        monkeypatch, odata_tables=[{"name": "APIabc", "label": "https://example/odata/Company('X')/APIabc"}]
+    )
+
     make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
     _login(client, "admin2", "AdminPass2026!")
-    resp = client.get("/meta/bc-tables/available-tables")
+    resp = client.get("/meta/bc-tables/available-odata-tables")
 
     assert resp.status_code == 200
     assert resp.json()["items"] == [{"name": "APIabc", "label": "https://example/odata/Company('X')/APIabc"}]
 
 
-def test_bc_available_tables_maps_client_error_to_400(isolated_state, client, monkeypatch):
+def test_admin_can_fetch_bc_available_custom_api_tables(isolated_state, client, monkeypatch):
+    _patch_fake_bc_client(
+        monkeypatch,
+        custom_api_tables=[{"name": "Proyecto/recursos", "label": "https://example/api/cade/Proyecto/v1.0/recursos"}],
+    )
+
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    resp = client.get("/meta/bc-tables/available-custom-api-tables")
+
+    assert resp.status_code == 200
+    assert resp.json()["items"] == [
+        {"name": "Proyecto/recursos", "label": "https://example/api/cade/Proyecto/v1.0/recursos"}
+    ]
+
+
+def test_operator_cannot_call_bc_available_custom_api_tables(isolated_state, client):
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+    resp = client.get("/meta/bc-tables/available-custom-api-tables")
+    assert resp.status_code == 403
+
+
+def test_bc_available_odata_tables_maps_client_error_to_400(isolated_state, client, monkeypatch):
     from src.bc_client import config as bc_config
 
     def fake_load_settings():
@@ -161,7 +193,7 @@ def test_bc_available_tables_maps_client_error_to_400(isolated_state, client, mo
 
     make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
     _login(client, "admin2", "AdminPass2026!")
-    resp = client.get("/meta/bc-tables/available-tables")
+    resp = client.get("/meta/bc-tables/available-odata-tables")
 
     assert resp.status_code == 400
 

@@ -100,34 +100,63 @@ def bc_table_fields(name: str) -> TableListOut:
     return TableListOut(items=table_configs.bc_table_fields(name))
 
 
-@router.get(
-    "/bc-tables/available-tables",
-    response_model=AvailablePropertiesOut,
-    dependencies=[Depends(require_role(ROLE_ADMIN))],
-)
-def bc_available_tables() -> AvailablePropertiesOut:
-    """Live discovery of every entity set Business Central's standard
-    OData v4 service exposes, to help pick a `url` when registering a new
-    table (see BusinessCentralClient.list_available_tables). Needs an
-    existing BC table to deduce the tenant/environment from -- same
-    constraint the extraction pipeline itself already has."""
-    from dotenv import load_dotenv
-
-    from src.bc_client.api import BusinessCentralClient, BusinessCentralError
+def _bc_client():
+    from src.bc_client.api import BusinessCentralClient
     from src.bc_client.auth import OAuthTokenProvider
     from src.bc_client.config import load_settings as load_bc_settings
 
+    settings = load_bc_settings()
+    provider = OAuthTokenProvider(
+        token_url=settings.token_url,
+        client_id=settings.client_id,
+        client_secret=settings.client_secret,
+        scope=settings.scope,
+    )
+    return BusinessCentralClient(settings=settings, token_provider=provider)
+
+
+@router.get(
+    "/bc-tables/available-odata-tables",
+    response_model=AvailablePropertiesOut,
+    dependencies=[Depends(require_role(ROLE_ADMIN))],
+)
+def bc_available_odata_tables() -> AvailablePropertiesOut:
+    """Live discovery of every entity set Business Central's standard
+    OData v4 service exposes, to help pick a `url` when registering a new
+    table (see BusinessCentralClient.list_available_odata_tables). Needs
+    an existing BC table using that mechanism to deduce the tenant/
+    environment from -- same constraint the extraction pipeline itself
+    already has."""
+    from dotenv import load_dotenv
+
+    from src.bc_client.api import BusinessCentralError
+
     load_dotenv()
     try:
-        settings = load_bc_settings()
-        provider = OAuthTokenProvider(
-            token_url=settings.token_url,
-            client_id=settings.client_id,
-            client_secret=settings.client_secret,
-            scope=settings.scope,
-        )
-        client = BusinessCentralClient(settings=settings, token_provider=provider)
-        tables = client.list_available_tables()
+        tables = _bc_client().list_available_odata_tables()
+    except (ValueError, BusinessCentralError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    return AvailablePropertiesOut(items=[AvailableProperty(**t) for t in tables])
+
+
+@router.get(
+    "/bc-tables/available-custom-api-tables",
+    response_model=AvailablePropertiesOut,
+    dependencies=[Depends(require_role(ROLE_ADMIN))],
+)
+def bc_available_custom_api_tables() -> AvailablePropertiesOut:
+    """Live discovery of every entity exposed by BC's "Custom APIs"
+    mechanism, for every publisher/group/version already used by at least
+    one currently-configured table (see
+    BusinessCentralClient.list_available_custom_api_tables)."""
+    from dotenv import load_dotenv
+
+    from src.bc_client.api import BusinessCentralError
+
+    load_dotenv()
+    try:
+        tables = _bc_client().list_available_custom_api_tables()
     except (ValueError, BusinessCentralError) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 

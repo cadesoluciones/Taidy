@@ -39,12 +39,17 @@ def _read() -> List[dict]:
 
 
 def _write(mappings: List[dict]) -> None:
-    tmp = _SYNC_MAPPINGS_PATH.with_suffix(".tmp")
-    tmp.write_text(
+    # Writes directly into the target path rather than write-to-tmp-then-
+    # rename: sync_mappings.yaml is an individually bind-mounted single
+    # file in production (see docker-compose.yml), and os.replace()/
+    # rename() onto a bind-mounted file's own path fails with "OSError:
+    # [Errno 16] Device or resource busy" (same bug confirmed live for
+    # table_configs.py's tables.yaml/etc -- fixed there and here the same
+    # way env_secrets.py already handles .env, bind-mounted identically).
+    _SYNC_MAPPINGS_PATH.write_text(
         yaml.dump({"mappings": mappings}, allow_unicode=True, sort_keys=False, default_flow_style=False),
         encoding="utf-8",
     )
-    tmp.replace(_SYNC_MAPPINGS_PATH)
 
 
 def list_mappings_full() -> List[dict]:

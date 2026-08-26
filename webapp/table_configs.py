@@ -41,12 +41,18 @@ def _read(path: Path) -> List[dict]:
 
 
 def _write(path: Path, tables: List[dict]) -> None:
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(
+    # Writes directly into `path` rather than write-to-tmp-then-rename:
+    # tables.yaml/hubspot_tables.yaml/factorial_tables.yaml are each
+    # individually bind-mounted single files in production (see
+    # docker-compose.yml), and os.replace()/rename() onto a bind-mounted
+    # file's own path fails with "OSError: [Errno 16] Device or resource
+    # busy" -- confirmed live, this broke every "add/edit/delete table"
+    # action on the real deployment. Same fix already applied in
+    # webapp/env_secrets.py for .env, which is bind-mounted the same way.
+    path.write_text(
         yaml.dump({"tables": tables}, allow_unicode=True, sort_keys=False, default_flow_style=False),
         encoding="utf-8",
     )
-    tmp.replace(path)
 
 
 # --------------------------------------------------------------------------------------
