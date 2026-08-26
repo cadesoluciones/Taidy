@@ -112,6 +112,10 @@ export function fetchBcTableFields(name: string): Promise<{ items: string[] }> {
   return apiGet<{ items: string[] }>(`/meta/bc-tables/${encodeURIComponent(name)}/fields`);
 }
 
+export function fetchBcAvailableTables(): Promise<{ items: AvailableProperty[] }> {
+  return apiGet<{ items: AvailableProperty[] }>("/meta/bc-tables/available-tables");
+}
+
 export interface FactorialTableConfig {
   name: string;
   description: string;

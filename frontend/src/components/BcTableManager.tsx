@@ -1,7 +1,16 @@
 import { Pencil, Plus, Trash2, X } from "lucide-react";
 
-import { createBcTable, deleteBcTable, fetchBcTablesFull, updateBcTable, type BcTableConfig, type UpdateBcTableInput } from "../api/meta";
+import {
+  createBcTable,
+  deleteBcTable,
+  fetchBcAvailableTables,
+  fetchBcTablesFull,
+  updateBcTable,
+  type BcTableConfig,
+  type UpdateBcTableInput,
+} from "../api/meta";
 import { useTableManager } from "../hooks/useTableManager";
+import { AvailablePropertiesPicker } from "./AvailablePropertiesPicker";
 import { ConfirmDialog } from "./ConfirmDialog";
 import formStyles from "./Form.module.css";
 import styles from "./TableManager.module.css";
@@ -14,6 +23,15 @@ interface BcForm {
 }
 
 const EMPTY_FORM: BcForm = { name: "", url: "", description: "", incremental: false };
+
+/** A picked entry's "name" is the full ready-to-save OData URL (see
+ * BusinessCentralClient.list_available_tables) -- its last path segment is
+ * the entity id, used here to suggest a readable table name. Never
+ * overwrites a name the admin already typed. */
+function suggestBcTableName(url: string): string {
+  const entity = url.split("/").pop()?.trim();
+  return entity ? `bc_${entity.toLowerCase()}` : "";
+}
 
 /** Admin-only: register, edit or remove a Business Central table in
  * tables.yaml directly from the web UI, instead of hand-editing the file on
@@ -81,6 +99,17 @@ export function BcTableManager() {
               value={mgr.form.url}
               onChange={(e) => mgr.setForm((f) => ({ ...f, url: e.target.value }))}
             />
+            <AvailablePropertiesPicker
+              buttonLabel="Ver tablas disponibles"
+              fetchProperties={() => fetchBcAvailableTables()}
+              onPick={(url) =>
+                mgr.setForm((f) => ({ ...f, url, name: f.name.trim() ? f.name : suggestBcTableName(url) }))
+              }
+            />
+            <p className={formStyles.hint}>
+              Solo lista tablas del API OData estándar (Company/APIxxxxx…) -- las que usan el mecanismo de
+              "Custom APIs" de BC (api/publisher/grupo/versión) no aparecen aquí y siguen necesitando la URL a mano.
+            </p>
           </div>
           <div className={formStyles.field}>
             <label htmlFor="new_bc_table_desc">Descripción (opcional)</label>

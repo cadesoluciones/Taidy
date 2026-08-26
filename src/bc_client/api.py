@@ -13,7 +13,7 @@ fetching all rows from a given OData endpoint.
 # --------------------------------------------------------------------------------------
 
 from typing import Any, Dict, List, Optional
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin
 
 import requests
 from requests import Response, Session
@@ -26,7 +26,8 @@ from tenacity import (
 )
 
 from .auth import TokenProvider
-from .config import Settings
+from .config import _ENVIRONMENT_PLACEHOLDER, Settings
+from ..config_loader import resolve_environment
 from ..utils import get_logger
 
 # --------------------------------------------------------------------------------------
@@ -81,6 +82,7 @@ class BusinessCentralClient:
                      HTTP requests. If not provided, a new one is created.
             timeout: The request timeout in seconds.
         """
+        self._settings = settings
         self._token_provider = token_provider
         self._session = session or requests.Session()
         self._timeout = timeout
@@ -142,6 +144,58 @@ class BusinessCentralClient:
             len(all_rows),
         )
         return all_rows
+
+    def list_available_tables(self) -> List[Dict[str, str]]:
+        """Live discovery of every entity set Business Central's standard
+        OData v4 service exposes -- confirmed live against the real API
+        that every currently-configured "APIxxxxx" custom page shows up
+        here under its exact existing id, via a plain GET on the service
+        root (same credentials extraction already uses, no extra scope).
+
+        Doesn't cover the handful of tables that instead use BC's newer
+        "Custom APIs" mechanism (URLs like
+        .../api/{publisher}/{group}/v{version}/...) -- that's a separate
+        service root with no single "list everything" endpoint of its own,
+        so those still need a manually-typed URL.
+
+        Each returned "name" is the FULL, ready-to-save URL -- with the
+        literal `{ENVIRONMENT}` placeholder tables.yaml itself uses, not
+        this process's resolved value -- so a picked entry can go straight
+        into tables.yaml unchanged, same as every URL already there.
+        "label" is just the bare entity name, for scanning/searching the
+        list (BC's service document has no human-readable summary the way
+        Factorial's OpenAPI spec does)."""
+        if not self._settings.tables:
+            raise BusinessCentralError(
+                "No hay ninguna tabla de Business Central configurada todavía -- hace falta al menos una "
+                "para deducir el entorno de la API OData."
+            )
+        existing_url = self._settings.tables[0].url
+        if "/ODataV4/" not in existing_url:
+            raise BusinessCentralError(
+                f"La URL de una tabla existente no tiene el formato ODataV4 esperado: {existing_url}"
+            )
+        prefix, _, _ = existing_url.partition("/ODataV4/")
+        odata_root = f"{prefix}/ODataV4/"
+
+        payload = self._fetch_page(odata_root)
+        entries = payload.get("value", [])
+        if not isinstance(entries, list):
+            raise BusinessCentralError(f"Respuesta inesperada de {odata_root}: 'value' debería ser una lista")
+
+        company = quote(self._settings.company_name.replace("'", "''"))
+        environment = resolve_environment()
+        tables: List[Dict[str, str]] = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            name = entry.get("name")
+            if not isinstance(name, str) or not name:
+                continue
+            full_url = f"{odata_root}Company('{company}')/{name}"
+            full_url = full_url.replace(environment, _ENVIRONMENT_PLACEHOLDER, 1)
+            tables.append({"name": full_url, "label": name})
+        return sorted(tables, key=lambda t: t["label"])
 
     # ----------------------------------------------------------------------------------
     # Internal Page Fetching and Parsing

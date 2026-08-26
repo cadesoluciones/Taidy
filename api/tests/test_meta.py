@@ -117,6 +117,55 @@ def test_create_bc_table_rejects_duplicate_name(isolated_state, client):
     assert resp.status_code == 400
 
 
+def test_operator_cannot_call_bc_available_tables(isolated_state, client):
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+    resp = client.get("/meta/bc-tables/available-tables")
+    assert resp.status_code == 403
+
+
+def test_admin_can_fetch_bc_available_tables(isolated_state, client, monkeypatch):
+    import types
+
+    from src.bc_client import api as bc_api
+    from src.bc_client import auth as bc_auth
+    from src.bc_client import config as bc_config
+
+    class _FakeClient:
+        def __init__(self, *, settings, token_provider):
+            pass
+
+        def list_available_tables(self):
+            return [{"name": "https://example/odata/Company('X')/APIabc", "label": "APIabc"}]
+
+    fake_settings = types.SimpleNamespace(token_url="", client_id="", client_secret="", scope="")
+    monkeypatch.setattr(bc_config, "load_settings", lambda: fake_settings)
+    monkeypatch.setattr(bc_auth, "OAuthTokenProvider", lambda **kwargs: object())
+    monkeypatch.setattr(bc_api, "BusinessCentralClient", _FakeClient)
+
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    resp = client.get("/meta/bc-tables/available-tables")
+
+    assert resp.status_code == 200
+    assert resp.json()["items"] == [{"name": "https://example/odata/Company('X')/APIabc", "label": "APIabc"}]
+
+
+def test_bc_available_tables_maps_client_error_to_400(isolated_state, client, monkeypatch):
+    from src.bc_client import config as bc_config
+
+    def fake_load_settings():
+        raise ValueError("Missing required environment variables: BC_CLIENT_SECRET")
+
+    monkeypatch.setattr(bc_config, "load_settings", fake_load_settings)
+
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    resp = client.get("/meta/bc-tables/available-tables")
+
+    assert resp.status_code == 400
+
+
 def test_admin_can_create_list_and_delete_factorial_table(isolated_state, client):
     make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
     _login(client, "admin2", "AdminPass2026!")

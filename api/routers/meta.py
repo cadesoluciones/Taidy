@@ -100,6 +100,40 @@ def bc_table_fields(name: str) -> TableListOut:
     return TableListOut(items=table_configs.bc_table_fields(name))
 
 
+@router.get(
+    "/bc-tables/available-tables",
+    response_model=AvailablePropertiesOut,
+    dependencies=[Depends(require_role(ROLE_ADMIN))],
+)
+def bc_available_tables() -> AvailablePropertiesOut:
+    """Live discovery of every entity set Business Central's standard
+    OData v4 service exposes, to help pick a `url` when registering a new
+    table (see BusinessCentralClient.list_available_tables). Needs an
+    existing BC table to deduce the tenant/environment from -- same
+    constraint the extraction pipeline itself already has."""
+    from dotenv import load_dotenv
+
+    from src.bc_client.api import BusinessCentralClient, BusinessCentralError
+    from src.bc_client.auth import OAuthTokenProvider
+    from src.bc_client.config import load_settings as load_bc_settings
+
+    load_dotenv()
+    try:
+        settings = load_bc_settings()
+        provider = OAuthTokenProvider(
+            token_url=settings.token_url,
+            client_id=settings.client_id,
+            client_secret=settings.client_secret,
+            scope=settings.scope,
+        )
+        client = BusinessCentralClient(settings=settings, token_provider=provider)
+        tables = client.list_available_tables()
+    except (ValueError, BusinessCentralError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    return AvailablePropertiesOut(items=[AvailableProperty(**t) for t in tables])
+
+
 @router.get("/factorial-tables/full", response_model=FactorialTableListOut)
 def factorial_tables_full() -> FactorialTableListOut:
     return FactorialTableListOut(items=[FactorialTableOut(**t) for t in table_configs.list_factorial_tables_full()])
