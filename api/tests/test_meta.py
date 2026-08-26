@@ -124,7 +124,7 @@ def test_operator_cannot_call_bc_available_odata_tables(isolated_state, client):
     assert resp.status_code == 403
 
 
-def _patch_fake_bc_client(monkeypatch, *, odata_tables=None, custom_api_tables=None):
+def _patch_fake_bc_client(monkeypatch, *, odata_tables=None, custom_api_tables=None, seen_extra_groups=None):
     import types
 
     from src.bc_client import api as bc_api
@@ -138,7 +138,9 @@ def _patch_fake_bc_client(monkeypatch, *, odata_tables=None, custom_api_tables=N
         def list_available_odata_tables(self):
             return odata_tables if odata_tables is not None else []
 
-        def list_available_custom_api_tables(self):
+        def list_available_custom_api_tables(self, *, extra_group=None):
+            if seen_extra_groups is not None:
+                seen_extra_groups.append(extra_group)
             return custom_api_tables if custom_api_tables is not None else []
 
     fake_settings = types.SimpleNamespace(token_url="", client_id="", client_secret="", scope="")
@@ -174,6 +176,35 @@ def test_admin_can_fetch_bc_available_custom_api_tables(isolated_state, client, 
     assert resp.json()["items"] == [
         {"name": "Proyecto/recursos", "label": "https://example/api/cade/Proyecto/v1.0/recursos"}
     ]
+
+
+def test_bc_available_custom_api_tables_without_query_params_probes_no_extra_group(
+    isolated_state, client, monkeypatch
+):
+    seen_extra_groups = []
+    _patch_fake_bc_client(monkeypatch, custom_api_tables=[], seen_extra_groups=seen_extra_groups)
+
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    resp = client.get("/meta/bc-tables/available-custom-api-tables")
+
+    assert resp.status_code == 200
+    assert seen_extra_groups == [None]
+
+
+def test_bc_available_custom_api_tables_forwards_extra_group_query_params(isolated_state, client, monkeypatch):
+    seen_extra_groups = []
+    _patch_fake_bc_client(monkeypatch, custom_api_tables=[], seen_extra_groups=seen_extra_groups)
+
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+    resp = client.get(
+        "/meta/bc-tables/available-custom-api-tables",
+        params={"publisher": "cade", "group": "Contabilidad", "version": "v1.0"},
+    )
+
+    assert resp.status_code == 200
+    assert seen_extra_groups == [("cade", "Contabilidad", "v1.0")]
 
 
 def test_operator_cannot_call_bc_available_custom_api_tables(isolated_state, client):

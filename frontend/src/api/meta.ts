@@ -116,8 +116,20 @@ export function fetchBcAvailableOdataTables(): Promise<{ items: AvailablePropert
   return apiGet<{ items: AvailableProperty[] }>("/meta/bc-tables/available-odata-tables");
 }
 
-export function fetchBcAvailableCustomApiTables(): Promise<{ items: AvailableProperty[] }> {
-  return apiGet<{ items: AvailableProperty[] }>("/meta/bc-tables/available-custom-api-tables");
+/** `extraGroup` probes one additional publisher/group/version even if no
+ * table uses it yet -- a real BC page can declare an APIGroup while every
+ * table actually configured for it still points at the older plain OData
+ * id instead, which would otherwise hide that group here forever (see
+ * BusinessCentralClient.list_available_custom_api_tables). */
+export function fetchBcAvailableCustomApiTables(extraGroup?: {
+  publisher: string;
+  group: string;
+  version: string;
+}): Promise<{ items: AvailableProperty[] }> {
+  const query = extraGroup
+    ? buildQuery({ publisher: extraGroup.publisher, group: extraGroup.group, version: extraGroup.version })
+    : "";
+  return apiGet<{ items: AvailableProperty[] }>(`/meta/bc-tables/available-custom-api-tables${query}`);
 }
 
 export interface FactorialTableConfig {

@@ -12,7 +12,7 @@ fetching all rows from a given OData endpoint.
 # Imports
 # --------------------------------------------------------------------------------------
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote, urljoin
 
 import requests
@@ -190,17 +190,63 @@ class BusinessCentralClient:
             tables.append({"name": name, "label": full_url})
         return sorted(tables, key=lambda t: t["name"])
 
-    def list_available_custom_api_tables(self) -> List[Dict[str, str]]:
+    def _common_url_prefix(self) -> str:
+        """The tenant/environment segment shared by every URL this client
+        deals with, regardless of which mechanism the specific table uses
+        -- everything up to (not including) whichever of "/ODataV4/" or
+        "/api/" appears in it. Needed even when probing a Custom APIs
+        group no *existing* table references yet (see extra_group on
+        list_available_custom_api_tables), as long as at least one table
+        of either kind is configured."""
+        if not self._settings.tables:
+            raise BusinessCentralError(
+                "No hay ninguna tabla de Business Central configurada todavía -- hace falta al menos una "
+                "para deducir el entorno y la empresa de la API."
+            )
+        url = self._settings.tables[0].url
+        return url.split("/ODataV4/")[0].split("/api/")[0]
+
+    def _list_custom_api_group(
+        self, prefix: str, publisher: str, group: str, version: str, *, company_query: str, environment: str
+    ) -> List[Dict[str, str]]:
+        group_root = f"{prefix}/api/{publisher}/{group}/{version}/"
+        payload = self._fetch_page(group_root)
+        entries = payload.get("value", [])
+        if not isinstance(entries, list):
+            raise BusinessCentralError(f"Respuesta inesperada de {group_root}: 'value' debería ser una lista")
+
+        tables: List[Dict[str, str]] = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            name = entry.get("name")
+            if not isinstance(name, str) or not name:
+                continue
+            full_url = f"{group_root}{name}?company={company_query}"
+            full_url = full_url.replace(environment, _ENVIRONMENT_PLACEHOLDER, 1)
+            tables.append({"name": f"{group}/{name}", "label": full_url})
+        return tables
+
+    def list_available_custom_api_tables(
+        self, *, extra_group: Optional[Tuple[str, str, str]] = None
+    ) -> List[Dict[str, str]]:
         """Live discovery of every entity exposed by BC's newer "Custom
         APIs" mechanism (.../api/{publisher}/{group}/{version}/...) --
         confirmed live that each GROUP's own root responds with its own
         full service document (e.g. .../api/cade/Proyecto/v1.0/ listed 21
         entities, only one of which -- "recursos" -- was already tracked).
+
         There's no single endpoint listing every group across the whole
-        tenant, though, so only groups already used by at least one
-        currently-configured table are queried -- an admin has to add one
-        table from a brand-new group by hand once before its *other*
-        entities become discoverable here too.
+        tenant, so by default only groups already used by at least one
+        currently-configured table are queried. Confirmed live: a real BC
+        page can declare an APIGroup (e.g. "Contabilidad", "Compras")
+        while every table actually configured for it still points at the
+        older plain OData id instead -- meaning that group would otherwise
+        never be found this way, even though it genuinely exists. `extra_group`
+        (publisher, group, version) probes ONE additional, explicitly-named
+        group on top of the auto-discovered ones, for exactly that case --
+        once a table is saved from it, it joins the auto-discovered set
+        for every future call.
 
         Each returned "name" is "{group}/{entity}" (to tell same-named
         entities in different groups apart, e.g. "Proyecto/recursos" vs.
@@ -212,6 +258,20 @@ class BusinessCentralClient:
         tables: List[Dict[str, str]] = []
         seen_groups: set = set()
 
+        def _add_group(prefix: str, publisher: str, group: str, version: str) -> None:
+            group_key = (prefix, publisher, group, version)
+            if group_key in seen_groups:
+                return
+            seen_groups.add(group_key)
+            try:
+                tables.extend(
+                    self._list_custom_api_group(
+                        prefix, publisher, group, version, company_query=company_query, environment=environment
+                    )
+                )
+            except (BusinessCentralError, requests.ConnectionError, requests.Timeout, ChunkedEncodingError) as exc:
+                logger.warning("No se pudo listar el grupo de Custom APIs %s/%s/%s: %s", publisher, group, version, exc)
+
         for table in self._settings.tables:
             if "/api/" not in table.url:
                 continue
@@ -219,35 +279,15 @@ class BusinessCentralClient:
             segments = rest.split("/")
             if len(segments) < 4:
                 continue
-            publisher, group, version = segments[0], segments[1], segments[2]
-            group_key = (prefix, publisher, group, version)
-            if group_key in seen_groups:
-                continue
-            seen_groups.add(group_key)
+            _add_group(prefix, segments[0], segments[1], segments[2])
 
-            group_root = f"{prefix}/api/{publisher}/{group}/{version}/"
-            try:
-                payload = self._fetch_page(group_root)
-            except (BusinessCentralError, requests.ConnectionError, requests.Timeout, ChunkedEncodingError) as exc:
-                logger.warning("No se pudo listar el grupo de Custom APIs %s: %s", group_root, exc)
-                continue
-            entries = payload.get("value", [])
-            if not isinstance(entries, list):
-                continue
-            for entry in entries:
-                if not isinstance(entry, dict):
-                    continue
-                name = entry.get("name")
-                if not isinstance(name, str) or not name:
-                    continue
-                full_url = f"{group_root}{name}?company={company_query}"
-                full_url = full_url.replace(environment, _ENVIRONMENT_PLACEHOLDER, 1)
-                tables.append({"name": f"{group}/{name}", "label": full_url})
+        if extra_group is not None:
+            _add_group(self._common_url_prefix(), *extra_group)
 
         if not tables:
             raise BusinessCentralError(
-                "Ninguna tabla configurada usa el mecanismo de Custom APIs de Business Central todavía -- "
-                "hace falta al menos una para saber qué grupo (publisher/grupo/versión) consultar."
+                "No se encontraron tablas en ese grupo de Custom APIs de Business Central. Revisa el "
+                "publisher/grupo/versión, o añade primero una tabla existente de ese grupo con la URL a mano."
             )
         return sorted(tables, key=lambda t: t["name"])
 

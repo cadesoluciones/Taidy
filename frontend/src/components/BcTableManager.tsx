@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import { Pencil, Plus, Trash2, X } from "lucide-react";
 
 import {
@@ -35,6 +37,19 @@ function suggestBcTableName(shortName: string): string {
   return `bc_${shortName.toLowerCase().replace(/\//g, "_")}`;
 }
 
+/** "cade/Contabilidad/v1.0" -> {publisher, group, version}, or undefined if
+ * it's not exactly three non-empty "/"-separated parts. */
+function parseExtraGroup(raw: string): { publisher: string; group: string; version: string } | undefined {
+  const parts = raw
+    .trim()
+    .split("/")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length !== 3) return undefined;
+  const [publisher, group, version] = parts;
+  return { publisher: publisher!, group: group!, version: version! };
+}
+
 /** Admin-only: register, edit or remove a Business Central table in
  * tables.yaml directly from the web UI, instead of hand-editing the file on
  * the server -- the exact same file src/bc_client/config.py reads for a real
@@ -53,6 +68,8 @@ export function BcTableManager() {
       return { input: { name: f.name.trim(), url: f.url, description: f.description, incremental: f.incremental } };
     },
   });
+
+  const [extraGroupInput, setExtraGroupInput] = useState("");
 
   function pickTable(property: { name: string; label: string }) {
     mgr.setForm((f) => ({
@@ -109,6 +126,18 @@ export function BcTableManager() {
               value={mgr.form.url}
               onChange={(e) => mgr.setForm((f) => ({ ...f, url: e.target.value }))}
             />
+            <div className={formStyles.field}>
+              <label htmlFor="new_bc_extra_group">
+                Grupo adicional de Custom APIs (opcional -- ninguna tabla lo usa todavía, pero existe en BC)
+              </label>
+              <input
+                id="new_bc_extra_group"
+                type="text"
+                value={extraGroupInput}
+                onChange={(e) => setExtraGroupInput(e.target.value)}
+                placeholder="cade/Contabilidad/v1.0"
+              />
+            </div>
             <div className={styles.pickerRow}>
               <AvailablePropertiesPicker
                 buttonLabel="Ver tablas OData estándar"
@@ -117,14 +146,14 @@ export function BcTableManager() {
               />
               <AvailablePropertiesPicker
                 buttonLabel="Ver tablas de Custom APIs"
-                fetchProperties={() => fetchBcAvailableCustomApiTables()}
+                fetchProperties={() => fetchBcAvailableCustomApiTables(parseExtraGroup(extraGroupInput))}
                 onPick={pickTable}
               />
             </div>
             <p className={formStyles.hint}>
               "OData estándar" son las tablas tipo Company/APIxxxxx…; "Custom APIs" son los grupos
-              (api/publisher/grupo/versión, p. ej. Proyecto o CRM) ya usados por alguna tabla existente -- un grupo
-              completamente nuevo aún necesita una primera tabla con la URL escrita a mano antes de aparecer aquí.
+              (api/publisher/grupo/versión, p. ej. Proyecto o CRM) ya usados por alguna tabla existente, más el grupo
+              adicional de arriba si lo rellenas.
             </p>
           </div>
           <div className={formStyles.field}>

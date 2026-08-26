@@ -145,18 +145,25 @@ def bc_available_odata_tables() -> AvailablePropertiesOut:
     response_model=AvailablePropertiesOut,
     dependencies=[Depends(require_role(ROLE_ADMIN))],
 )
-def bc_available_custom_api_tables() -> AvailablePropertiesOut:
+def bc_available_custom_api_tables(
+    publisher: str = "", group: str = "", version: str = ""
+) -> AvailablePropertiesOut:
     """Live discovery of every entity exposed by BC's "Custom APIs"
     mechanism, for every publisher/group/version already used by at least
-    one currently-configured table (see
-    BusinessCentralClient.list_available_custom_api_tables)."""
+    one currently-configured table, PLUS -- when publisher/group/version
+    are all given -- that one additional group even if no table uses it
+    yet (see BusinessCentralClient.list_available_custom_api_tables): a
+    real BC page can declare an APIGroup while every table actually
+    configured for it still points at the older plain OData id instead,
+    which would otherwise hide that group here forever."""
     from dotenv import load_dotenv
 
     from src.bc_client.api import BusinessCentralError
 
     load_dotenv()
+    extra_group = (publisher, group, version) if publisher and group and version else None
     try:
-        tables = _bc_client().list_available_custom_api_tables()
+        tables = _bc_client().list_available_custom_api_tables(extra_group=extra_group)
     except (ValueError, BusinessCentralError) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
