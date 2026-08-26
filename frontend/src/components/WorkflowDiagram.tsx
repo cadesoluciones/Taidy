@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   Controls,
@@ -15,38 +15,111 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
+import { NEEDS_TABLES } from "../utils/actionParamGroups";
 import { statusMeta } from "./statusMeta";
 import styles from "./WorkflowDiagram.module.css";
 
 /** Structural subset shared by StepDefinition (draft/saved steps) and
  * StepRun (live run steps) -- the diagram only ever needs these fields,
- * so it accepts either without the caller reshaping data. */
+ * so it accepts either without the caller reshaping data. `params` is
+ * optional because StepRun carries no params at all -- a run's card just
+ * shows no scope/target detail line instead, which is fine since it
+ * already shows richer live status there. */
 export interface DiagramStep {
   id: string;
   label: string;
   action: string;
   depends_on: string[];
   trigger_rule: string;
+  params?: Record<string, unknown>;
+}
+
+/** A short second line under the action label -- which tables a
+ * NEEDS_TABLES block is scoped to, or which pipeline/mapping/flow a
+ * single-target block launches. Returns undefined when the action has no
+ * such target concept (nothing to add beyond the action label itself) or
+ * when `params` wasn't supplied (run view). */
+function computeDetailLabel(
+  action: string,
+  params: Record<string, unknown> | undefined,
+  workflowNamesById: Record<string, string> | undefined,
+): string | undefined {
+  if (!params) return undefined;
+  if (NEEDS_TABLES.has(action)) {
+    const tables = params.tables as string[] | undefined;
+    if (!tables || tables.length === 0) return "Todas las tablas";
+    return tables.length === 1 ? tables[0] : `${tables.length} tablas`;
+  }
+  if (action === "run_pipeline") return (params.pipeline as string | undefined) || undefined;
+  if (action === "sync_apply") return (params.mapping as string | undefined) || undefined;
+  if (action === "run_workflow") {
+    const id = params.workflow_id as string | undefined;
+    return id ? (workflowNamesById?.[id] ?? undefined) : undefined;
+  }
+  return undefined;
 }
 
 type StepNodeData = Record<string, unknown> & {
   label: string;
   actionLabel: string;
+  detailLabel?: string;
   status?: string;
   detail?: string | null;
   alwaysRun?: boolean;
   elapsedSeconds?: number;
+  onRename?: (label: string) => void;
 };
 
 type StepFlowNode = Node<StepNodeData, "step">;
 
 function StepNode({ data, selected }: NodeProps<StepFlowNode>) {
   const status = data.status;
+  const onRename = data.onRename;
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState(data.label);
+
+  function commit() {
+    setIsEditing(false);
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== data.label) onRename?.(trimmed);
+    else setDraft(data.label);
+  }
+
   return (
     <div className={styles.node} data-selected={selected || undefined} data-status={status ?? "none"}>
       <Handle type="target" position={Position.Left} className={styles.handle} />
-      <div className={styles.nodeLabel}>{data.label}</div>
+      {isEditing ? (
+        <input
+          className={`${styles.nodeLabelInput} nodrag`}
+          value={draft}
+          autoFocus
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            if (e.key === "Escape") {
+              setDraft(data.label);
+              setIsEditing(false);
+            }
+          }}
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <div
+          className={styles.nodeLabel}
+          title={onRename ? "Doble clic para renombrar" : undefined}
+          onDoubleClick={(e) => {
+            if (!onRename) return;
+            e.stopPropagation();
+            setDraft(data.label);
+            setIsEditing(true);
+          }}
+        >
+          {data.label}
+        </div>
+      )}
       <div className={styles.nodeAction}>{data.actionLabel}</div>
+      {data.detailLabel && <div className={styles.nodeDetail}>{data.detailLabel}</div>}
       {status && (
         <div className={styles.nodeStatus}>
           {statusMeta(status).label.toLowerCase()}
@@ -180,6 +253,13 @@ interface WorkflowDiagramProps {
   onSelectStep?: (id: string) => void;
   onConnectSteps?: (sourceId: string, targetId: string) => void;
   onRemoveDependency?: (sourceId: string, targetId: string) => void;
+  /** Renaming inline on the node card itself (double-click) -- undefined in
+   * read-only views, which is also what hides the "double-click" hint and
+   * disables the double-click handler entirely. */
+  onLabelChange?: (stepId: string, label: string) => void;
+  /** Resolves a run_workflow block's target id to a human name for its
+   * detail line -- StepDefinition/StepRun only carry the id. */
+  workflowNamesById?: Record<string, string>;
   readOnly?: boolean;
   /** Manual positions (from a previous drag) that override the auto-layout
    * for the steps they cover -- lets the designer's canvas remember where
@@ -203,6 +283,8 @@ export function WorkflowDiagram({
   onSelectStep,
   onConnectSteps,
   onRemoveDependency,
+  onLabelChange,
+  workflowNamesById,
   readOnly = false,
   nodePositions,
   onNodePositionChange,
@@ -225,13 +307,16 @@ export function WorkflowDiagram({
         const status = stepStatuses?.[s.id];
         const detail = stepDetails?.[s.id];
         const elapsedSeconds = elapsedSecondsFor(stepTimings?.[s.id]);
+        const detailLabel = computeDetailLabel(s.action, s.params, workflowNamesById);
         const data: StepNodeData = {
           label: s.label,
           actionLabel: actionLabels[s.action] ?? s.action,
           alwaysRun: s.depends_on.length > 0 && s.trigger_rule === "always",
+          ...(detailLabel ? { detailLabel } : {}),
           ...(status !== undefined ? { status } : {}),
           ...(detail ? { detail } : {}),
           ...(elapsedSeconds !== undefined ? { elapsedSeconds } : {}),
+          ...(onLabelChange ? { onRename: (label: string) => onLabelChange(s.id, label) } : {}),
         };
         return {
           id: s.id,
@@ -243,7 +328,19 @@ export function WorkflowDiagram({
           data,
         };
       }),
-    [steps, positions, nodePositions, selectedStepId, actionLabels, stepStatuses, stepDetails, stepTimings, readOnly],
+    [
+      steps,
+      positions,
+      nodePositions,
+      selectedStepId,
+      actionLabels,
+      stepStatuses,
+      stepDetails,
+      stepTimings,
+      readOnly,
+      workflowNamesById,
+      onLabelChange,
+    ],
   );
 
   const handleNodesChange = (changes: NodeChange<StepFlowNode>[]) => {

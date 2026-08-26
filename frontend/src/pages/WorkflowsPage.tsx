@@ -27,11 +27,12 @@ import formStyles from "../components/Form.module.css";
 import { NotifyCheckbox } from "../components/NotifyCheckbox";
 import { StatusBadge } from "../components/StatusBadge";
 import { SyncApplyFields } from "../components/SyncApplyFields";
+import { TableScopeField, tableScopeModeFor, type TableScopeMode } from "../components/TableScopeField";
 import { TagMultiSelect } from "../components/TagMultiSelect";
 import { WorkflowDiagram } from "../components/WorkflowDiagram";
 import { usePolling } from "../hooks/usePolling";
 import { useDragReorder } from "../hooks/useDragReorder";
-import { NEEDS_MODE_PARALLEL, NEEDS_START_ON, NEEDS_SKIP_EXISTING } from "../utils/actionParamGroups";
+import { NEEDS_MODE_PARALLEL, NEEDS_START_ON, NEEDS_SKIP_EXISTING, NEEDS_TABLES } from "../utils/actionParamGroups";
 import styles from "./WorkflowsPage.module.css";
 
 /**
@@ -75,6 +76,9 @@ export function WorkflowsPage() {
   const [newStepStartOn, setNewStepStartOn] = useState("2025-01-01");
   const [newStepEmployeeStatus, setNewStepEmployeeStatus] = useState<"active" | "inactive" | "all">("active");
   const [newStepSkipExisting, setNewStepSkipExisting] = useState(false);
+  const [newStepTableScope, setNewStepTableScope] = useState<TableScopeMode>("all");
+  const [newStepTables, setNewStepTables] = useState<string[]>([]);
+  const [editStepTableScope, setEditStepTableScope] = useState<TableScopeMode>("all");
   const [stepPositions, setStepPositions] = useState<Record<string, { x: number; y: number }>>({});
 
   const { data: runsData, refetch: refetchRuns } = usePolling(() => fetchWorkflowRuns(), 3000);
@@ -116,12 +120,23 @@ export function WorkflowsPage() {
   // that would be an immediate self-reference loop.
   const workflowChoicesForStep = workflows.filter((w) => w.id !== editingWorkflowId);
 
+  // Lets the diagram show which flow a run_workflow block actually launches
+  // (params only carries the id) instead of a generic "Lanzar flujo" label.
+  const workflowNamesById = Object.fromEntries(workflows.map((w) => [w.id, w.name]));
+
   useEffect(() => {
     if (newStepAction === "run_workflow" && !newStepWorkflowId && workflowChoicesForStep.length > 0) {
       setNewStepWorkflowId(workflowChoicesForStep[0]?.id ?? "");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newStepAction, workflowChoicesForStep.length]);
+
+  // Re-derive the edit panel's table-scope toggle from whichever block just
+  // got selected -- it's UI-only state (see TableScopeField), not persisted
+  // on the step, so it has to be recomputed every time the selection moves.
+  useEffect(() => {
+    setEditStepTableScope(tableScopeModeFor(selectedStep?.params.tables as string[] | undefined));
+  }, [selectedStepId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -180,6 +195,10 @@ export function WorkflowsPage() {
     }
     if (NEEDS_SKIP_EXISTING.has(newStepAction)) {
       params.skip_existing = newStepSkipExisting;
+    }
+    if (NEEDS_TABLES.has(newStepAction) && newStepTableScope !== "all") {
+      if (newStepTables.length === 0) return null;
+      params.tables = newStepTables;
     }
     return params;
   }
@@ -460,6 +479,8 @@ export function WorkflowsPage() {
                       const action = e.target.value;
                       setNewStepAction(action);
                       setNewStepPipeline(action === "run_pipeline" ? (pipelines[0] ?? "") : "");
+                      setNewStepTableScope("all");
+                      setNewStepTables([]);
                     }}
                   >
                     {Object.entries(ACTION_LABELS).map(([key, label]) => (
@@ -580,6 +601,19 @@ export function WorkflowsPage() {
                     />
                     <span>Omitir ficheros ya subidos</span>
                   </label>
+                )}
+                {NEEDS_TABLES.has(newStepAction) && (
+                  <TableScopeField
+                    idPrefix="new_step"
+                    action={newStepAction}
+                    mode={newStepTableScope}
+                    onModeChange={(mode) => {
+                      setNewStepTableScope(mode);
+                      if (mode === "all") setNewStepTables([]);
+                    }}
+                    tables={newStepTables}
+                    onTablesChange={setNewStepTables}
+                  />
                 )}
                 <button
                   type="button"
@@ -754,6 +788,24 @@ export function WorkflowsPage() {
                       <span>Omitir ficheros ya subidos</span>
                     </label>
                   )}
+                  {NEEDS_TABLES.has(selectedStep.action) && (
+                    <TableScopeField
+                      idPrefix="edit_step"
+                      action={selectedStep.action}
+                      mode={editStepTableScope}
+                      onModeChange={(mode) => {
+                        setEditStepTableScope(mode);
+                        if (mode === "all") {
+                          const { tables: _tables, ...rest } = selectedStep.params;
+                          updateStep(selectedStep.id, { params: rest });
+                        }
+                      }}
+                      tables={(selectedStep.params.tables as string[] | undefined) ?? []}
+                      onTablesChange={(tables) =>
+                        updateStep(selectedStep.id, { params: { ...selectedStep.params, tables } })
+                      }
+                    />
+                  )}
                   {selectedStep.depends_on.length > 0 && (
                     <div className={formStyles.field}>
                       <label htmlFor="edit_step_trigger_rule">¿Cuándo lanzar este bloque?</label>
@@ -801,6 +853,8 @@ export function WorkflowsPage() {
                   onSelectStep={setSelectedStepId}
                   onConnectSteps={connectSteps}
                   onRemoveDependency={removeDependency}
+                  onLabelChange={(id, label) => updateStep(id, { label })}
+                  workflowNamesById={workflowNamesById}
                   nodePositions={stepPositions}
                   onNodePositionChange={(id, position) => setStepPositions((prev) => ({ ...prev, [id]: position }))}
                   height="100%"
@@ -894,6 +948,7 @@ export function WorkflowsPage() {
                   <WorkflowDiagram
                     steps={selectedWorkflow.steps}
                     actionLabels={ACTION_LABELS}
+                    workflowNamesById={workflowNamesById}
                     readOnly
                     height={420}
                   />
