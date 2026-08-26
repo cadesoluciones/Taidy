@@ -141,7 +141,7 @@ export function FactorialTableManager() {
             <AvailablePropertiesPicker
               buttonLabel="Ver tablas disponibles"
               fetchProperties={() => fetchFactorialAvailableTables()}
-              onPick={(name) => mgr.setForm((f) => ({ ...f, path: name }))}
+              onPick={(property) => mgr.setForm((f) => ({ ...f, path: property.name }))}
             />
           </div>
           <div className={formStyles.field}>
@@ -157,7 +157,7 @@ export function FactorialTableManager() {
               disabled={!mgr.form.path.trim()}
               disabledHint="Escribe primero la ruta de la API de Factorial."
               fetchProperties={() => fetchFactorialAvailableFields(mgr.form.path.trim(), mgr.form.dateRange)}
-              onPick={(name) => mgr.setForm((f) => ({ ...f, fieldsRaw: appendField(f.fieldsRaw, name) }))}
+              onPick={(property) => mgr.setForm((f) => ({ ...f, fieldsRaw: appendField(f.fieldsRaw, property.name) }))}
             />
             <p className={formStyles.hint}>
               Factorial no tiene un catálogo de campos -- esto muestra los campos vistos en una muestra reciente de

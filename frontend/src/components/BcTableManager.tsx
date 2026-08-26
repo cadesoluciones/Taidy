@@ -24,13 +24,13 @@ interface BcForm {
 
 const EMPTY_FORM: BcForm = { name: "", url: "", description: "", incremental: false };
 
-/** A picked entry's "name" is the full ready-to-save OData URL (see
- * BusinessCentralClient.list_available_tables) -- its last path segment is
- * the entity id, used here to suggest a readable table name. Never
- * overwrites a name the admin already typed. */
-function suggestBcTableName(url: string): string {
-  const entity = url.split("/").pop()?.trim();
-  return entity ? `bc_${entity.toLowerCase()}` : "";
+/** Unlike HubSpot/Factorial's pickers, BC's "name" (the short, scannable
+ * entity id, e.g. "APIabc" or "Proyecto/recursos" for a Custom APIs entry)
+ * is NOT the value that fills the form -- that's "label" instead (the
+ * full, ready-to-save URL, too long to be the picker's bold primary text).
+ * See BusinessCentralClient.list_available_tables. */
+function suggestBcTableName(shortName: string): string {
+  return `bc_${shortName.toLowerCase().replace(/\//g, "_")}`;
 }
 
 /** Admin-only: register, edit or remove a Business Central table in
@@ -102,13 +102,18 @@ export function BcTableManager() {
             <AvailablePropertiesPicker
               buttonLabel="Ver tablas disponibles"
               fetchProperties={() => fetchBcAvailableTables()}
-              onPick={(url) =>
-                mgr.setForm((f) => ({ ...f, url, name: f.name.trim() ? f.name : suggestBcTableName(url) }))
+              onPick={(property) =>
+                mgr.setForm((f) => ({
+                  ...f,
+                  url: property.label,
+                  name: f.name.trim() ? f.name : suggestBcTableName(property.name),
+                }))
               }
             />
             <p className={formStyles.hint}>
-              Solo lista tablas del API OData estándar (Company/APIxxxxx…) -- las que usan el mecanismo de
-              "Custom APIs" de BC (api/publisher/grupo/versión) no aparecen aquí y siguen necesitando la URL a mano.
+              Incluye tanto el API OData estándar como los grupos de "Custom APIs" (api/publisher/grupo/versión) ya
+              usados por alguna tabla existente -- un grupo completamente nuevo aún necesita una primera tabla con la
+              URL escrita a mano antes de aparecer aquí.
             </p>
           </div>
           <div className={formStyles.field}>

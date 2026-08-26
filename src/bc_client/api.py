@@ -146,56 +146,99 @@ class BusinessCentralClient:
         return all_rows
 
     def list_available_tables(self) -> List[Dict[str, str]]:
-        """Live discovery of every entity set Business Central's standard
-        OData v4 service exposes -- confirmed live against the real API
-        that every currently-configured "APIxxxxx" custom page shows up
-        here under its exact existing id, via a plain GET on the service
-        root (same credentials extraction already uses, no extra scope).
+        """Live discovery of every entity Business Central exposes, across
+        BOTH mechanisms this project's tables use -- confirmed live against
+        the real API:
 
-        Doesn't cover the handful of tables that instead use BC's newer
-        "Custom APIs" mechanism (URLs like
-        .../api/{publisher}/{group}/v{version}/...) -- that's a separate
-        service root with no single "list everything" endpoint of its own,
-        so those still need a manually-typed URL.
+        1. The standard OData v4 service root (.../ODataV4/) -- a plain GET
+           returns every entity set, including every "APIxxxxx" custom page
+           under its exact existing id (18/19 of this project's real,
+           already-configured URLs matched byte-for-byte).
+        2. BC's newer "Custom APIs" mechanism
+           (.../api/{publisher}/{group}/{version}/...) -- each such GROUP's
+           own root also responds with its own full service document (e.g.
+           .../api/cade/Proyecto/v1.0/ listed 21 entities live, only one of
+           which -- "recursos" -- was already tracked). There's no single
+           endpoint listing every group across the whole tenant, though, so
+           only groups already used by at least one currently-configured
+           table are queried here -- an admin has to add one table from a
+           brand-new group by hand once before its *other* entities become
+           discoverable here too.
 
-        Each returned "name" is the FULL, ready-to-save URL -- with the
-        literal `{ENVIRONMENT}` placeholder tables.yaml itself uses, not
-        this process's resolved value -- so a picked entry can go straight
-        into tables.yaml unchanged, same as every URL already there.
-        "label" is just the bare entity name, for scanning/searching the
-        list (BC's service document has no human-readable summary the way
-        Factorial's OpenAPI spec does)."""
+        Each returned "name" is the short, scannable entity id (prefixed
+        with its group, for the Custom APIs ones, to tell same-named
+        entities in different groups apart -- e.g. "Proyecto/recursos") --
+        unlike HubSpot/Factorial, that's NOT the value to save here, since
+        it's not a working URL by itself. "label" instead carries the
+        FULL, ready-to-save URL, with the literal `{ENVIRONMENT}`
+        placeholder tables.yaml itself uses (not this process's resolved
+        value), so a picked entry's label can go straight into tables.yaml
+        unchanged, same as every URL already there."""
         if not self._settings.tables:
             raise BusinessCentralError(
                 "No hay ninguna tabla de Business Central configurada todavía -- hace falta al menos una "
-                "para deducir el entorno de la API OData."
+                "para deducir el entorno y la empresa de la API."
             )
-        existing_url = self._settings.tables[0].url
-        if "/ODataV4/" not in existing_url:
-            raise BusinessCentralError(
-                f"La URL de una tabla existente no tiene el formato ODataV4 esperado: {existing_url}"
-            )
-        prefix, _, _ = existing_url.partition("/ODataV4/")
-        odata_root = f"{prefix}/ODataV4/"
 
-        payload = self._fetch_page(odata_root)
-        entries = payload.get("value", [])
-        if not isinstance(entries, list):
-            raise BusinessCentralError(f"Respuesta inesperada de {odata_root}: 'value' debería ser una lista")
-
-        company = quote(self._settings.company_name.replace("'", "''"))
         environment = resolve_environment()
+        company_literal = quote(self._settings.company_name.replace("'", "''"))
+        company_query = quote(self._settings.company_name)
         tables: List[Dict[str, str]] = []
-        for entry in entries:
-            if not isinstance(entry, dict):
+
+        odata_table = next((t for t in self._settings.tables if "/ODataV4/" in t.url), None)
+        if odata_table is not None:
+            prefix, _, _ = odata_table.url.partition("/ODataV4/")
+            odata_root = f"{prefix}/ODataV4/"
+            payload = self._fetch_page(odata_root)
+            entries = payload.get("value", [])
+            if not isinstance(entries, list):
+                raise BusinessCentralError(f"Respuesta inesperada de {odata_root}: 'value' debería ser una lista")
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                name = entry.get("name")
+                if not isinstance(name, str) or not name:
+                    continue
+                full_url = f"{odata_root}Company('{company_literal}')/{name}"
+                full_url = full_url.replace(environment, _ENVIRONMENT_PLACEHOLDER, 1)
+                tables.append({"name": name, "label": full_url})
+
+        seen_groups: set = set()
+        for table in self._settings.tables:
+            if "/api/" not in table.url:
                 continue
-            name = entry.get("name")
-            if not isinstance(name, str) or not name:
+            prefix, _, rest = table.url.partition("/api/")
+            segments = rest.split("/")
+            if len(segments) < 4:
                 continue
-            full_url = f"{odata_root}Company('{company}')/{name}"
-            full_url = full_url.replace(environment, _ENVIRONMENT_PLACEHOLDER, 1)
-            tables.append({"name": full_url, "label": name})
-        return sorted(tables, key=lambda t: t["label"])
+            publisher, group, version = segments[0], segments[1], segments[2]
+            group_key = (prefix, publisher, group, version)
+            if group_key in seen_groups:
+                continue
+            seen_groups.add(group_key)
+
+            group_root = f"{prefix}/api/{publisher}/{group}/{version}/"
+            try:
+                payload = self._fetch_page(group_root)
+            except (BusinessCentralError, requests.ConnectionError, requests.Timeout, ChunkedEncodingError) as exc:
+                logger.warning("No se pudo listar el grupo de Custom APIs %s: %s", group_root, exc)
+                continue
+            entries = payload.get("value", [])
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                name = entry.get("name")
+                if not isinstance(name, str) or not name:
+                    continue
+                full_url = f"{group_root}{name}?company={company_query}"
+                full_url = full_url.replace(environment, _ENVIRONMENT_PLACEHOLDER, 1)
+                tables.append({"name": f"{group}/{name}", "label": full_url})
+
+        if not tables:
+            raise BusinessCentralError("No se encontraron tablas disponibles en Business Central.")
+        return sorted(tables, key=lambda t: t["name"])
 
     # ----------------------------------------------------------------------------------
     # Internal Page Fetching and Parsing

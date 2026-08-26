@@ -136,7 +136,7 @@ def test_admin_can_fetch_bc_available_tables(isolated_state, client, monkeypatch
             pass
 
         def list_available_tables(self):
-            return [{"name": "https://example/odata/Company('X')/APIabc", "label": "APIabc"}]
+            return [{"name": "APIabc", "label": "https://example/odata/Company('X')/APIabc"}]
 
     fake_settings = types.SimpleNamespace(token_url="", client_id="", client_secret="", scope="")
     monkeypatch.setattr(bc_config, "load_settings", lambda: fake_settings)
@@ -148,7 +148,7 @@ def test_admin_can_fetch_bc_available_tables(isolated_state, client, monkeypatch
     resp = client.get("/meta/bc-tables/available-tables")
 
     assert resp.status_code == 200
-    assert resp.json()["items"] == [{"name": "https://example/odata/Company('X')/APIabc", "label": "APIabc"}]
+    assert resp.json()["items"] == [{"name": "APIabc", "label": "https://example/odata/Company('X')/APIabc"}]
 
 
 def test_bc_available_tables_maps_client_error_to_400(isolated_state, client, monkeypatch):

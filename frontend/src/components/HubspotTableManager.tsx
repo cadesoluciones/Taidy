@@ -128,7 +128,7 @@ export function HubspotTableManager() {
             <AvailablePropertiesPicker
               buttonLabel="Ver tipos de objeto disponibles"
               fetchProperties={() => fetchHubspotAvailableObjectTypes()}
-              onPick={(name) => mgr.setForm((f) => ({ ...f, objectType: name }))}
+              onPick={(property) => mgr.setForm((f) => ({ ...f, objectType: property.name }))}
             />
           </div>
           <div className={formStyles.field}>
@@ -145,7 +145,7 @@ export function HubspotTableManager() {
               disabledHint="Escribe primero el tipo de objeto de HubSpot."
               showHiddenToggle
               fetchProperties={(includeHidden) => fetchHubspotAvailableProperties(mgr.form.objectType.trim(), includeHidden)}
-              onPick={(name) => mgr.setForm((f) => ({ ...f, fieldsRaw: appendField(f.fieldsRaw, name) }))}
+              onPick={(property) => mgr.setForm((f) => ({ ...f, fieldsRaw: appendField(f.fieldsRaw, property.name) }))}
             />
           </div>
           <div className={formStyles.field}>

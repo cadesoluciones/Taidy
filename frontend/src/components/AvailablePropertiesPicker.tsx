@@ -14,7 +14,12 @@ interface AvailablePropertiesPickerProps {
    * such distinction). */
   showHiddenToggle?: boolean;
   fetchProperties: (includeHidden: boolean) => Promise<{ items: AvailableProperty[] }>;
-  onPick: (name: string) => void;
+  /** Gets the whole picked entry, not just its `name` -- most callers only
+   * need `.name` (unchanged from before), but one (BC's table URL picker)
+   * needs `.label` too, since its "name" is a long URL unsuited to being
+   * the bold, primary text every row shows -- there it's the short,
+   * scannable identifier instead, with the full URL carried in `.label`. */
+  onPick: (property: AvailableProperty) => void;
 }
 
 /** Admin-only helper: a button that opens a live, searchable, click-to-add
@@ -108,7 +113,7 @@ export function AvailablePropertiesPicker({
               <div className={styles.list}>
                 {visible.length === 0 && <p className={styles.emptyHint}>Sin resultados.</p>}
                 {visible.map((p) => (
-                  <button type="button" key={p.name} className={styles.propertyRow} onClick={() => onPick(p.name)}>
+                  <button type="button" key={p.name} className={styles.propertyRow} onClick={() => onPick(p)}>
                     <span className={styles.propertyName}>{p.name}</span>
                     {p.label && p.label !== p.name && <span className={styles.propertyLabel}>{p.label}</span>}
                   </button>
