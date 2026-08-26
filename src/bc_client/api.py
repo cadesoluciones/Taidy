@@ -36,6 +36,22 @@ from ..utils import get_logger
 
 logger = get_logger(__name__)
 
+# Real BC "Custom APIs" groups (publisher, group, version) confirmed to exist
+# in this tenant's AL customizations -- e.g. from the page source pasted by
+# an admin -- that no currently-configured table references yet, so the
+# auto-discovery loop in list_available_custom_api_tables() can never find
+# them on its own (see that method's docstring). Probed unconditionally on
+# every call, same as an explicit `extra_group`; a group that's since been
+# renamed or removed just gets skipped the same way an unreachable one
+# always has, it won't show up. There's no tenant-wide "list every group"
+# endpoint to discover this automatically, so a genuinely new group still
+# needs either a first table referencing it or a manual probe -- see
+# `extra_group` -- until it's added here.
+_KNOWN_UNDISCOVERABLE_GROUPS: Tuple[Tuple[str, str, str], ...] = (
+    ("cade", "Compras", "v1.0"),
+    ("cade", "Contabilidad", "v1.0"),
+)
+
 
 # --------------------------------------------------------------------------------------
 # Custom Exceptions
@@ -238,15 +254,17 @@ class BusinessCentralClient:
 
         There's no single endpoint listing every group across the whole
         tenant, so by default only groups already used by at least one
-        currently-configured table are queried. Confirmed live: a real BC
-        page can declare an APIGroup (e.g. "Contabilidad", "Compras")
-        while every table actually configured for it still points at the
-        older plain OData id instead -- meaning that group would otherwise
-        never be found this way, even though it genuinely exists. `extra_group`
-        (publisher, group, version) probes ONE additional, explicitly-named
-        group on top of the auto-discovered ones, for exactly that case --
-        once a table is saved from it, it joins the auto-discovered set
-        for every future call.
+        currently-configured table are queried, plus every group in
+        `_KNOWN_UNDISCOVERABLE_GROUPS` (real groups confirmed to exist that
+        no table references yet -- e.g. "Contabilidad", "Compras": a real BC
+        page can declare an APIGroup while every table actually configured
+        for it still points at the older plain OData id instead, meaning
+        that group would otherwise never be found this way even though it
+        genuinely exists). `extra_group` (publisher, group, version) probes
+        ONE further, explicitly-named group on top of both of those, for a
+        group that's new enough it hasn't been added to
+        `_KNOWN_UNDISCOVERABLE_GROUPS` yet -- once a table is saved from it,
+        it joins the auto-discovered set for every future call anyway.
 
         Each returned "name" is "{group}/{entity}" (to tell same-named
         entities in different groups apart, e.g. "Proyecto/recursos" vs.
@@ -280,6 +298,11 @@ class BusinessCentralClient:
             if len(segments) < 4:
                 continue
             _add_group(prefix, segments[0], segments[1], segments[2])
+
+        if self._settings.tables:
+            common_prefix = self._common_url_prefix()
+            for publisher, group, version in _KNOWN_UNDISCOVERABLE_GROUPS:
+                _add_group(common_prefix, publisher, group, version)
 
         if extra_group is not None:
             _add_group(self._common_url_prefix(), *extra_group)

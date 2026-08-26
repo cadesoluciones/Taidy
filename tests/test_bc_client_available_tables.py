@@ -88,6 +88,16 @@ def _client(settings, session):
     return BusinessCentralClient(settings=settings, token_provider=_FakeTokenProvider(), session=session)
 
 
+@pytest.fixture(autouse=True)
+def _no_known_extra_groups(monkeypatch):
+    """Every other test in this file focuses on auto-discovery or an
+    explicit `extra_group` and doesn't mock a response for the
+    always-probed `_KNOWN_UNDISCOVERABLE_GROUPS` roots -- clear that list
+    here so they keep exercising exactly what they say. A dedicated test
+    below restores it to verify the real behavior."""
+    monkeypatch.setattr(bc_api_module, "_KNOWN_UNDISCOVERABLE_GROUPS", ())
+
+
 _PREFIX = "https://api.businesscentral.dynamics.com/v2.0/tenant-guid/SANDBOX_CADE"
 _ODATA_ROOT = f"{_PREFIX}/ODataV4/"
 _EXISTING_TABLE_URL = f"{_ODATA_ROOT}Company('CADE%20Soluciones')/APIexisting"
@@ -280,6 +290,80 @@ def test_list_available_custom_api_tables_extra_group_already_seen_is_not_querie
     client.list_available_custom_api_tables(extra_group=("cade", "Proyecto", "v1.0"))
 
     assert session.requests == [_PROYECTO_GROUP_ROOT]
+
+
+def test_list_available_custom_api_tables_always_includes_known_undiscoverable_groups(monkeypatch):
+    """The actual fix for the reported bug: Compras/Contabilidad must show
+    up with no manual input at all, not just when the admin remembers to
+    type them into the "extra group" field."""
+    monkeypatch.setattr(bc_api_module, "resolve_environment", lambda: "SANDBOX_CADE")
+    contabilidad_root = f"{_PREFIX}/api/cade/Contabilidad/v1.0/"
+    monkeypatch.setattr(bc_api_module, "_KNOWN_UNDISCOVERABLE_GROUPS", (("cade", "Contabilidad", "v1.0"),))
+    # Only an ODataV4-style table configured -- nothing to auto-discover
+    # any Custom APIs group from, and no extra_group passed in either.
+    settings = _settings([TableConfig(name="bc_existing", url=_EXISTING_TABLE_URL)])
+    session = _FakeSession({contabilidad_root: _FakeResponse(200, {"value": [{"name": "GLAccount"}]})})
+    client = _client(settings, session)
+
+    tables = client.list_available_custom_api_tables()
+
+    assert tables == [
+        {
+            "name": "Contabilidad/GLAccount",
+            "label": f"{contabilidad_root.replace('SANDBOX_CADE', '{ENVIRONMENT}')}GLAccount?company=CADE%20Soluciones",
+        }
+    ]
+    assert session.requests == [contabilidad_root]
+
+
+def test_list_available_custom_api_tables_known_group_merges_with_auto_discovered_and_extra(monkeypatch):
+    monkeypatch.setattr(bc_api_module, "resolve_environment", lambda: "SANDBOX_CADE")
+    contabilidad_root = f"{_PREFIX}/api/cade/Contabilidad/v1.0/"
+    compras_root = f"{_PREFIX}/api/cade/Compras/v1.0/"
+    monkeypatch.setattr(bc_api_module, "_KNOWN_UNDISCOVERABLE_GROUPS", (("cade", "Contabilidad", "v1.0"),))
+    settings = _settings([TableConfig(name="bc_recursos", url=_PROYECTO_TABLE_URL)])
+    session = _FakeSession(
+        {
+            _PROYECTO_GROUP_ROOT: _FakeResponse(200, {"value": [{"name": "recursos"}]}),
+            contabilidad_root: _FakeResponse(200, {"value": [{"name": "GLAccount"}]}),
+            compras_root: _FakeResponse(200, {"value": [{"name": "vendors"}]}),
+        }
+    )
+    client = _client(settings, session)
+
+    tables = client.list_available_custom_api_tables(extra_group=("cade", "Compras", "v1.0"))
+
+    assert {t["name"] for t in tables} == {"Proyecto/recursos", "Contabilidad/GLAccount", "Compras/vendors"}
+
+
+def test_list_available_custom_api_tables_known_group_already_auto_discovered_is_not_queried_twice(monkeypatch):
+    monkeypatch.setattr(bc_api_module, "resolve_environment", lambda: "SANDBOX_CADE")
+    monkeypatch.setattr(bc_api_module, "_KNOWN_UNDISCOVERABLE_GROUPS", (("cade", "Proyecto", "v1.0"),))
+    settings = _settings([TableConfig(name="bc_recursos", url=_PROYECTO_TABLE_URL)])
+    session = _FakeSession({_PROYECTO_GROUP_ROOT: _FakeResponse(200, {"value": [{"name": "recursos"}]})})
+    client = _client(settings, session)
+
+    client.list_available_custom_api_tables()
+
+    assert session.requests == [_PROYECTO_GROUP_ROOT]
+
+
+def test_list_available_custom_api_tables_known_group_that_fails_does_not_hide_the_rest(monkeypatch):
+    monkeypatch.setattr(bc_api_module, "resolve_environment", lambda: "SANDBOX_CADE")
+    monkeypatch.setattr(bc_api_module, "_KNOWN_UNDISCOVERABLE_GROUPS", (("cade", "Contabilidad", "v1.0"),))
+    contabilidad_root = f"{_PREFIX}/api/cade/Contabilidad/v1.0/"
+    settings = _settings([TableConfig(name="bc_recursos", url=_PROYECTO_TABLE_URL)])
+    session = _FakeSession(
+        {
+            _PROYECTO_GROUP_ROOT: _FakeResponse(200, {"value": [{"name": "recursos"}]}),
+            contabilidad_root: _FakeResponse(404, text="Not Found"),
+        }
+    )
+    client = _client(settings, session)
+
+    tables = client.list_available_custom_api_tables()
+
+    assert [t["name"] for t in tables] == ["Proyecto/recursos"]
 
 
 def test_list_available_custom_api_tables_skips_a_failing_group_without_failing_the_rest(monkeypatch):

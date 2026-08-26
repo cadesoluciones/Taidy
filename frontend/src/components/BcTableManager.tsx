@@ -126,18 +126,6 @@ export function BcTableManager() {
               value={mgr.form.url}
               onChange={(e) => mgr.setForm((f) => ({ ...f, url: e.target.value }))}
             />
-            <div className={formStyles.field}>
-              <label htmlFor="new_bc_extra_group">
-                Grupo adicional de Custom APIs (opcional -- ninguna tabla lo usa todavía, pero existe en BC)
-              </label>
-              <input
-                id="new_bc_extra_group"
-                type="text"
-                value={extraGroupInput}
-                onChange={(e) => setExtraGroupInput(e.target.value)}
-                placeholder="cade/Contabilidad/v1.0"
-              />
-            </div>
             <div className={styles.pickerRow}>
               <AvailablePropertiesPicker
                 buttonLabel="Ver tablas OData estándar"
@@ -152,9 +140,21 @@ export function BcTableManager() {
             </div>
             <p className={formStyles.hint}>
               "OData estándar" son las tablas tipo Company/APIxxxxx…; "Custom APIs" son los grupos
-              (api/publisher/grupo/versión, p. ej. Proyecto o CRM) ya usados por alguna tabla existente, más el grupo
-              adicional de arriba si lo rellenas.
+              (api/publisher/grupo/versión) ya usados por alguna tabla existente (Proyecto, CRM…), más Compras y
+              Contabilidad, que ya se incluyen siempre aunque ninguna tabla los use todavía.
             </p>
+            <div className={formStyles.field}>
+              <label htmlFor="new_bc_extra_group">
+                Grupo adicional de Custom APIs (opcional -- solo si BC tiene otro grupo nuevo que aún no aparece)
+              </label>
+              <input
+                id="new_bc_extra_group"
+                type="text"
+                value={extraGroupInput}
+                onChange={(e) => setExtraGroupInput(e.target.value)}
+                placeholder="cade/OtroGrupo/v1.0"
+              />
+            </div>
           </div>
           <div className={formStyles.field}>
             <label htmlFor="new_bc_table_desc">Descripción (opcional)</label>
