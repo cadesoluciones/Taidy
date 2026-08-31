@@ -9,6 +9,7 @@ import { syncBc } from "../../api/tasks";
 import { useAuth } from "../../auth/AuthContext";
 import formStyles from "../../components/Form.module.css";
 import { NotifyCheckbox } from "../../components/NotifyCheckbox";
+import { PageHeader } from "../../components/PageHeader";
 import { ReadOnlyNotice } from "../../components/ReadOnlyNotice";
 import { TagMultiSelect } from "../../components/TagMultiSelect";
 
@@ -62,7 +63,7 @@ export function BcSyncPage() {
 
   return (
     <section>
-      <h1>Extraer + subir Business Central en un paso</h1>
+      <PageHeader title="Extraer + subir Business Central en un paso" />
       {success && <div className={formStyles.successBanner}>{success}</div>}
       {error && <div className={formStyles.errorBanner}>{error}</div>}
       {isReader && <ReadOnlyNotice action="lanzar sincronizaciones" />}

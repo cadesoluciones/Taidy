@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { ApiError } from "../../api/client";
 import { fetchSummaryMode, setSummaryMode, type SummaryMode } from "../../api/dashboard";
 import formStyles from "../../components/Form.module.css";
+import { PageHeader } from "../../components/PageHeader";
 
 export function ConfiguracionPage() {
   const [mode, setMode] = useState<SummaryMode["mode"] | null>(null);
@@ -31,7 +32,7 @@ export function ConfiguracionPage() {
 
   return (
     <section>
-      <h1>Configuración</h1>
+      <PageHeader title="Configuración" />
 
       <h2>Resumen de actividad (Inicio)</h2>
       <p>

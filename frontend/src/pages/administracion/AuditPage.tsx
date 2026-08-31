@@ -3,6 +3,7 @@ import { Download } from "lucide-react";
 
 import { auditExportCsvUrl, fetchAudit, type AuditFilters, type AuditPage as AuditPageData } from "../../api/audit";
 import formStyles from "../../components/Form.module.css";
+import { PageHeader } from "../../components/PageHeader";
 import styles from "./AuditPage.module.css";
 
 const EVENT_LABELS: Record<string, string> = {
@@ -58,8 +59,10 @@ export function AuditPage() {
 
   return (
     <section>
-      <h1>Auditoría de seguridad</h1>
-      <p>Eventos de login, cierre de sesión, cambio de contraseña y accesos denegados. Nunca contiene tokens ni secretos.</p>
+      <PageHeader
+        title="Auditoría de seguridad"
+        description="Eventos de login, cierre de sesión, cambio de contraseña y accesos denegados. Nunca contiene tokens ni secretos."
+      />
 
       {error && <div className={formStyles.errorBanner}>{error}</div>}
 

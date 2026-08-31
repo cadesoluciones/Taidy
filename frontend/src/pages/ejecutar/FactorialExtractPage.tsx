@@ -9,6 +9,7 @@ import { extractFactorial } from "../../api/tasks";
 import { useAuth } from "../../auth/AuthContext";
 import formStyles from "../../components/Form.module.css";
 import { NotifyCheckbox } from "../../components/NotifyCheckbox";
+import { PageHeader } from "../../components/PageHeader";
 import { ReadOnlyNotice } from "../../components/ReadOnlyNotice";
 import { TagMultiSelect } from "../../components/TagMultiSelect";
 
@@ -97,7 +98,7 @@ export function FactorialExtractPage() {
 
   return (
     <section>
-      <h1>Extraer tablas de Factorial HR</h1>
+      <PageHeader title="Extraer tablas de Factorial HR" />
       {success && <div className={formStyles.successBanner}>{success}</div>}
       {error && <div className={formStyles.errorBanner}>{error}</div>}
       {isReader && <ReadOnlyNotice action="lanzar extracciones" />}

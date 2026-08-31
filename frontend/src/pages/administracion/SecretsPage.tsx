@@ -13,6 +13,7 @@ import {
   type TestConnectionResult,
 } from "../../api/secrets";
 import formStyles from "../../components/Form.module.css";
+import { PageHeader } from "../../components/PageHeader";
 import styles from "./SecretsPage.module.css";
 
 const TEST_FUNCTIONS: Record<string, () => Promise<TestConnectionResult>> = {
@@ -78,13 +79,17 @@ export function SecretsPage() {
 
   return (
     <section>
-      <h1>Claves de servicio</h1>
-      <p>
-        Valores de <code>.env</code> — se autorrellenan con lo que ya hay configurado en el servidor. Por defecto
-        se muestran ocultos; usa el icono del ojo para verlos. Guardar aquí escribe directamente en{" "}
-        <code>.env</code> y aplica el cambio de inmediato para las próximas ejecuciones. "Probar acceso" solo hace
-        una lectura mínima real (nunca crea, modifica ni borra nada) para confirmar que la clave funciona.
-      </p>
+      <PageHeader
+        title="Claves de servicio"
+        description={
+          <>
+            Valores de <code>.env</code> — se autorrellenan con lo que ya hay configurado en el servidor. Por
+            defecto se muestran ocultos; usa el icono del ojo para verlos. Guardar aquí escribe directamente en{" "}
+            <code>.env</code> y aplica el cambio de inmediato para las próximas ejecuciones. "Probar acceso" solo
+            hace una lectura mínima real (nunca crea, modifica ni borra nada) para confirmar que la clave funciona.
+          </>
+        }
+      />
 
       {error && <div className={formStyles.errorBanner}>{error}</div>}
 

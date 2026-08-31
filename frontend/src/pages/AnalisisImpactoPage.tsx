@@ -7,6 +7,7 @@ import { FabricRelationshipCanvas } from "../components/FabricRelationshipCanvas
 import { computeImpact } from "../utils/fabricImpact";
 import formStyles from "../components/Form.module.css";
 import managerStyles from "../components/FabricCatalogManager.module.css";
+import { PageHeader } from "../components/PageHeader";
 import styles from "./AnalisisImpactoPage.module.css";
 
 const MIN_DEPTH = 1;
@@ -40,11 +41,15 @@ export function AnalisisImpactoPage() {
 
   return (
     <section>
-      <h1>Análisis de impacto</h1>
-      <p>
-        Elige un elemento del catálogo de Fabric para ver de qué depende y a qué otros elementos podría afectar si
-        se modifica, a partir de las relaciones declaradas en "Gobernanza de datos".
-      </p>
+      <PageHeader
+        title="Análisis de impacto"
+        description={
+          <>
+            Elige un elemento del catálogo de Fabric para ver de qué depende y a qué otros elementos podría afectar
+            si se modifica, a partir de las relaciones declaradas en "Gobernanza de datos".
+          </>
+        }
+      />
 
       {isLoading && <p>Cargando catálogo de Fabric…</p>}
       {loadError && <div className={formStyles.errorBanner}>{loadError}</div>}

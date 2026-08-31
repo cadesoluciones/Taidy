@@ -25,6 +25,7 @@ import { ACTION_LABELS } from "../components/actionLabels";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import formStyles from "../components/Form.module.css";
 import { NotifyCheckbox } from "../components/NotifyCheckbox";
+import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { SyncApplyFields } from "../components/SyncApplyFields";
 import { TableScopeField, tableScopeModeFor, type TableScopeMode } from "../components/TableScopeField";
@@ -407,13 +408,17 @@ export function WorkflowsPage() {
 
   return (
     <section>
-      <h1>Flujos</h1>
-      <p>
-        Añade bloques y arrastra desde el borde derecho de un bloque hasta el izquierdo de otro para marcar una
-        dependencia. Haz clic en un bloque para editarlo, o en una conexión para quitarla. Un bloque sin dependencias
-        se lanza en paralelo con los demás; uno con dependencias espera a que todas terminen antes de decidir si se
-        lanza.
-      </p>
+      <PageHeader
+        title="Flujos"
+        description={
+          <>
+            Añade bloques y arrastra desde el borde derecho de un bloque hasta el izquierdo de otro para marcar una
+            dependencia. Haz clic en un bloque para editarlo, o en una conexión para quitarla. Un bloque sin
+            dependencias se lanza en paralelo con los demás; uno con dependencias espera a que todas terminen antes
+            de decidir si se lanza.
+          </>
+        }
+      />
 
       <div className={styles.tabBar}>
         <button

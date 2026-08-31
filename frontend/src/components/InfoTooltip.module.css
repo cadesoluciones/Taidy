@@ -1,0 +1,41 @@
+.wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.button {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.button:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.popover {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 260px;
+  max-width: 380px;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-card);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text);
+  font-weight: 400;
+}

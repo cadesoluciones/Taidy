@@ -20,6 +20,7 @@ import { ACTION_LABELS } from "../components/actionLabels";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import formStyles from "../components/Form.module.css";
 import { NotifyCheckbox } from "../components/NotifyCheckbox";
+import { PageHeader } from "../components/PageHeader";
 import { SyncApplyFields } from "../components/SyncApplyFields";
 import { useDragReorder } from "../hooks/useDragReorder";
 import { NEEDS_MODE_PARALLEL, NEEDS_START_ON, NEEDS_SKIP_EXISTING } from "../utils/actionParamGroups";
@@ -325,11 +326,15 @@ export function SchedulesPage() {
 
   return (
     <section>
-      <h1>Tareas programadas</h1>
-      <p>
-        Se ejecutan en segundo plano mientras el servidor de la API siga vivo. En producción, arráncalo bajo un
-        supervisor de procesos (systemd, Docker con restart policy, etc.).
-      </p>
+      <PageHeader
+        title="Tareas programadas"
+        description={
+          <>
+            Se ejecutan en segundo plano mientras el servidor de la API siga vivo. En producción, arráncalo bajo un
+            supervisor de procesos (systemd, Docker con restart policy, etc.).
+          </>
+        }
+      />
 
       {isAdmin ? (
         <div className={styles.layout}>

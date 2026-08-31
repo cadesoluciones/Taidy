@@ -5,6 +5,7 @@ import { HelpCircle } from "lucide-react";
 import { FabricCatalogManager } from "../components/FabricCatalogManager";
 import { GobernanzaRolesHelp } from "../components/GobernanzaRolesHelp";
 import { Modal } from "../components/Modal";
+import { PageHeader } from "../components/PageHeader";
 import styles from "./GobernanzaDatosPage.module.css";
 
 export function GobernanzaDatosPage() {
@@ -12,8 +13,16 @@ export function GobernanzaDatosPage() {
 
   return (
     <section>
-      <div className={styles.titleRow}>
-        <h1>Gobernanza de datos</h1>
+      <PageHeader
+        title="Gobernanza de datos"
+        description={
+          <>
+            Documenta y relaciona los objetos de Fabric, Business Central y HubSpot -- descubiertos en vivo (Fabric)
+            o desde su configuración de tablas (BC/HubSpot), con descripción, roles de gobernanza y relaciones que
+            se añaden aquí.
+          </>
+        }
+      >
         <button
           type="button"
           className={styles.helpButton}
@@ -23,12 +32,7 @@ export function GobernanzaDatosPage() {
         >
           <HelpCircle size={18} />
         </button>
-      </div>
-      <p>
-        Documenta y relaciona los objetos de Fabric, Business Central y HubSpot -- descubiertos en vivo (Fabric) o
-        desde su configuración de tablas (BC/HubSpot), con descripción, roles de gobernanza y relaciones que se
-        añaden aquí.
-      </p>
+      </PageHeader>
       <FabricCatalogManager />
 
       <Modal

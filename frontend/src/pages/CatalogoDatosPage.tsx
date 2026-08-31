@@ -9,6 +9,7 @@ import {
   type HubspotTableConfig,
 } from "../api/meta";
 import formStyles from "../components/Form.module.css";
+import { PageHeader } from "../components/PageHeader";
 import styles from "./CatalogoDatosPage.module.css";
 
 export function CatalogoDatosPage() {
@@ -40,12 +41,16 @@ export function CatalogoDatosPage() {
 
   return (
     <section>
-      <h1>Catálogo de datos</h1>
-      <p>
-        Qué tablas extrae NEXUS-BDB de cada origen y con qué configuración, en modo solo lectura. Para añadir, editar o
-        borrar tablas, ve a "Conexiones API" (Administración). Para documentar y relacionar los objetos de vuestro
-        workspace de Fabric (notebooks, pipelines, lakehouses), ve a "Gobernanza de datos".
-      </p>
+      <PageHeader
+        title="Catálogo de datos"
+        description={
+          <>
+            Qué tablas extrae NEXUS-BDB de cada origen y con qué configuración, en modo solo lectura. Para añadir,
+            editar o borrar tablas, ve a "Conexiones API" (Administración). Para documentar y relacionar los
+            objetos de vuestro workspace de Fabric (notebooks, pipelines, lakehouses), ve a "Gobernanza de datos".
+          </>
+        }
+      />
 
       {error && <div className={formStyles.errorBanner}>{error}</div>}
       {isLoading && !error && <p>Cargando…</p>}

@@ -6,6 +6,7 @@ import { runWorkflow } from "../api/workflows";
 import { useAuth } from "../auth/AuthContext";
 import { ACTION_LABELS } from "../components/actionLabels";
 import formStyles from "../components/Form.module.css";
+import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { WorkflowDiagram } from "../components/WorkflowDiagram";
 import { usePolling } from "../hooks/usePolling";
@@ -48,7 +49,7 @@ export function ReaderHomePage() {
 
   return (
     <section>
-      <h1>NEXUS-BDB — Panel de datos</h1>
+      <PageHeader title="NEXUS-BDB — Panel de datos" />
       <p>Hola, {user?.username}. Aquí puedes lanzar y seguir tus flujos.</p>
 
       {pollError && <div className={formStyles.errorBanner}>No se pudo actualizar el estado. Reintentando…</div>}

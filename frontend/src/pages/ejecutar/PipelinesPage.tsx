@@ -9,6 +9,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { type DiagramStep, WorkflowDiagram } from "../../components/WorkflowDiagram";
 import formStyles from "../../components/Form.module.css";
 import { NotifyCheckbox } from "../../components/NotifyCheckbox";
+import { PageHeader } from "../../components/PageHeader";
 import { ReadOnlyNotice } from "../../components/ReadOnlyNotice";
 import styles from "./PipelinesPage.module.css";
 
@@ -98,7 +99,7 @@ export function PipelinesPage() {
 
   return (
     <section>
-      <h1>Ejecutar un pipeline de Fabric Data Factory</h1>
+      <PageHeader title="Ejecutar un pipeline de Fabric Data Factory" />
       {success && <div className={formStyles.successBanner}>{success}</div>}
       {error && <div className={formStyles.errorBanner}>{error}</div>}
       {isReader && <ReadOnlyNotice action="lanzar pipelines" />}

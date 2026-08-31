@@ -6,6 +6,8 @@ import {
   CalendarClock,
   ChevronDown,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   Database,
   Download,
   GitFork,
@@ -180,6 +182,28 @@ function persistCollapsedSections(labels: Set<string>): void {
   }
 }
 
+// Whole-sidebar rail collapse (icons only) -- independent of, and doesn't
+// interact with, per-section collapse above (a rail-collapsed sidebar just
+// shows every item's icon flat, ignoring section grouping entirely, since
+// section *headers* have nothing left to show once labels are hidden).
+const NAV_RAIL_STORAGE_KEY = "taidy.nav.railCollapsed";
+
+function loadRailCollapsed(): boolean {
+  try {
+    return localStorage.getItem(NAV_RAIL_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function persistRailCollapsed(collapsed: boolean): void {
+  try {
+    localStorage.setItem(NAV_RAIL_STORAGE_KEY, collapsed ? "1" : "0");
+  } catch {
+    // Best-effort only -- a failed write just means the choice won't survive reload.
+  }
+}
+
 function breadcrumbFor(sections: NavSection[], pathname: string): string {
   for (const section of sections) {
     for (const item of section.items) {
@@ -200,6 +224,15 @@ export function NavShell() {
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() =>
     loadCollapsedSections(sectionLabelContaining(location.pathname)),
   );
+  const [railCollapsed, setRailCollapsed] = useState(loadRailCollapsed);
+
+  function toggleRail() {
+    setRailCollapsed((prev) => {
+      const next = !prev;
+      persistRailCollapsed(next);
+      return next;
+    });
+  }
 
   // Close the mobile drawer automatically on navigation -- otherwise it
   // stays open over the newly-loaded page.
@@ -256,7 +289,7 @@ export function NavShell() {
   const breadcrumb = breadcrumbFor(sections, location.pathname);
 
   return (
-    <div className={styles.shell}>
+    <div className={`${styles.shell} ${railCollapsed ? styles.shellRailCollapsed : ""}`}>
       <header className={styles.header}>
         <div className={styles.brand}>
           <button
@@ -311,50 +344,74 @@ export function NavShell() {
         aria-hidden="true"
       />
       <nav
-        className={`${styles.sidebar} ${mobileNavOpen ? styles.sidebarOpen : ""}`}
+        className={`${styles.sidebar} ${mobileNavOpen ? styles.sidebarOpen : ""} ${railCollapsed ? styles.sidebarRailCollapsed : ""}`}
         aria-label="Navegación principal"
       >
-        {sections.map((section) => {
-          const collapsible = section.items.length > 1;
-          const isCollapsed = collapsible && collapsedSections.has(section.label);
-          const panelId = `nav-section-${section.label.replace(/\s+/g, "-").toLowerCase()}`;
-          return (
-            <div key={section.label || "inicio"}>
-              {section.label && collapsible && (
-                <button
-                  type="button"
-                  className={styles.sectionToggle}
-                  aria-expanded={!isCollapsed}
-                  aria-controls={panelId}
-                  onClick={() => toggleSection(section.label)}
+        <button
+          type="button"
+          className={styles.railToggle}
+          aria-label={railCollapsed ? "Expandir menú" : "Contraer menú a iconos"}
+          title={railCollapsed ? "Expandir menú" : "Contraer menú a iconos"}
+          onClick={toggleRail}
+        >
+          {railCollapsed ? <ChevronsRight size={15} /> : <ChevronsLeft size={15} />}
+        </button>
+        {railCollapsed
+          ? sections.flatMap((section) =>
+              section.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end
+                  className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ""}`}
+                  title={item.label}
+                  aria-label={item.label}
                 >
-                  {section.label}
-                  {isCollapsed ? (
-                    <ChevronRight size={13} className={styles.sectionChevron} aria-hidden="true" />
-                  ) : (
-                    <ChevronDown size={13} className={styles.sectionChevron} aria-hidden="true" />
-                  )}
-                </button>
-              )}
-              {section.label && !collapsible && <div className={styles.sectionLabel}>{section.label}</div>}
-              {!isCollapsed && (
-                <div id={panelId}>
-                  {section.items.map((item) => (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      end
-                      className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ""}`}
+                  <item.icon size={16} aria-hidden="true" />
+                </NavLink>
+              )),
+            )
+          : sections.map((section) => {
+              const collapsible = section.items.length > 1;
+              const isCollapsed = collapsible && collapsedSections.has(section.label);
+              const panelId = `nav-section-${section.label.replace(/\s+/g, "-").toLowerCase()}`;
+              return (
+                <div key={section.label || "inicio"}>
+                  {section.label && collapsible && (
+                    <button
+                      type="button"
+                      className={styles.sectionToggle}
+                      aria-expanded={!isCollapsed}
+                      aria-controls={panelId}
+                      onClick={() => toggleSection(section.label)}
                     >
-                      <item.icon size={16} aria-hidden="true" />
-                      {item.label}
-                    </NavLink>
-                  ))}
+                      {section.label}
+                      {isCollapsed ? (
+                        <ChevronRight size={13} className={styles.sectionChevron} aria-hidden="true" />
+                      ) : (
+                        <ChevronDown size={13} className={styles.sectionChevron} aria-hidden="true" />
+                      )}
+                    </button>
+                  )}
+                  {section.label && !collapsible && <div className={styles.sectionLabel}>{section.label}</div>}
+                  {!isCollapsed && (
+                    <div id={panelId}>
+                      {section.items.map((item) => (
+                        <NavLink
+                          key={item.to}
+                          to={item.to}
+                          end
+                          className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ""}`}
+                        >
+                          <item.icon size={16} aria-hidden="true" />
+                          {item.label}
+                        </NavLink>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          );
-        })}
+              );
+            })}
       </nav>
       <main className={styles.content}>
         <Outlet />

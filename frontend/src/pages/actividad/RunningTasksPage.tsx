@@ -4,6 +4,7 @@ import { ROLE_ADMIN } from "../../api/auth";
 import { fetchTasks, stopTask, type Task } from "../../api/tasks";
 import { useAuth } from "../../auth/AuthContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { PageHeader } from "../../components/PageHeader";
 import { StatusBadge } from "../../components/StatusBadge";
 import { StepStatusGrid } from "../../components/StepStatusGrid";
 import { usePolling } from "../../hooks/usePolling";
@@ -40,7 +41,7 @@ export function RunningTasksPage() {
 
   return (
     <section>
-      <h1>Tareas en curso</h1>
+      <PageHeader title="Tareas en curso" />
       {error && <p>No se pudo actualizar la lista de tareas.</p>}
       {tasks.length === 0 ? (
         <p className={styles.emptyState}>No hay tareas registradas en esta sesión del servidor.</p>

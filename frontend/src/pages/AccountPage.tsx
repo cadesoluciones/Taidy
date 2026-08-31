@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import { ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import formStyles from "../components/Form.module.css";
+import { PageHeader } from "../components/PageHeader";
 
 export function AccountPage() {
   const { user, changePassword } = useAuth();
@@ -31,7 +32,7 @@ export function AccountPage() {
 
   return (
     <section>
-      <h1>Mi cuenta</h1>
+      <PageHeader title="Mi cuenta" />
       <p>
         Sesión iniciada como <strong>{user?.username}</strong> — rol: {user?.role}
       </p>

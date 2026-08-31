@@ -12,6 +12,7 @@ import {
 import { syncApply, type SyncApplyDirection } from "../../api/tasks";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import formStyles from "../../components/Form.module.css";
+import { PageHeader } from "../../components/PageHeader";
 import { directionLabel, SYSTEM_LABELS } from "../../utils/syncLabels";
 import styles from "./Sincronizacion.module.css";
 
@@ -317,11 +318,15 @@ export function CompararPage() {
 
   return (
     <section>
-      <h1>Comparar</h1>
-      <p>
-        Elige un mapeo ya definido en Sincronización → Mapeos y pulsa "Comparar" para ver, sin cambiar nada
-        todavía, qué se crearía, qué se actualizaría en cada dirección y qué se saltaría por tener la clave mal.
-      </p>
+      <PageHeader
+        title="Comparar"
+        description={
+          <>
+            Elige un mapeo ya definido en Sincronización → Mapeos y pulsa "Comparar" para ver, sin cambiar nada
+            todavía, qué se crearía, qué se actualizaría en cada dirección y qué se saltaría por tener la clave mal.
+          </>
+        }
+      />
 
       {error && <div className={formStyles.errorBanner}>{error}</div>}
       {syncSuccess && <div className={formStyles.successBanner}>{syncSuccess}</div>}

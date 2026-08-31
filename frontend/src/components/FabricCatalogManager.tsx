@@ -74,6 +74,7 @@ export function FabricCatalogManager() {
   const [shortDescriptionDraft, setShortDescriptionDraft] = useState("");
   const [longDescriptionDraft, setLongDescriptionDraft] = useState("");
   const [longDescriptionView, setLongDescriptionView] = useState<"editar" | "vista previa">("editar");
+  const [detailTab, setDetailTab] = useState<"descripcion" | "modelo">("descripcion");
   const [roleDrafts, setRoleDrafts] = useState<Record<DataRoleField, string[]>>(EMPTY_ROLE_DRAFTS);
   const [criticalityDraft, setCriticalityDraft] = useState<FabricCriticality>("");
   const [statusDraft, setStatusDraft] = useState<FabricStatus>("");
@@ -131,11 +132,13 @@ export function FabricCatalogManager() {
   }, [appearanceOpen]);
 
   const selected = items.find((i) => i.item_id === selectedId) ?? null;
+  const isLakehouseTable = !!selected?.item_id.startsWith(LAKEHOUSE_TABLE_ID_PREFIX);
 
   useEffect(() => {
     setShortDescriptionDraft(selected?.short_description ?? "");
     setLongDescriptionDraft(selected?.long_description_markdown ?? "");
     setLongDescriptionView("editar");
+    setDetailTab("descripcion");
     setRoleDrafts({
       data_owner: selected?.data_owner ?? [],
       data_steward: selected?.data_steward ?? [],
@@ -634,61 +637,83 @@ export function FabricCatalogManager() {
                     </div>
                   </div>
 
-                  {selected.item_id.startsWith(LAKEHOUSE_TABLE_ID_PREFIX) && (
-                    <div className={`${formStyles.field} no-print`}>
-                      <label style={{ marginBottom: 0 }}>Modelo semántico</label>
-                      <FabricSemanticModelSection itemId={selected.item_id} itemName={selected.name} canEdit={canEdit} />
-                    </div>
-                  )}
                 </div>
 
                 <div className={`${styles.longDescColumn} no-print`}>
                   <div className={styles.detailHead}>
-                    <label htmlFor="fc_long_description" style={{ marginBottom: 0 }}>
-                      Descripción detallada
-                    </label>
-                    <div className={styles.longDescActions}>
-                      <button
-                        type="button"
-                        className={styles.relType}
-                        onClick={() => setLongDescriptionView((v) => (v === "editar" ? "vista previa" : "editar"))}
-                      >
-                        {longDescriptionView === "editar" ? "Ver vista previa" : "Volver a editar"}
-                      </button>
-                      {canEdit && (
+                    {isLakehouseTable ? (
+                      <div className={styles.detailTabBar}>
                         <button
                           type="button"
-                          className={formStyles.submit}
-                          onClick={() => void handleSave()}
-                          disabled={isSaving || !isDirty}
+                          className={detailTab === "descripcion" ? styles.detailTabActive : styles.detailTab}
+                          onClick={() => setDetailTab("descripcion")}
                         >
-                          {isSaving ? "Guardando…" : "Guardar"}
+                          Descripción detallada
                         </button>
-                      )}
-                    </div>
+                        <button
+                          type="button"
+                          className={detailTab === "modelo" ? styles.detailTabActive : styles.detailTab}
+                          onClick={() => setDetailTab("modelo")}
+                        >
+                          Modelo semántico
+                        </button>
+                      </div>
+                    ) : (
+                      <label htmlFor="fc_long_description" style={{ marginBottom: 0 }}>
+                        Descripción detallada
+                      </label>
+                    )}
+                    {(detailTab === "descripcion" || !isLakehouseTable) && (
+                      <div className={styles.longDescActions}>
+                        <button
+                          type="button"
+                          className={styles.relType}
+                          onClick={() => setLongDescriptionView((v) => (v === "editar" ? "vista previa" : "editar"))}
+                        >
+                          {longDescriptionView === "editar" ? "Ver vista previa" : "Volver a editar"}
+                        </button>
+                        {canEdit && (
+                          <button
+                            type="button"
+                            className={formStyles.submit}
+                            onClick={() => void handleSave()}
+                            disabled={isSaving || !isDirty}
+                          >
+                            {isSaving ? "Guardando…" : "Guardar"}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  {(saveSuccess || saveError) && (
-                    <div>
-                      {saveSuccess && <div className={formStyles.successBanner}>{saveSuccess}</div>}
-                      {saveError && <div className={formStyles.errorBanner}>{saveError}</div>}
-                    </div>
-                  )}
-                  {longDescriptionView === "editar" ? (
-                    <textarea
-                      id="fc_long_description"
-                      className={styles.mdTextarea}
-                      value={longDescriptionDraft}
-                      onChange={(e) => setLongDescriptionDraft(e.target.value)}
-                      disabled={!canEdit}
-                      placeholder={"Admite Markdown: # títulos, **negrita**, *cursiva*, - listas, [texto](url)"}
-                    />
+
+                  {detailTab === "descripcion" || !isLakehouseTable ? (
+                    <>
+                      {(saveSuccess || saveError) && (
+                        <div>
+                          {saveSuccess && <div className={formStyles.successBanner}>{saveSuccess}</div>}
+                          {saveError && <div className={formStyles.errorBanner}>{saveError}</div>}
+                        </div>
+                      )}
+                      {longDescriptionView === "editar" ? (
+                        <textarea
+                          id="fc_long_description"
+                          className={styles.mdTextarea}
+                          value={longDescriptionDraft}
+                          onChange={(e) => setLongDescriptionDraft(e.target.value)}
+                          disabled={!canEdit}
+                          placeholder={"Admite Markdown: # títulos, **negrita**, *cursiva*, - listas, [texto](url)"}
+                        />
+                      ) : (
+                        <div
+                          className={styles.mdPreview}
+                          dangerouslySetInnerHTML={{
+                            __html: renderMarkdown(longDescriptionDraft) || "<p><em>Vacío.</em></p>",
+                          }}
+                        />
+                      )}
+                    </>
                   ) : (
-                    <div
-                      className={styles.mdPreview}
-                      dangerouslySetInnerHTML={{
-                        __html: renderMarkdown(longDescriptionDraft) || "<p><em>Vacío.</em></p>",
-                      }}
-                    />
+                    <FabricSemanticModelSection itemId={selected.item_id} itemName={selected.name} canEdit={canEdit} />
                   )}
                 </div>
               </div>

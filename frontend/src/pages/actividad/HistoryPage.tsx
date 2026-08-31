@@ -6,6 +6,7 @@ import { fetchHistory, historyExportCsvUrl, type HistoryFilters, type HistoryPag
 import { ACTION_LABELS } from "../../components/actionLabels";
 import formStyles from "../../components/Form.module.css";
 import { OutcomeIcon } from "../../components/OutcomeIcon";
+import { PageHeader } from "../../components/PageHeader";
 import { Timeline, type TimelineItem } from "../../components/Timeline";
 import styles from "./HistoryPage.module.css";
 
@@ -80,7 +81,7 @@ export function HistoryPage() {
 
   return (
     <section>
-      <h1>Historial de ejecuciones</h1>
+      <PageHeader title="Historial de ejecuciones" />
       {error && <div className={formStyles.errorBanner}>{error}</div>}
       <div className={styles.filters}>
         <div className={styles.field}>

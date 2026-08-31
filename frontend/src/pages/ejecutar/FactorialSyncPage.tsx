@@ -9,6 +9,7 @@ import { syncFactorial } from "../../api/tasks";
 import { useAuth } from "../../auth/AuthContext";
 import formStyles from "../../components/Form.module.css";
 import { NotifyCheckbox } from "../../components/NotifyCheckbox";
+import { PageHeader } from "../../components/PageHeader";
 import { ReadOnlyNotice } from "../../components/ReadOnlyNotice";
 import { TagMultiSelect } from "../../components/TagMultiSelect";
 
@@ -72,7 +73,7 @@ export function FactorialSyncPage() {
 
   return (
     <section>
-      <h1>Extraer + subir Factorial en un paso</h1>
+      <PageHeader title="Extraer + subir Factorial en un paso" />
       {success && <div className={formStyles.successBanner}>{success}</div>}
       {error && <div className={formStyles.errorBanner}>{error}</div>}
       {isReader && <ReadOnlyNotice action="lanzar sincronizaciones" />}
