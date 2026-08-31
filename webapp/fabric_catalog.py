@@ -18,6 +18,7 @@ rename upstream doesn't orphan the metadata.
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 import threading
@@ -26,6 +27,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from src.fabric_pipelines.semantic_model_tmdl import (
+    append_missing_columns,
+    build_new_model_parts,
+    parse_table_columns,
+    set_column_description,
+)
 from webapp import table_configs
 from webapp.state_dir import state_path
 
@@ -119,6 +126,12 @@ _EMPTY_ENTRY: dict = {
     # un-hides the ones worth tracking day to day (via "mostrar ocultos" to
     # find and reveal them), rather than starting from a full, noisy list.
     "is_hidden": True,
+    # The Fabric item id of this table's linked semantic model, if one was
+    # created/linked through the app -- the source of truth for "does this
+    # table have a semantic model", since there's no naming convention to
+    # search Fabric by (see get_semantic_model_state() below). Only ever set
+    # by set_semantic_model_link(), never by set_metadata()'s general edit form.
+    "semantic_model_item_id": "",
 }
 
 
@@ -294,6 +307,22 @@ def set_hidden(item_id: str, is_hidden: bool) -> dict:
     return entry
 
 
+def set_semantic_model_link(item_id: str, semantic_model_item_id: str) -> dict:
+    """Records which Fabric semantic model (by its own item id) this table
+    is linked to, right after it's created via the app -- its own
+    lightweight save path, same reasoning as set_favorite()/set_hidden():
+    this is set programmatically by the create flow, never typed into the
+    general edit form. Pass "" to unlink (e.g. if the model was deleted
+    directly in Fabric and the app should offer "crear" again)."""
+    with _LOCK:
+        data = _read()
+        entry = {**_EMPTY_ENTRY, **data.get(item_id, {})}
+        entry["semantic_model_item_id"] = semantic_model_item_id
+        data[item_id] = entry
+        _write(data)
+    return entry
+
+
 def add_relationship(item_id: str, rel_type: str, target_item_id: str, *, reviewed_by: str) -> dict:
     """Appends a single relationship without touching any of the item's
     other fields -- used by the free-form relationship canvas, where a
@@ -423,6 +452,7 @@ _METADATA_FIELDS = (
     "canvas_positions",
     "is_favorite",
     "is_hidden",
+    "semantic_model_item_id",
 )
 
 
@@ -518,3 +548,192 @@ def preview_lakehouse_table(client: Any, item_id: str, *, limit: int = 10) -> Di
     lakehouse_item = client.get_item(lakehouse_id)
     display_name = lakehouse_item.get("displayName", "")
     return client.preview_lakehouse_table(lakehouse_id, display_name, schema, table, limit=limit)
+
+
+# --------------------------------------------------------------------------------------
+# Semantic models -- one single-table DirectLake Fabric semantic model per
+# Lakehouse table, created/edited from the app so an external MCP has a
+# focused model per table to query. Column *structure* (name/type) is
+# always auto-detected from the real table -- never typed by hand -- only
+# descriptions are editable here. See src/fabric_pipelines/semantic_model_tmdl.py
+# for how the TMDL itself is built/patched, and that module's tests for the
+# live-validated create/update round trip this is built on.
+# --------------------------------------------------------------------------------------
+
+
+def _lakehouse_table_source_columns(client: Any, lakehouse_id: str, schema: str, table: str) -> List[Dict[str, str]]:
+    lakehouse_item = client.get_item(lakehouse_id)
+    display_name = lakehouse_item.get("displayName", "")
+    return client.list_lakehouse_table_columns(lakehouse_id, display_name, schema, table)
+
+
+def _table_tmdl_part(parts: List[Dict[str, Any]]) -> Dict[str, Any]:
+    for part in parts:
+        path = part.get("path", "")
+        if path.startswith("definition/tables/") and path.endswith(".tmdl"):
+            return part
+    raise ValueError("El modelo semántico no tiene ninguna tabla en su definición -- no se puede editar desde aquí.")
+
+
+def _empty_semantic_model_state(missing_columns: List[str]) -> Dict[str, Any]:
+    return {"linked": False, "model_item_id": "", "model_name": "", "columns": [], "missing_columns": missing_columns}
+
+
+def _fetch_model_item_and_definition(client: Any, model_item_id: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    return client.get_item(model_item_id), client.get_definition(model_item_id)
+
+
+def get_semantic_model_state(client: Any, item_id: str) -> Dict[str, Any]:
+    """Live state of the table's linked semantic model (or the "not linked
+    yet" state): its columns with their current descriptions, plus which
+    real source-table columns aren't in the model yet (`missing_columns`,
+    for the "sync columns" convenience). `client` is a FabricPipelineClient
+    (passed in, same as preview_lakehouse_table()/list_catalog_items()).
+
+    Confirmed live this can genuinely take 20-40s end to end: the source
+    table's columns need their own SQL connection (get_item + a fresh
+    pyodbc connection), and get_definition() on the model can itself be a
+    polled Fabric long-running operation. Since those two round trips are
+    completely independent, they're run in parallel threads (this module's
+    established pattern for concurrent I/O, see src/hubspot_main.py/
+    src/factorial_main.py) rather than back to back -- roughly halves the
+    wait instead of leaving it to a future optimization."""
+    parsed = parse_lakehouse_table_id(item_id)
+    if parsed is None:
+        raise ValueError(f"'{item_id}' no es una tabla de Lakehouse -- no puede tener un modelo semántico.")
+    lakehouse_id, schema, table = parsed
+    model_item_id = get_metadata(item_id).get("semantic_model_item_id", "")
+
+    if not model_item_id:
+        source_columns = _lakehouse_table_source_columns(client, lakehouse_id, schema, table)
+        return _empty_semantic_model_state([c["name"] for c in source_columns])
+
+    from concurrent.futures import ThreadPoolExecutor
+
+    from src.fabric_pipelines.api import FabricPipelineError  # local: keep this module decoupled on the hot path
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        source_future = pool.submit(_lakehouse_table_source_columns, client, lakehouse_id, schema, table)
+        model_future = pool.submit(_fetch_model_item_and_definition, client, model_item_id)
+
+        source_columns = source_future.result()
+        source_names = [c["name"] for c in source_columns]
+        try:
+            model_item, defn = model_future.result()
+        except FabricPipelineError:
+            # The linked model is gone (e.g. deleted directly in Fabric) --
+            # self heal by unlinking, so the tab offers "crear" again
+            # instead of failing forever on a dangling id.
+            set_semantic_model_link(item_id, "")
+            return _empty_semantic_model_state(source_names)
+
+    table_part = _table_tmdl_part(defn.get("definition", {}).get("parts", []))
+    table_tmdl = base64.b64decode(table_part["payload"]).decode("utf-8")
+    model_columns = parse_table_columns(table_tmdl)
+
+    model_names = {c["name"] for c in model_columns}
+    source_name_set = set(source_names)
+    for column in model_columns:
+        column["in_source"] = column["name"] in source_name_set
+    missing_columns = [name for name in source_names if name not in model_names]
+
+    return {
+        "linked": True,
+        "model_item_id": model_item_id,
+        "model_name": model_item.get("displayName", ""),
+        "columns": model_columns,
+        "missing_columns": missing_columns,
+    }
+
+
+def create_semantic_model(client: Any, item_id: str) -> Dict[str, Any]:
+    """Creates a brand-new, single-table DirectLake semantic model for this
+    Lakehouse table -- columns auto-detected from the table's real schema,
+    never typed by hand -- links it to this catalog item, and returns the
+    same shape as get_semantic_model_state(). Raises ValueError if a model
+    is already linked (unlink/delete it first rather than silently creating
+    a second one for the same table)."""
+    parsed = parse_lakehouse_table_id(item_id)
+    if parsed is None:
+        raise ValueError(f"'{item_id}' no es una tabla de Lakehouse -- no puede tener un modelo semántico.")
+    lakehouse_id, schema, table = parsed
+    if get_metadata(item_id).get("semantic_model_item_id", ""):
+        raise ValueError("Esta tabla ya tiene un modelo semántico vinculado.")
+
+    source_columns = _lakehouse_table_source_columns(client, lakehouse_id, schema, table)
+    if not source_columns:
+        raise ValueError(f"No se encontraron columnas para {schema}.{table} -- ¿existe todavía en el Lakehouse?")
+
+    parts = build_new_model_parts(
+        display_name=table,
+        workspace_id=client.workspace_id,
+        lakehouse_id=lakehouse_id,
+        schema=schema,
+        table=table,
+        columns=source_columns,
+    )
+    model_item_id = client.create_item(table, "SemanticModel", parts)
+    set_semantic_model_link(item_id, model_item_id)
+    return get_semantic_model_state(client, item_id)
+
+
+def update_semantic_model_descriptions(client: Any, item_id: str, descriptions: Dict[str, str]) -> Dict[str, Any]:
+    """Pushes column description edits to the linked semantic model --
+    surgically (see semantic_model_tmdl.set_column_description()), so
+    anything else on the model (measures, hierarchies, other columns) is
+    left untouched. Raises ValueError if there's no linked model, or if a
+    description targets a column the model doesn't have (stale UI state)."""
+    model_item_id = get_metadata(item_id).get("semantic_model_item_id", "")
+    if not model_item_id:
+        raise ValueError("Esta tabla todavía no tiene un modelo semántico vinculado.")
+
+    defn = client.get_definition(model_item_id)
+    parts = defn.get("definition", {}).get("parts", [])
+    table_part = _table_tmdl_part(parts)
+    table_tmdl = base64.b64decode(table_part["payload"]).decode("utf-8")
+    for column_name, description in descriptions.items():
+        table_tmdl = set_column_description(table_tmdl, column_name, description)
+
+    updated_parts = [
+        {**part, "payload": base64.b64encode(table_tmdl.encode("utf-8")).decode("ascii")}
+        if part is table_part
+        else part
+        for part in parts
+    ]
+    client.update_item_definition(model_item_id, updated_parts)
+    return get_semantic_model_state(client, item_id)
+
+
+def sync_semantic_model_columns(client: Any, item_id: str) -> Dict[str, Any]:
+    """Adds any column the real source table has that the linked semantic
+    model doesn't yet (schema drift -- e.g. a pipeline started landing a
+    new column after the model was created), auto-detected the same way
+    creation is, so nobody has to add them by hand."""
+    parsed = parse_lakehouse_table_id(item_id)
+    if parsed is None:
+        raise ValueError(f"'{item_id}' no es una tabla de Lakehouse -- no puede tener un modelo semántico.")
+    lakehouse_id, schema, table = parsed
+    model_item_id = get_metadata(item_id).get("semantic_model_item_id", "")
+    if not model_item_id:
+        raise ValueError("Esta tabla todavía no tiene un modelo semántico vinculado.")
+
+    source_columns = _lakehouse_table_source_columns(client, lakehouse_id, schema, table)
+
+    defn = client.get_definition(model_item_id)
+    parts = defn.get("definition", {}).get("parts", [])
+    table_part = _table_tmdl_part(parts)
+    table_tmdl = base64.b64decode(table_part["payload"]).decode("utf-8")
+    model_names = {c["name"] for c in parse_table_columns(table_tmdl)}
+    missing = [c for c in source_columns if c["name"] not in model_names]
+    if not missing:
+        return get_semantic_model_state(client, item_id)
+
+    patched_tmdl = append_missing_columns(table_tmdl, missing)
+    updated_parts = [
+        {**part, "payload": base64.b64encode(patched_tmdl.encode("utf-8")).decode("ascii")}
+        if part is table_part
+        else part
+        for part in parts
+    ]
+    client.update_item_definition(model_item_id, updated_parts)
+    return get_semantic_model_state(client, item_id)

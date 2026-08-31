@@ -39,11 +39,18 @@ class _FakeFabricClient:
     folders) -- reproduced live against the real workspace before writing
     this module, see FabricPipelineClient.list_items()/list_folders()."""
 
-    def __init__(self, items, folders, lakehouse_tables=None):
+    def __init__(self, items, folders, lakehouse_tables=None, lakehouse_columns=None):
         self._items = items
         self._folders = folders
         # {lakehouse_item_id: [{"schema": ..., "table": ...}, ...]}
         self._lakehouse_tables = lakehouse_tables or {}
+        # {(lakehouse_item_id, schema, table): [{"name": ..., "sql_type": ...}, ...]}
+        self._lakehouse_columns = lakehouse_columns or {}
+        # {model_item_id: [part, ...]} -- created via create_item(), the
+        # same shape get_definition()'s real response nests under "parts".
+        self._model_definitions: dict = {}
+        self._next_id = 1
+        self.workspace_id = "ws-fake"
 
     def list_items(self):
         return self._items
@@ -54,8 +61,16 @@ class _FakeFabricClient:
     def list_lakehouse_tables(self, item_id, display_name):
         return self._lakehouse_tables.get(item_id, [])
 
+    def list_lakehouse_table_columns(self, item_id, display_name, schema, table):
+        return self._lakehouse_columns.get((item_id, schema, table), [])
+
     def get_item(self, item_id):
-        return next(i for i in self._items if i["id"] == item_id)
+        from src.fabric_pipelines.api import FabricPipelineError
+
+        found = next((i for i in self._items if i["id"] == item_id), None)
+        if found is None:
+            raise FabricPipelineError(f"item not found: {item_id}")
+        return found
 
     def preview_lakehouse_table(self, item_id, display_name, schema, table, limit=10):
         return {
@@ -63,6 +78,19 @@ class _FakeFabricClient:
             "rows": [["1", "a"]],
             "_called_with": (item_id, display_name, schema, table, limit),
         }
+
+    def create_item(self, display_name, item_type, parts):
+        item_id = f"model-{self._next_id}"
+        self._next_id += 1
+        self._model_definitions[item_id] = parts
+        self._items.append({"id": item_id, "type": item_type, "displayName": display_name})
+        return item_id
+
+    def get_definition(self, item_id):
+        return {"definition": {"parts": self._model_definitions[item_id]}}
+
+    def update_item_definition(self, item_id, parts):
+        self._model_definitions[item_id] = parts
 
 
 _EMPTY_CLIENT = _FakeFabricClient(items=[], folders=[])
@@ -254,6 +282,128 @@ def test_preview_lakehouse_table_looks_up_the_lakehouses_display_name_and_delega
     assert result["_called_with"] == ("lh-1", "Lakehouse", "bronze", "bc_cuentas_contables", 10)
 
 
+# --------------------------------------------------------------------------------------
+# Semantic models
+# --------------------------------------------------------------------------------------
+
+_LH_ITEM = {"id": "lh-1", "type": "Lakehouse", "displayName": "Lakehouse"}
+_TABLE_ITEM_ID = "lakehouse-table:lh-1:bronze.ventas"
+_SOURCE_COLUMNS = [{"name": "id", "sql_type": "int"}, {"name": "importe", "sql_type": "decimal"}]
+
+
+def _client_with_source_table(columns=None):
+    return _FakeFabricClient(
+        items=[dict(_LH_ITEM)],
+        folders=[],
+        lakehouse_columns={("lh-1", "bronze", "ventas"): columns if columns is not None else list(_SOURCE_COLUMNS)},
+    )
+
+
+def test_get_semantic_model_state_rejects_a_non_lakehouse_table_id(isolated_state):
+    with pytest.raises(ValueError, match="no es una tabla de Lakehouse"):
+        fabric_catalog.get_semantic_model_state(_EMPTY_CLIENT, "bc:bc_customer")
+
+
+def test_get_semantic_model_state_not_linked_lists_every_source_column_as_missing(isolated_state):
+    client = _client_with_source_table()
+    state = fabric_catalog.get_semantic_model_state(client, _TABLE_ITEM_ID)
+    assert state == {
+        "linked": False,
+        "model_item_id": "",
+        "model_name": "",
+        "columns": [],
+        "missing_columns": ["id", "importe"],
+    }
+
+
+def test_create_semantic_model_auto_detects_columns_and_links_it(isolated_state):
+    client = _client_with_source_table()
+    state = fabric_catalog.create_semantic_model(client, _TABLE_ITEM_ID)
+
+    assert state["linked"] is True
+    assert state["model_name"] == "ventas"
+    assert [c["name"] for c in state["columns"]] == ["id", "importe"]
+    assert all(c["description"] == "" for c in state["columns"])
+    assert state["missing_columns"] == []
+
+    # Persisted onto the catalog item, so a later call resolves the same model.
+    assert fabric_catalog.get_metadata(_TABLE_ITEM_ID)["semantic_model_item_id"] == state["model_item_id"]
+
+
+def test_create_semantic_model_rejects_a_table_that_already_has_one(isolated_state):
+    client = _client_with_source_table()
+    fabric_catalog.create_semantic_model(client, _TABLE_ITEM_ID)
+    with pytest.raises(ValueError, match="ya tiene un modelo semántico"):
+        fabric_catalog.create_semantic_model(client, _TABLE_ITEM_ID)
+
+
+def test_create_semantic_model_rejects_a_table_with_no_detectable_columns(isolated_state):
+    client = _client_with_source_table(columns=[])
+    with pytest.raises(ValueError, match="No se encontraron columnas"):
+        fabric_catalog.create_semantic_model(client, _TABLE_ITEM_ID)
+
+
+def test_get_semantic_model_state_reads_back_the_created_model(isolated_state):
+    client = _client_with_source_table()
+    created = fabric_catalog.create_semantic_model(client, _TABLE_ITEM_ID)
+    state = fabric_catalog.get_semantic_model_state(client, _TABLE_ITEM_ID)
+    assert state == created
+
+
+def test_get_semantic_model_state_self_heals_when_the_linked_model_was_deleted_in_fabric(isolated_state):
+    client = _client_with_source_table()
+    fabric_catalog.create_semantic_model(client, _TABLE_ITEM_ID)
+    # Simulate the model having been deleted directly in Fabric.
+    client._items = [i for i in client._items if i["type"] != "SemanticModel"]
+
+    state = fabric_catalog.get_semantic_model_state(client, _TABLE_ITEM_ID)
+    assert state["linked"] is False
+    assert fabric_catalog.get_metadata(_TABLE_ITEM_ID)["semantic_model_item_id"] == ""
+
+
+def test_update_semantic_model_descriptions_requires_a_linked_model(isolated_state):
+    client = _client_with_source_table()
+    with pytest.raises(ValueError, match="todavía no tiene"):
+        fabric_catalog.update_semantic_model_descriptions(client, _TABLE_ITEM_ID, {"id": "x"})
+
+
+def test_update_semantic_model_descriptions_saves_and_leaves_other_columns_alone(isolated_state):
+    client = _client_with_source_table()
+    fabric_catalog.create_semantic_model(client, _TABLE_ITEM_ID)
+
+    state = fabric_catalog.update_semantic_model_descriptions(
+        client, _TABLE_ITEM_ID, {"importe": "Importe en euros."}
+    )
+    by_name = {c["name"]: c["description"] for c in state["columns"]}
+    assert by_name["importe"] == "Importe en euros."
+    assert by_name["id"] == ""
+
+
+def test_sync_semantic_model_columns_requires_a_linked_model(isolated_state):
+    client = _client_with_source_table()
+    with pytest.raises(ValueError, match="todavía no tiene"):
+        fabric_catalog.sync_semantic_model_columns(client, _TABLE_ITEM_ID)
+
+
+def test_sync_semantic_model_columns_adds_a_column_added_to_the_source_after_creation(isolated_state):
+    client = _client_with_source_table(columns=[{"name": "id", "sql_type": "int"}])
+    fabric_catalog.create_semantic_model(client, _TABLE_ITEM_ID)
+
+    # Schema drift: the real table now also has "importe".
+    client._lakehouse_columns[("lh-1", "bronze", "ventas")] = list(_SOURCE_COLUMNS)
+
+    state = fabric_catalog.sync_semantic_model_columns(client, _TABLE_ITEM_ID)
+    assert [c["name"] for c in state["columns"]] == ["id", "importe"]
+    assert state["missing_columns"] == []
+
+
+def test_sync_semantic_model_columns_is_a_no_op_when_nothing_is_missing(isolated_state):
+    client = _client_with_source_table()
+    created = fabric_catalog.create_semantic_model(client, _TABLE_ITEM_ID)
+    synced = fabric_catalog.sync_semantic_model_columns(client, _TABLE_ITEM_ID)
+    assert synced == created
+
+
 def test_list_catalog_items_bc_table_keeps_its_saved_metadata(isolated_state, monkeypatch):
     monkeypatch.setattr(
         fabric_catalog.table_configs,
@@ -328,6 +478,7 @@ def test_get_metadata_for_unknown_item_returns_fully_shaped_empty_entry(isolated
         "canvas_positions": {},
         "is_favorite": False,
         "is_hidden": True,  # opt-in curation: everything starts hidden
+        "semantic_model_item_id": "",
     }
 
 

@@ -149,3 +149,42 @@ export interface FabricTablePreview {
 export function fetchFabricTablePreview(itemId: string): Promise<FabricTablePreview> {
   return apiGet(`/fabric-catalog/items/${encodeURIComponent(itemId)}/preview`);
 }
+
+export interface SemanticModelColumn {
+  name: string;
+  description: string;
+  in_source: boolean;
+}
+
+export interface SemanticModelState {
+  linked: boolean;
+  model_item_id: string;
+  model_name: string;
+  columns: SemanticModelColumn[];
+  /** Real source-table columns the model doesn't have yet -- empty when
+   * nothing's missing, or (when not linked) every column of the table. */
+  missing_columns: string[];
+}
+
+export function fetchSemanticModelState(itemId: string): Promise<SemanticModelState> {
+  return apiGet(`/fabric-catalog/items/${encodeURIComponent(itemId)}/semantic-model`);
+}
+
+/** Creates a new single-table DirectLake semantic model for this table --
+ * columns auto-detected from its real schema, nothing to fill in by hand. */
+export function createSemanticModel(itemId: string): Promise<SemanticModelState> {
+  return apiPost(`/fabric-catalog/items/${encodeURIComponent(itemId)}/semantic-model`);
+}
+
+export function updateSemanticModelDescriptions(
+  itemId: string,
+  descriptions: Record<string, string>
+): Promise<SemanticModelState> {
+  return apiPatch(`/fabric-catalog/items/${encodeURIComponent(itemId)}/semantic-model`, { descriptions });
+}
+
+/** Adds any column the real table has that the model doesn't yet -- schema
+ * drift auto-detection, see missing_columns. */
+export function syncSemanticModelColumns(itemId: string): Promise<SemanticModelState> {
+  return apiPost(`/fabric-catalog/items/${encodeURIComponent(itemId)}/semantic-model/sync-columns`);
+}

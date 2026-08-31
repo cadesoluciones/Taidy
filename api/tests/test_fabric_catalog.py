@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+from src.fabric_pipelines.api import FabricPipelineError
 from webapp import fabric_catalog, users_db
 from webapp.tests.conftest import make_user
 
@@ -25,6 +26,13 @@ def _login(client, username, password):
 
 
 class _FakeFabricClient:
+    def __init__(self):
+        self.workspace_id = "ws-fake"
+        self._extra_items = {}  # {item_id: item} -- e.g. semantic models created via create_item()
+        self._lakehouse_columns = {("lh-1", "bronze", "ventas"): [{"name": "id", "sql_type": "int"}]}
+        self._model_definitions = {}
+        self._next_id = 1
+
     def list_items(self):
         return [
             {"id": "nb-1", "type": "Notebook", "displayName": "silver_facturas", "folderId": "f-silver"},
@@ -38,14 +46,38 @@ class _FakeFabricClient:
         ]
 
     def get_item(self, item_id):
+        if item_id in self._extra_items:
+            return self._extra_items[item_id]
+        if item_id in self._model_definitions:
+            raise FabricPipelineError("model deleted")
         return {"id": "lh-1", "type": "Lakehouse", "displayName": "Lakehouse"}
 
     def preview_lakehouse_table(self, item_id, display_name, schema, table, limit=10):
         return {"columns": ["id", "name"], "rows": [["1", "Alice"], ["2", "Bob"]]}
 
+    def list_lakehouse_table_columns(self, item_id, display_name, schema, table):
+        return self._lakehouse_columns.get((item_id, schema, table), [])
+
+    def create_item(self, display_name, item_type, parts):
+        item_id = f"model-{self._next_id}"
+        self._next_id += 1
+        self._model_definitions[item_id] = parts
+        self._extra_items[item_id] = {"id": item_id, "type": item_type, "displayName": display_name}
+        return item_id
+
+    def get_definition(self, item_id):
+        return {"definition": {"parts": self._model_definitions[item_id]}}
+
+    def update_item_definition(self, item_id, parts):
+        self._model_definitions[item_id] = parts
+
 
 def _use_fake_fabric_client(monkeypatch):
-    monkeypatch.setattr(fabric_catalog_router, "_client", lambda: _FakeFabricClient())
+    # One shared instance for the whole test, not a fresh one per _client()
+    # call -- semantic-model tests need state (created models) to survive
+    # across several requests within the same test.
+    fake = _FakeFabricClient()
+    monkeypatch.setattr(fabric_catalog_router, "_client", lambda: fake)
     # Isolate from the project's real tables.yaml/hubspot_tables.yaml/
     # factorial_tables.yaml so item-count/item-id assertions here stay
     # about the two Fabric items this fake client returns, not whatever's
@@ -53,6 +85,7 @@ def _use_fake_fabric_client(monkeypatch):
     monkeypatch.setattr(fabric_catalog.table_configs, "list_bc_tables_full", lambda: [])
     monkeypatch.setattr(fabric_catalog.table_configs, "list_hubspot_tables_full", lambda: [])
     monkeypatch.setattr(fabric_catalog.table_configs, "list_factorial_tables_full", lambda: [])
+    return fake
 
 
 def test_reader_cannot_list_catalog_items(isolated_state, client, monkeypatch):
@@ -400,4 +433,93 @@ def test_reader_cannot_preview_a_table(isolated_state, client, monkeypatch):
     _login(client, "reader1", "ReaderPass2026!")
 
     resp = client.get("/fabric-catalog/items/lakehouse-table:lh-1:bronze.bc_cuentas_contables/preview")
+    assert resp.status_code == 403
+
+
+_VENTAS_ITEM = "lakehouse-table:lh-1:bronze.ventas"
+
+
+def test_operator_can_read_semantic_model_state_when_not_linked(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.get(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model")
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "linked": False,
+        "model_item_id": "",
+        "model_name": "",
+        "columns": [],
+        "missing_columns": ["id"],
+    }
+
+
+def test_operator_can_create_a_semantic_model(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.post(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["linked"] is True
+    assert body["model_name"] == "ventas"
+    assert [c["name"] for c in body["columns"]] == ["id"]
+    assert body["missing_columns"] == []
+
+
+def test_create_semantic_model_rejects_a_second_one_for_the_same_table(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    client.post(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model")
+    resp = client.post(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model")
+    assert resp.status_code == 400
+
+
+def test_operator_can_update_semantic_model_descriptions(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    client.post(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model")
+    resp = client.patch(
+        f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model",
+        json={"descriptions": {"id": "Identificador de venta."}},
+    )
+    assert resp.status_code == 200
+    columns = {c["name"]: c["description"] for c in resp.json()["columns"]}
+    assert columns["id"] == "Identificador de venta."
+
+
+def test_update_semantic_model_descriptions_without_a_linked_model_is_400(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.patch(
+        f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model", json={"descriptions": {"id": "x"}}
+    )
+    assert resp.status_code == 400
+
+
+def test_operator_can_sync_semantic_model_columns(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    client.post(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model")
+    resp = client.post(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model/sync-columns")
+    assert resp.status_code == 200
+    assert resp.json()["missing_columns"] == []
+
+
+def test_reader_cannot_create_a_semantic_model(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+
+    resp = client.post(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model")
     assert resp.status_code == 403

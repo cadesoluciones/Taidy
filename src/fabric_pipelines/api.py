@@ -77,6 +77,14 @@ class FabricPipelineClient:
             client_secret=settings.client_secret,
         )
 
+    @property
+    def workspace_id(self) -> str:
+        """Public read-only access to the configured workspace id -- needed
+        by callers building a new item's definition (e.g. a semantic
+        model's DirectLake OneLake path), which otherwise has no reason to
+        reach into this client's private settings."""
+        return self._settings.workspace_id
+
     def _headers(self) -> Dict[str, str]:
         token = self._credential.get_token(_FABRIC_SCOPE)
         return {"Authorization": f"Bearer {token.token}", "Content-Type": "application/json"}
@@ -283,6 +291,35 @@ class FabricPipelineClient:
         finally:
             conn.close()
 
+    def list_lakehouse_table_columns(self, item_id: str, display_name: str, schema: str, table: str) -> List[Dict[str, str]]:
+        """A table's real column names + SQL types, as [{"name": ..., "sql_type": ...}, ...] --
+        feeds automatic column detection when creating or syncing a semantic
+        model (see semantic_model_tmdl.py), so nobody has to type out a
+        table's columns by hand."""
+        if not _SQL_IDENTIFIER_RE.match(schema) or not _SQL_IDENTIFIER_RE.match(table):
+            raise FabricPipelineError(f"Nombre de esquema o tabla no válido: {schema}.{table}")
+        conn = self._connect_to_lakehouse_sql(item_id, display_name)
+        if conn is None:
+            raise FabricPipelineError(
+                f"No se pudo conectar al endpoint SQL del Lakehouse '{display_name}' para leer las columnas."
+            )
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT c.name, ty.name AS type_name FROM sys.columns c "
+                "JOIN sys.tables t ON c.object_id = t.object_id "
+                "JOIN sys.schemas s ON t.schema_id = s.schema_id "
+                "JOIN sys.types ty ON c.user_type_id = ty.user_type_id "
+                "WHERE s.name = ? AND t.name = ? ORDER BY c.column_id",
+                schema,
+                table,
+            )
+            return [{"name": row.name, "sql_type": row.type_name} for row in cursor.fetchall()]
+        except pyodbc.Error as exc:
+            raise FabricPipelineError(f"No se pudieron leer las columnas de {schema}.{table}: {exc}")
+        finally:
+            conn.close()
+
     def preview_lakehouse_table(
         self, item_id: str, display_name: str, schema: str, table: str, *, limit: int = 10
     ) -> Dict[str, Any]:
@@ -328,12 +365,53 @@ class FabricPipelineClient:
         if response.status_code == 200:
             return response.json()
         if response.status_code == 202:
-            return self._await_operation(response)
+            return self._await_operation(response) or {}
         raise FabricPipelineError(
             f"No se pudo obtener la definición del pipeline (HTTP {response.status_code}): {response.text}"
         )
 
-    def _await_operation(self, initial_response: requests.Response) -> Dict[str, Any]:
+    def create_item(self, display_name: str, item_type: str, parts: List[Dict[str, str]]) -> str:
+        """Creates a new Fabric item (e.g. a semantic model) from a full
+        definition (see semantic_model_tmdl.build_new_model_parts()).
+        Confirmed live: a 202 create returns the new item's id from the
+        operation's /result body, same shape as get_item()."""
+        url = f"{_FABRIC_API_BASE}/workspaces/{self._settings.workspace_id}/items"
+        body = {"displayName": display_name, "type": item_type, "definition": {"parts": parts}}
+        response = self._request("POST", url, headers=self._headers(), json=body)
+        if response.status_code == 201:
+            item = response.json()
+        elif response.status_code == 202:
+            item = self._await_operation(response) or {}
+        else:
+            raise FabricPipelineError(f"No se pudo crear el elemento en Fabric (HTTP {response.status_code}): {response.text}")
+        item_id = item.get("id", "")
+        if not item_id:
+            raise FabricPipelineError("Fabric creó el elemento pero no devolvió su id.")
+        return item_id
+
+    def update_item_definition(self, item_id: str, parts: List[Dict[str, str]]) -> None:
+        """Replaces an existing item's definition (e.g. after patching a
+        semantic model's table TMDL) -- confirmed live this is a
+        Succeeded/Failed operation with no result body to fetch, unlike
+        create_item()."""
+        url = f"{_FABRIC_API_BASE}/workspaces/{self._settings.workspace_id}/items/{item_id}/updateDefinition"
+        response = self._request("POST", url, headers=self._headers(), json={"definition": {"parts": parts}})
+        if response.status_code == 200:
+            return
+        if response.status_code == 202:
+            self._await_operation(response, fetch_result=False)
+            return
+        raise FabricPipelineError(
+            f"No se pudo actualizar la definición del elemento {item_id} (HTTP {response.status_code}): {response.text}"
+        )
+
+    def delete_item(self, item_id: str) -> None:
+        url = f"{_FABRIC_API_BASE}/workspaces/{self._settings.workspace_id}/items/{item_id}"
+        response = self._request("DELETE", url, headers=self._headers())
+        if response.status_code not in (200, 204):
+            raise FabricPipelineError(f"No se pudo borrar el elemento {item_id} (HTTP {response.status_code}): {response.text}")
+
+    def _await_operation(self, initial_response: requests.Response, *, fetch_result: bool = True) -> Optional[Dict[str, Any]]:
         operation_url = initial_response.headers.get("Location")
         if not operation_url:
             raise FabricPipelineError(
@@ -355,6 +433,8 @@ class FabricPipelineClient:
             payload = op_response.json()
             op_status = payload.get("status")
             if op_status == "Succeeded":
+                if not fetch_result:
+                    return None
                 result_response = self._request("GET", f"{operation_url}/result", headers=self._headers())
                 if result_response.status_code != 200:
                     raise FabricPipelineError(
@@ -364,7 +444,7 @@ class FabricPipelineClient:
                 return result_response.json()
             if op_status == "Failed":
                 raise FabricPipelineError(f"La operación de Fabric falló: {payload.get('error')}")
-        raise FabricPipelineError("Tiempo de espera agotado consultando la definición del pipeline.")
+        raise FabricPipelineError("Tiempo de espera agotado consultando la operación de Fabric.")
 
 
 def parse_pipeline_definition(definition: Dict[str, Any]) -> Dict[str, Any]:

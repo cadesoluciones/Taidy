@@ -31,12 +31,14 @@ from ..schemas.fabric_catalog import (
     FabricCatalogListOut,
     FabricCatalogItemOut,
     FlagOut,
+    SemanticModelStateOut,
     SetCanvasPositionsRequest,
     SetFavoriteRequest,
     SetHiddenRequest,
     TablePreviewOut,
     UpdateFabricCatalogItemOut,
     UpdateFabricCatalogItemRequest,
+    UpdateSemanticModelDescriptionsRequest,
 )
 
 router = APIRouter(
@@ -181,3 +183,59 @@ def preview_table(item_id: str) -> TablePreviewOut:
     except FabricPipelineError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
     return TablePreviewOut(**result)
+
+
+@router.get("/items/{item_id}/semantic-model", response_model=SemanticModelStateOut)
+def get_semantic_model(item_id: str) -> SemanticModelStateOut:
+    """Live state of the table's linked Fabric semantic model (or the
+    "not linked yet" state, with every real column listed as missing so the
+    tab can offer "crear" pre-populated). 400 for anything but a Lakehouse
+    table; 502 if Fabric/the SQL endpoint can't be reached right now."""
+    try:
+        result = fabric_catalog.get_semantic_model_state(_client(), item_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except FabricPipelineError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    return SemanticModelStateOut(**result)
+
+
+@router.post("/items/{item_id}/semantic-model", response_model=SemanticModelStateOut)
+def create_semantic_model(item_id: str) -> SemanticModelStateOut:
+    """Creates a new single-table DirectLake semantic model for this
+    Lakehouse table -- columns auto-detected from its real schema -- and
+    links it to the catalog item. 400 if one's already linked or the table
+    has no columns to detect; 502 for a real Fabric-side failure."""
+    try:
+        result = fabric_catalog.create_semantic_model(_client(), item_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except FabricPipelineError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    return SemanticModelStateOut(**result)
+
+
+@router.patch("/items/{item_id}/semantic-model", response_model=SemanticModelStateOut)
+def update_semantic_model(item_id: str, payload: UpdateSemanticModelDescriptionsRequest) -> SemanticModelStateOut:
+    """Pushes column description edits to the linked semantic model."""
+    try:
+        result = fabric_catalog.update_semantic_model_descriptions(_client(), item_id, payload.descriptions)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except FabricPipelineError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    return SemanticModelStateOut(**result)
+
+
+@router.post("/items/{item_id}/semantic-model/sync-columns", response_model=SemanticModelStateOut)
+def sync_semantic_model_columns(item_id: str) -> SemanticModelStateOut:
+    """Adds any column the real source table has that the linked semantic
+    model doesn't yet (auto-detected schema drift) -- see
+    fabric_catalog.sync_semantic_model_columns()."""
+    try:
+        result = fabric_catalog.sync_semantic_model_columns(_client(), item_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except FabricPipelineError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    return SemanticModelStateOut(**result)

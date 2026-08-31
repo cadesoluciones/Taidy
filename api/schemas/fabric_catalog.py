@@ -124,3 +124,23 @@ class FlagOut(BaseModel):
 class TablePreviewOut(BaseModel):
     columns: List[str]
     rows: List[List[str]]
+
+
+class SemanticModelColumnOut(BaseModel):
+    name: str
+    description: str = ""
+    in_source: bool = True
+
+
+class SemanticModelStateOut(BaseModel):
+    linked: bool
+    model_item_id: str = ""
+    model_name: str = ""
+    columns: List[SemanticModelColumnOut] = []
+    # Real source-table columns the model doesn't have yet (schema drift, or
+    # not-yet-linked) -- drives the "sync columns" button.
+    missing_columns: List[str] = []
+
+
+class UpdateSemanticModelDescriptionsRequest(BaseModel):
+    descriptions: Dict[str, str]

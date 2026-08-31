@@ -1,0 +1,75 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.modelName {
+  margin: 0;
+  font-size: 13px;
+}
+
+.syncHint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 12px;
+  color: var(--color-text-muted);
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-bg));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 25%, var(--color-border));
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+}
+
+.linkButton {
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.linkButton:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.columnsTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.columnsTable th {
+  text-align: left;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.columnsTable td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+.descInput {
+  width: 100%;
+  font-size: 12px;
+  padding: 3px 6px;
+}
+
+.staleBadge {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger);
+  border-radius: 3px;
+  padding: 1px 4px;
+}

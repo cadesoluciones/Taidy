@@ -32,6 +32,7 @@ import { DATA_ROLE_INFO } from "../utils/dataRoles";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { FabricCatalogBrowser } from "./FabricCatalogBrowser";
 import { FabricRelationshipCanvas } from "./FabricRelationshipCanvas";
+import { FabricSemanticModelSection } from "./FabricSemanticModelSection";
 import { FreeTagInput } from "./FreeTagInput";
 import { Modal } from "./Modal";
 import styles from "./FabricCatalogManager.module.css";
@@ -632,6 +633,13 @@ export function FabricCatalogManager() {
                       />
                     </div>
                   </div>
+
+                  {selected.item_id.startsWith(LAKEHOUSE_TABLE_ID_PREFIX) && (
+                    <div className={`${formStyles.field} no-print`}>
+                      <label style={{ marginBottom: 0 }}>Modelo semántico</label>
+                      <FabricSemanticModelSection itemId={selected.item_id} itemName={selected.name} canEdit={canEdit} />
+                    </div>
+                  )}
                 </div>
 
                 <div className={`${styles.longDescColumn} no-print`}>
