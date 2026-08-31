@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { fetchFabricCatalog, type FabricCatalogItem } from "../api/fabricCatalog";
+import { fetchFabricCatalog, fetchTypeIcons, type FabricCatalogItem } from "../api/fabricCatalog";
 import { ApiError } from "../api/client";
 import { FabricCatalogBrowser } from "../components/FabricCatalogBrowser";
 import { FabricRelationshipCanvas } from "../components/FabricRelationshipCanvas";
@@ -20,6 +20,7 @@ export function AnalisisImpactoPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [depth, setDepth] = useState(DEFAULT_DEPTH);
+  const [typeIcons, setTypeIcons] = useState<Record<string, string>>({});
 
   useEffect(() => {
     (async () => {
@@ -34,6 +35,9 @@ export function AnalisisImpactoPage() {
         setIsLoading(false);
       }
     })();
+    fetchTypeIcons()
+      .then((res) => setTypeIcons(res.icons))
+      .catch(() => setTypeIcons({}));
   }, []);
 
   const selected = items.find((i) => i.item_id === selectedId) ?? null;
@@ -56,7 +60,7 @@ export function AnalisisImpactoPage() {
 
       {!isLoading && !loadError && (
         <div className={managerStyles.layout}>
-          <FabricCatalogBrowser items={items} selectedId={selectedId} onSelect={setSelectedId} />
+          <FabricCatalogBrowser items={items} selectedId={selectedId} onSelect={setSelectedId} typeIcons={typeIcons} />
 
           <div className={managerStyles.detailColumn}>
             {selected && impact && (

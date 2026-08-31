@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { ChevronDown, Eye, EyeOff, Star } from "lucide-react";
+import { Boxes, ChevronDown, Eye, EyeOff, Star } from "lucide-react";
 
 import type { FabricCatalogItem } from "../api/fabricCatalog";
 import { fabricIconFor } from "../utils/fabricIcons";
 import formStyles from "./Form.module.css";
 import styles from "./FabricCatalogManager.module.css";
+
+// Shown for a type with no configured default icon (a brand new Fabric item
+// type this tenant just started using, before Configuración has a mapping
+// for it) -- never persisted, just a rendering fallback.
+const FALLBACK_TYPE_ICON = Boxes;
 
 const CRITICALITY_COLORS: Record<string, string> = {
   baja: "#8a9a5b",
@@ -70,6 +75,12 @@ interface FabricCatalogBrowserProps {
   /** Extra controls rendered between the search row and the folder groups
    * (e.g. Gobernanza's "+ Bloque personalizado" form). */
   headerExtra?: React.ReactNode;
+  /** Default icon key per item type (Notebook, Lakehouse, Tabla, ...) --
+   * feeds both the quick-filter row's buttons and the fallback icon shown
+   * on a block that has no icon of its own. Configured in Configuración,
+   * see fetchTypeIcons(). A type with no entry here still gets a filter
+   * button, just with a generic placeholder icon. */
+  typeIcons?: Record<string, string>;
 }
 
 /** The same compact, folder-grouped, collapsible block list Gobernanza de
@@ -84,20 +95,45 @@ export function FabricCatalogBrowser({
   onToggleHidden,
   actionError,
   headerExtra,
+  typeIcons = {},
 }: FabricCatalogBrowserProps) {
   const [search, setSearch] = useState("");
   const [showHidden, setShowHidden] = useState(false);
+  const [activeTypes, setActiveTypes] = useState<Set<string>>(new Set());
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const hasAutoCollapsedRef = useRef(false);
+
+  // Counted off `items` filtered only by "mostrar ocultos" (not by search
+  // text or the type filter itself) -- these buttons are the available
+  // facets, so their counts stay stable reference numbers ("hay 5 tablas")
+  // rather than shrinking as soon as one is clicked.
+  const typeCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of items) {
+      if (item.is_hidden && !showHidden) continue;
+      counts.set(item.type, (counts.get(item.type) ?? 0) + 1);
+    }
+    return Array.from(counts.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [items, showHidden]);
+
+  function toggleType(type: string) {
+    setActiveTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  }
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase();
     return items.filter((item) => {
       if (item.is_hidden && !showHidden) return false;
+      if (activeTypes.size > 0 && !activeTypes.has(item.type)) return false;
       if (!q) return true;
       return item.name.toLowerCase().includes(q) || item.type.toLowerCase().includes(q);
     });
-  }, [items, search, showHidden]);
+  }, [items, search, showHidden, activeTypes]);
 
   const grouped = useMemo(() => {
     const favorites = filteredItems.filter((i) => i.is_favorite);
@@ -146,7 +182,8 @@ export function FabricCatalogBrowser({
 
   function renderBlock(item: FabricCatalogItem) {
     const relCount = relationshipCountByItem.get(item.item_id) ?? 0;
-    const ItemIcon = item.icon ? fabricIconFor(item.icon) : null;
+    const iconKey = item.icon || typeIcons[item.type];
+    const ItemIcon = iconKey ? fabricIconFor(iconKey) : null;
     return (
       <div key={item.item_id} className={styles.blockWrapper}>
         <button
@@ -217,6 +254,30 @@ export function FabricCatalogBrowser({
           {showHidden ? <Eye size={14} /> : <EyeOff size={14} />}
         </button>
       </div>
+
+      {typeCounts.length > 0 && (
+        <div className={styles.typeFilterRow}>
+          {typeCounts.map(([type, count]) => {
+            const iconKey = typeIcons[type];
+            const TypeIcon = iconKey ? (fabricIconFor(iconKey) ?? FALLBACK_TYPE_ICON) : FALLBACK_TYPE_ICON;
+            const active = activeTypes.has(type);
+            return (
+              <button
+                key={type}
+                type="button"
+                className={active ? styles.typeFilterActive : styles.typeFilter}
+                onClick={() => toggleType(type)}
+                title={`${type} (${count})`}
+                aria-label={`Filtrar por ${type}`}
+                aria-pressed={active}
+              >
+                <TypeIcon size={13} />
+                <span className={styles.typeFilterCount}>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {actionError && <div className={formStyles.errorBanner}>{actionError}</div>}
 

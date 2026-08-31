@@ -523,3 +523,48 @@ def test_reader_cannot_create_a_semantic_model(isolated_state, client, monkeypat
 
     resp = client.post(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model")
     assert resp.status_code == 403
+
+
+def test_operator_can_read_type_icons(isolated_state, client):
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.get("/fabric-catalog/type-icons")
+    assert resp.status_code == 200
+    assert resp.json()["icons"]["Lakehouse"] == "database"
+
+
+def test_admin_can_override_a_type_icon(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    resp = client.put("/fabric-catalog/type-icons", json={"type": "Lakehouse", "icon": "boxes"})
+    assert resp.status_code == 200
+    assert resp.json()["icons"]["Lakehouse"] == "boxes"
+
+    resp2 = client.get("/fabric-catalog/type-icons")
+    assert resp2.json()["icons"]["Lakehouse"] == "boxes"
+
+
+def test_set_type_icon_rejects_an_unknown_icon_key(isolated_state, client):
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    resp = client.put("/fabric-catalog/type-icons", json={"type": "Lakehouse", "icon": "not-a-real-icon"})
+    assert resp.status_code == 400
+
+
+def test_operator_cannot_override_a_type_icon(isolated_state, client):
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.put("/fabric-catalog/type-icons", json={"type": "Lakehouse", "icon": "boxes"})
+    assert resp.status_code == 403
+
+
+def test_reader_cannot_read_type_icons(isolated_state, client):
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+
+    resp = client.get("/fabric-catalog/type-icons")
+    assert resp.status_code == 403

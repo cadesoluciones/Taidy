@@ -12,6 +12,7 @@ import {
   deleteCustomFabricItem,
   fetchFabricCatalog,
   fetchFabricTablePreview,
+  fetchTypeIcons,
   removeFabricRelationship,
   setFabricCanvasPositions,
   setFabricFavorite,
@@ -70,6 +71,7 @@ export function FabricCatalogManager() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [typeIcons, setTypeIcons] = useState<Record<string, string>>({});
 
   const [shortDescriptionDraft, setShortDescriptionDraft] = useState("");
   const [longDescriptionDraft, setLongDescriptionDraft] = useState("");
@@ -119,6 +121,9 @@ export function FabricCatalogManager() {
 
   useEffect(() => {
     void reload();
+    fetchTypeIcons()
+      .then((res) => setTypeIcons(res.icons))
+      .catch(() => setTypeIcons({}));
   }, []);
 
   // Close the appearance popover when clicking anywhere outside it.
@@ -340,6 +345,7 @@ export function FabricCatalogManager() {
           onToggleFavorite={(item) => void handleToggleFavorite(item)}
           onToggleHidden={(item) => void handleToggleHidden(item)}
           actionError={actionError}
+          typeIcons={typeIcons}
           headerExtra={
             canEdit && (
               <>

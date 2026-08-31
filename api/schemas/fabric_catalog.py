@@ -144,3 +144,13 @@ class SemanticModelStateOut(BaseModel):
 
 class UpdateSemanticModelDescriptionsRequest(BaseModel):
     descriptions: Dict[str, str]
+
+
+class TypeIconsOut(BaseModel):
+    icons: Dict[str, str]
+
+
+class SetTypeIconRequest(BaseModel):
+    type: str
+    # "" clears the override, falling back to the built-in default (or none).
+    icon: str = ""

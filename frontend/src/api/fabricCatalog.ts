@@ -188,3 +188,16 @@ export function updateSemanticModelDescriptions(
 export function syncSemanticModelColumns(itemId: string): Promise<SemanticModelState> {
   return apiPost(`/fabric-catalog/items/${encodeURIComponent(itemId)}/semantic-model/sync-columns`);
 }
+
+/** The default icon key (see FABRIC_ICON_OPTIONS) shown for each catalog
+ * item type when an item hasn't had one set by hand -- built-in defaults
+ * plus whatever an admin overrode in Configuración. */
+export function fetchTypeIcons(): Promise<{ icons: Record<string, string> }> {
+  return apiGet("/fabric-catalog/type-icons");
+}
+
+/** icon: "" clears an override, falling back to the built-in default (or
+ * none) for that type. */
+export function setTypeIcon(type: string, icon: string): Promise<{ icons: Record<string, string> }> {
+  return apiPut("/fabric-catalog/type-icons", { type, icon });
+}

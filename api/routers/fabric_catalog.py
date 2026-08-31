@@ -20,10 +20,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from src.fabric_pipelines.api import FabricPipelineClient, FabricPipelineError
 from src.fabric_pipelines.config import load_settings
-from webapp import fabric_catalog
+from webapp import app_settings, fabric_catalog
 from webapp.users_db import ROLE_ADMIN, ROLE_OPERATOR
 
-from ..dependencies import CurrentUser, get_current_user, require_any_role
+from ..dependencies import CurrentUser, get_current_user, require_any_role, require_role
 from ..schemas.fabric_catalog import (
     AddRelationshipRequest,
     CanvasPositionsOut,
@@ -35,7 +35,9 @@ from ..schemas.fabric_catalog import (
     SetCanvasPositionsRequest,
     SetFavoriteRequest,
     SetHiddenRequest,
+    SetTypeIconRequest,
     TablePreviewOut,
+    TypeIconsOut,
     UpdateFabricCatalogItemOut,
     UpdateFabricCatalogItemRequest,
     UpdateSemanticModelDescriptionsRequest,
@@ -239,3 +241,20 @@ def sync_semantic_model_columns(item_id: str) -> SemanticModelStateOut:
     except FabricPipelineError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
     return SemanticModelStateOut(**result)
+
+
+@router.get("/type-icons", response_model=TypeIconsOut)
+def get_type_icons() -> TypeIconsOut:
+    """The default icon (see ICON_KEYS) shown for each catalog item type
+    when an item hasn't had one set by hand -- built-in defaults plus
+    whatever an admin has overridden in Configuración."""
+    return TypeIconsOut(icons=app_settings.get_type_icons())
+
+
+@router.put("/type-icons", response_model=TypeIconsOut, dependencies=[Depends(require_role(ROLE_ADMIN))])
+def set_type_icon(payload: SetTypeIconRequest) -> TypeIconsOut:
+    try:
+        icons = app_settings.set_type_icon(payload.type, payload.icon, valid_icon_keys=fabric_catalog.ICON_KEYS)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return TypeIconsOut(icons=icons)

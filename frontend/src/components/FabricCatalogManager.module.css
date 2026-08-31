@@ -40,6 +40,38 @@
   color: var(--color-primary);
 }
 
+.typeFilterRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: var(--space-2);
+}
+
+.typeFilter,
+.typeFilterActive {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.typeFilterActive {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-bg));
+  color: var(--color-primary);
+}
+
+.typeFilterCount {
+  font-weight: 700;
+}
+
 /* Side-by-side: the item list on the left, the selected item's detail
    panel on the right -- collapses to a single column on narrow viewports,
    where a side-by-side layout would squeeze both into uselessness. The
