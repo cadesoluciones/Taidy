@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ApiError } from "../api/client";
 import {
@@ -31,46 +31,69 @@ export function FabricSemanticModelSection({ itemId, itemName, canEdit }: Fabric
   const [descDrafts, setDescDrafts] = useState<Record<string, string>>({});
   const [confirmCreateOpen, setConfirmCreateOpen] = useState(false);
 
+  // Fabric's own read (getDefinition) can take 20s+ -- long enough that the
+  // user switches to a different table before a request resolves. Every
+  // async handler below captures itemId at call time and checks it against
+  // this ref (kept in sync with the prop on every render) before touching
+  // state, so a slow response for a table that's no longer selected can
+  // never overwrite what's currently on screen. Confirmed live this was a
+  // real bug: creating a model for one table, then navigating away before
+  // it finished, made the NEXT table opened show up as "linked" too.
+  const currentItemIdRef = useRef(itemId);
+  currentItemIdRef.current = itemId;
+
   function applyState(result: SemanticModelState) {
     setState(result);
     setDescDrafts(Object.fromEntries(result.columns.map((c) => [c.name, c.description])));
   }
 
   async function load() {
+    const requestedItemId = itemId;
     setIsLoading(true);
     setError(null);
     try {
-      applyState(await fetchSemanticModelState(itemId));
+      const result = await fetchSemanticModelState(requestedItemId);
+      if (currentItemIdRef.current !== requestedItemId) return;
+      applyState(result);
     } catch (err) {
+      if (currentItemIdRef.current !== requestedItemId) return;
       setError(err instanceof ApiError ? err.message : "No se pudo leer el modelo semántico.");
     } finally {
-      setIsLoading(false);
+      if (currentItemIdRef.current === requestedItemId) setIsLoading(false);
     }
   }
 
   useEffect(() => {
+    setState(null);
+    setIsLoading(true);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemId]);
 
   async function handleCreate() {
+    const requestedItemId = itemId;
     setConfirmCreateOpen(false);
     setBusy(true);
     setError(null);
     try {
-      applyState(await createSemanticModel(itemId));
+      const result = await createSemanticModel(requestedItemId);
+      if (currentItemIdRef.current !== requestedItemId) return;
+      applyState(result);
     } catch (err) {
+      if (currentItemIdRef.current !== requestedItemId) return;
       setError(err instanceof ApiError ? err.message : "No se pudo crear el modelo semántico.");
     } finally {
-      setBusy(false);
+      if (currentItemIdRef.current === requestedItemId) setBusy(false);
     }
   }
 
   async function handleSync() {
+    const requestedItemId = itemId;
     setBusy(true);
     setError(null);
     try {
-      const result = await syncSemanticModelColumns(itemId);
+      const result = await syncSemanticModelColumns(requestedItemId);
+      if (currentItemIdRef.current !== requestedItemId) return;
       setState(result);
       // Keep any description the user already typed but hasn't saved yet --
       // only fill in the newly-synced columns, don't clobber a live edit.
@@ -79,14 +102,16 @@ export function FabricSemanticModelSection({ itemId, itemName, canEdit }: Fabric
         ...prev,
       }));
     } catch (err) {
+      if (currentItemIdRef.current !== requestedItemId) return;
       setError(err instanceof ApiError ? err.message : "No se pudieron sincronizar las columnas.");
     } finally {
-      setBusy(false);
+      if (currentItemIdRef.current === requestedItemId) setBusy(false);
     }
   }
 
   async function handleSaveDescriptions() {
     if (!state) return;
+    const requestedItemId = itemId;
     const changed: Record<string, string> = {};
     for (const col of state.columns) {
       const draft = descDrafts[col.name] ?? "";
@@ -96,11 +121,14 @@ export function FabricSemanticModelSection({ itemId, itemName, canEdit }: Fabric
     setBusy(true);
     setError(null);
     try {
-      applyState(await updateSemanticModelDescriptions(itemId, changed));
+      const result = await updateSemanticModelDescriptions(requestedItemId, changed);
+      if (currentItemIdRef.current !== requestedItemId) return;
+      applyState(result);
     } catch (err) {
+      if (currentItemIdRef.current !== requestedItemId) return;
       setError(err instanceof ApiError ? err.message : "No se pudieron guardar las descripciones.");
     } finally {
-      setBusy(false);
+      if (currentItemIdRef.current === requestedItemId) setBusy(false);
     }
   }
 
