@@ -51,6 +51,11 @@ class _FakeFabricClient:
         self._model_definitions: dict = {}
         self._next_id = 1
         self.workspace_id = "ws-fake"
+        # Item ids whose get_definition() should raise instead of returning
+        # -- simulates get_item succeeding (the model still exists) while
+        # get_definition fails for an unrelated reason (e.g. Fabric's own
+        # getDefinition polling timing out).
+        self._fail_definition_for: set = set()
 
     def list_items(self):
         return self._items
@@ -87,6 +92,10 @@ class _FakeFabricClient:
         return item_id
 
     def get_definition(self, item_id):
+        if item_id in self._fail_definition_for:
+            from src.fabric_pipelines.api import FabricPipelineError
+
+            raise FabricPipelineError(f"Tiempo de espera agotado consultando la operación de Fabric: {item_id}")
         return {"definition": {"parts": self._model_definitions[item_id]}}
 
     def update_item_definition(self, item_id, parts):
@@ -359,6 +368,31 @@ def test_get_semantic_model_state_self_heals_when_the_linked_model_was_deleted_i
     state = fabric_catalog.get_semantic_model_state(client, _TABLE_ITEM_ID)
     assert state["linked"] is False
     assert fabric_catalog.get_metadata(_TABLE_ITEM_ID)["semantic_model_item_id"] == ""
+
+
+def test_get_semantic_model_state_does_not_unlink_when_only_get_definition_fails(isolated_state):
+    """Regression: confirmed live that get_definition() can fail on its own
+    (its own long-running-operation polling timing out) while the model
+    itself still genuinely exists -- that must surface as an error, not
+    silently discard a real link (and the descriptions saved on it)."""
+    client = _client_with_source_table()
+    created = fabric_catalog.create_semantic_model(client, _TABLE_ITEM_ID)
+    client._fail_definition_for.add(created["model_item_id"])
+
+    from src.fabric_pipelines.api import FabricPipelineError
+
+    with pytest.raises(FabricPipelineError):
+        fabric_catalog.get_semantic_model_state(client, _TABLE_ITEM_ID)
+
+    # The link itself must survive -- unlike the get_item failure above.
+    assert fabric_catalog.get_metadata(_TABLE_ITEM_ID)["semantic_model_item_id"] == created["model_item_id"]
+
+    # And once get_definition works again (Fabric responds), the same link
+    # reads normally -- nothing was lost.
+    client._fail_definition_for.discard(created["model_item_id"])
+    state = fabric_catalog.get_semantic_model_state(client, _TABLE_ITEM_ID)
+    assert state["linked"] is True
+    assert state["model_item_id"] == created["model_item_id"]
 
 
 def test_update_semantic_model_descriptions_requires_a_linked_model(isolated_state):

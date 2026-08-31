@@ -77,6 +77,15 @@ export function FabricCatalogManager() {
   const [longDescriptionDraft, setLongDescriptionDraft] = useState("");
   const [longDescriptionView, setLongDescriptionView] = useState<"editar" | "vista previa">("editar");
   const [detailTab, setDetailTab] = useState<"descripcion" | "modelo">("descripcion");
+  // Tracks whether the semantic-model tab has been opened at least once for
+  // the CURRENTLY selected item -- once true, FabricSemanticModelSection
+  // stays mounted (just CSS-hidden) across further tab switches instead of
+  // unmounting, so its already-fetched state survives instead of refetching
+  // from Fabric (confirmed live: getDefinition alone can take ~20s) every
+  // single time the user tabs back to it. Reset to false whenever the
+  // selected item changes, so a genuinely different table still fetches
+  // fresh the first time, not stale data left over from mounting once.
+  const [hasOpenedModeloTab, setHasOpenedModeloTab] = useState(false);
   const [roleDrafts, setRoleDrafts] = useState<Record<DataRoleField, string[]>>(EMPTY_ROLE_DRAFTS);
   const [criticalityDraft, setCriticalityDraft] = useState<FabricCriticality>("");
   const [statusDraft, setStatusDraft] = useState<FabricStatus>("");
@@ -144,6 +153,7 @@ export function FabricCatalogManager() {
     setLongDescriptionDraft(selected?.long_description_markdown ?? "");
     setLongDescriptionView("editar");
     setDetailTab("descripcion");
+    setHasOpenedModeloTab(false);
     setRoleDrafts({
       data_owner: selected?.data_owner ?? [],
       data_steward: selected?.data_steward ?? [],
@@ -659,7 +669,10 @@ export function FabricCatalogManager() {
                         <button
                           type="button"
                           className={detailTab === "modelo" ? styles.detailTabActive : styles.detailTab}
-                          onClick={() => setDetailTab("modelo")}
+                          onClick={() => {
+                            setDetailTab("modelo");
+                            setHasOpenedModeloTab(true);
+                          }}
                         >
                           Modelo semántico
                         </button>
@@ -692,34 +705,38 @@ export function FabricCatalogManager() {
                     )}
                   </div>
 
-                  {detailTab === "descripcion" || !isLakehouseTable ? (
-                    <>
-                      {(saveSuccess || saveError) && (
-                        <div>
-                          {saveSuccess && <div className={formStyles.successBanner}>{saveSuccess}</div>}
-                          {saveError && <div className={formStyles.errorBanner}>{saveError}</div>}
-                        </div>
-                      )}
-                      {longDescriptionView === "editar" ? (
-                        <textarea
-                          id="fc_long_description"
-                          className={styles.mdTextarea}
-                          value={longDescriptionDraft}
-                          onChange={(e) => setLongDescriptionDraft(e.target.value)}
-                          disabled={!canEdit}
-                          placeholder={"Admite Markdown: # títulos, **negrita**, *cursiva*, - listas, [texto](url)"}
-                        />
-                      ) : (
-                        <div
-                          className={styles.mdPreview}
-                          dangerouslySetInnerHTML={{
-                            __html: renderMarkdown(longDescriptionDraft) || "<p><em>Vacío.</em></p>",
-                          }}
-                        />
-                      )}
-                    </>
-                  ) : (
-                    <FabricSemanticModelSection itemId={selected.item_id} itemName={selected.name} canEdit={canEdit} />
+                  <div hidden={isLakehouseTable && detailTab !== "descripcion"}>
+                    {(saveSuccess || saveError) && (
+                      <div>
+                        {saveSuccess && <div className={formStyles.successBanner}>{saveSuccess}</div>}
+                        {saveError && <div className={formStyles.errorBanner}>{saveError}</div>}
+                      </div>
+                    )}
+                    {longDescriptionView === "editar" ? (
+                      <textarea
+                        id="fc_long_description"
+                        className={styles.mdTextarea}
+                        value={longDescriptionDraft}
+                        onChange={(e) => setLongDescriptionDraft(e.target.value)}
+                        disabled={!canEdit}
+                        placeholder={"Admite Markdown: # títulos, **negrita**, *cursiva*, - listas, [texto](url)"}
+                      />
+                    ) : (
+                      <div
+                        className={styles.mdPreview}
+                        dangerouslySetInnerHTML={{
+                          __html: renderMarkdown(longDescriptionDraft) || "<p><em>Vacío.</em></p>",
+                        }}
+                      />
+                    )}
+                  </div>
+
+                  {/* Mounted once (on first "Modelo semántico" click) and kept mounted for the
+                      rest of this item's selection, just hidden via CSS -- see hasOpenedModeloTab. */}
+                  {isLakehouseTable && hasOpenedModeloTab && (
+                    <div hidden={detailTab !== "modelo"}>
+                      <FabricSemanticModelSection itemId={selected.item_id} itemName={selected.name} canEdit={canEdit} />
+                    </div>
                   )}
                 </div>
               </div>

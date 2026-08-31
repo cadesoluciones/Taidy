@@ -579,10 +579,6 @@ def _empty_semantic_model_state(missing_columns: List[str]) -> Dict[str, Any]:
     return {"linked": False, "model_item_id": "", "model_name": "", "columns": [], "missing_columns": missing_columns}
 
 
-def _fetch_model_item_and_definition(client: Any, model_item_id: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    return client.get_item(model_item_id), client.get_definition(model_item_id)
-
-
 def get_semantic_model_state(client: Any, item_id: str) -> Dict[str, Any]:
     """Live state of the table's linked semantic model (or the "not linked
     yet" state): its columns with their current descriptions, plus which
@@ -593,11 +589,23 @@ def get_semantic_model_state(client: Any, item_id: str) -> Dict[str, Any]:
     Confirmed live this can genuinely take 20-40s end to end: the source
     table's columns need their own SQL connection (get_item + a fresh
     pyodbc connection), and get_definition() on the model can itself be a
-    polled Fabric long-running operation. Since those two round trips are
-    completely independent, they're run in parallel threads (this module's
-    established pattern for concurrent I/O, see src/hubspot_main.py/
-    src/factorial_main.py) rather than back to back -- roughly halves the
-    wait instead of leaving it to a future optimization."""
+    polled Fabric long-running operation. Since those three round trips
+    (source columns, get_item, get_definition) are all independent of each
+    other, they're all fired in parallel threads (this module's established
+    pattern for concurrent I/O, see src/hubspot_main.py/src/factorial_main.py)
+    rather than back to back.
+
+    get_item and get_definition are deliberately NOT treated the same way
+    on failure. get_item failing (a 404-shaped error) is real evidence the
+    model itself is gone -- e.g. deleted directly in Fabric -- so that
+    self-heals by unlinking, offering "crear" again instead of failing
+    forever on a dangling id. get_definition failing (confirmed live: it
+    can time out on its own long-running-operation polling, unrelated to
+    whether the model still exists) must NOT trigger that same unlink --
+    doing so once genuinely discarded a live link (and its saved
+    descriptions) here during testing, just because that one read was slow.
+    A get_definition failure is surfaced as a normal error instead; the
+    link stays intact and a retry can succeed once Fabric responds."""
     parsed = parse_lakehouse_table_id(item_id)
     if parsed is None:
         raise ValueError(f"'{item_id}' no es una tabla de Lakehouse -- no puede tener un modelo semántico.")
@@ -612,20 +620,19 @@ def get_semantic_model_state(client: Any, item_id: str) -> Dict[str, Any]:
 
     from src.fabric_pipelines.api import FabricPipelineError  # local: keep this module decoupled on the hot path
 
-    with ThreadPoolExecutor(max_workers=2) as pool:
+    with ThreadPoolExecutor(max_workers=3) as pool:
         source_future = pool.submit(_lakehouse_table_source_columns, client, lakehouse_id, schema, table)
-        model_future = pool.submit(_fetch_model_item_and_definition, client, model_item_id)
+        item_future = pool.submit(client.get_item, model_item_id)
+        defn_future = pool.submit(client.get_definition, model_item_id)
 
         source_columns = source_future.result()
         source_names = [c["name"] for c in source_columns]
         try:
-            model_item, defn = model_future.result()
+            model_item = item_future.result()
         except FabricPipelineError:
-            # The linked model is gone (e.g. deleted directly in Fabric) --
-            # self heal by unlinking, so the tab offers "crear" again
-            # instead of failing forever on a dangling id.
             set_semantic_model_link(item_id, "")
             return _empty_semantic_model_state(source_names)
+        defn = defn_future.result()
 
     table_part = _table_tmdl_part(defn.get("definition", {}).get("parts", []))
     table_tmdl = base64.b64decode(table_part["payload"]).decode("utf-8")
