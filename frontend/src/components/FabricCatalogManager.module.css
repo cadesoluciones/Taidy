@@ -135,8 +135,13 @@
    they're a DIRECT flex child of .longDescColumn -- the tab content sits
    one level deeper (in a wrapper toggled by the `hidden` attribute, so it
    survives switching tabs instead of remounting), so that wrapper needs to
-   be a flex column itself and grow too, or the fill-height chain breaks. */
-.longDescBody {
+   be a flex column itself and grow too, or the fill-height chain breaks.
+   The :not([hidden]) guard matters just as much as the flex itself -- an
+   unconditional `display: flex` here has the same specificity as (and
+   loads after) the browser's own `[hidden] { display: none }`, so without
+   the guard this box stays visible, overlapping "Modelo semántico", even
+   while its `hidden` attribute is set. Confirmed live: exactly that. */
+.longDescBody:not([hidden]) {
   display: flex;
   flex-direction: column;
   flex: 1;
