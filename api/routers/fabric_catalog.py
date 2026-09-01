@@ -28,6 +28,7 @@ from ..schemas.fabric_catalog import (
     AddRelationshipRequest,
     CanvasPositionsOut,
     CreateCustomFabricItemRequest,
+    CreateSemanticModelRequest,
     FabricCatalogListOut,
     FabricCatalogItemOut,
     FlagOut,
@@ -35,6 +36,7 @@ from ..schemas.fabric_catalog import (
     SetCanvasPositionsRequest,
     SetFavoriteRequest,
     SetHiddenRequest,
+    SetManualSemanticModelColumnsRequest,
     SetTypeIconRequest,
     TablePreviewOut,
     TypeIconsOut,
@@ -189,10 +191,12 @@ def preview_table(item_id: str) -> TablePreviewOut:
 
 @router.get("/items/{item_id}/semantic-model", response_model=SemanticModelStateOut)
 def get_semantic_model(item_id: str) -> SemanticModelStateOut:
-    """Live state of the table's linked Fabric semantic model (or the
-    "not linked yet" state, with every real column listed as missing so the
-    tab can offer "crear" pre-populated). 400 for anything but a Lakehouse
-    table; 502 if Fabric/the SQL endpoint can't be reached right now."""
+    """Live state of the item's linked Fabric semantic model (or the
+    "not linked yet" state -- for a Lakehouse table, every real column is
+    listed as missing so the tab can offer "crear" pre-populated). Works
+    for any catalog item type, not just Lakehouse tables -- see
+    `has_real_source` in the response for which editing mode applies.
+    502 if Fabric/the SQL endpoint can't be reached right now."""
     try:
         result = fabric_catalog.get_semantic_model_state(_client(), item_id)
     except ValueError as exc:
@@ -203,13 +207,25 @@ def get_semantic_model(item_id: str) -> SemanticModelStateOut:
 
 
 @router.post("/items/{item_id}/semantic-model", response_model=SemanticModelStateOut)
-def create_semantic_model(item_id: str) -> SemanticModelStateOut:
-    """Creates a new single-table DirectLake semantic model for this
-    Lakehouse table -- columns auto-detected from its real schema -- and
-    links it to the catalog item. 400 if one's already linked or the table
-    has no columns to detect; 502 for a real Fabric-side failure."""
+def create_semantic_model(item_id: str, payload: CreateSemanticModelRequest) -> SemanticModelStateOut:
+    """Creates a new single-table semantic model for this catalog item and
+    links it. For a Lakehouse table, columns are always auto-detected from
+    its real schema (`payload` is ignored even if it carries columns) --
+    the reliable path. For anything else, `payload.item_name` (the item's
+    own display name -- there's no way to look it up server-side for a
+    BC/HubSpot/Factorial/custom item) and at least one manually typed
+    column in `payload.columns` are required: the result has no live data
+    connection, just documented column names/types/descriptions.
+    400 if a model's already linked, the Lakehouse table has no columns to
+    detect, or (for a manual model) item_name/columns is missing; 502 for a
+    real Fabric-side failure."""
     try:
-        result = fabric_catalog.create_semantic_model(_client(), item_id)
+        result = fabric_catalog.create_semantic_model(
+            _client(),
+            item_id,
+            item_name=payload.item_name,
+            columns=[c.model_dump() for c in payload.columns],
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except FabricPipelineError as exc:
@@ -236,6 +252,26 @@ def sync_semantic_model_columns(item_id: str) -> SemanticModelStateOut:
     fabric_catalog.sync_semantic_model_columns()."""
     try:
         result = fabric_catalog.sync_semantic_model_columns(_client(), item_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except FabricPipelineError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    return SemanticModelStateOut(**result)
+
+
+@router.put("/items/{item_id}/semantic-model/columns", response_model=SemanticModelStateOut)
+def set_manual_semantic_model_columns(
+    item_id: str, payload: SetManualSemanticModelColumnsRequest
+) -> SemanticModelStateOut:
+    """Replaces a manual (no real data source) model's full column list --
+    used to add or remove a column, since its DATATABLE() partition has to
+    declare every column in lockstep. 400 for a Lakehouse table (its
+    columns are auto-detected, see sync-columns above instead), no linked
+    model, or an unknown data type."""
+    try:
+        result = fabric_catalog.set_manual_semantic_model_columns(
+            _client(), item_id, [c.model_dump() for c in payload.columns]
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except FabricPipelineError as exc:

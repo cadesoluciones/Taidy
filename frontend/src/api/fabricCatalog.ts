@@ -150,10 +150,22 @@ export function fetchFabricTablePreview(itemId: string): Promise<FabricTablePrev
   return apiGet(`/fabric-catalog/items/${encodeURIComponent(itemId)}/preview`);
 }
 
+/** Data types selectable for a manually-defined (non-Lakehouse) column --
+ * TMDL's own vocabulary, distinct from the DAX DATATABLE() one used behind
+ * the scenes to give the table a valid (empty) partition. */
+export const MANUAL_DATA_TYPES = ["string", "int64", "double", "boolean", "dateTime"] as const;
+export type ManualDataType = (typeof MANUAL_DATA_TYPES)[number];
+
+export interface ManualColumn {
+  name: string;
+  data_type: string;
+}
+
 export interface SemanticModelColumn {
   name: string;
   description: string;
   in_source: boolean;
+  data_type: string;
 }
 
 export interface SemanticModelState {
@@ -162,18 +174,31 @@ export interface SemanticModelState {
   model_name: string;
   columns: SemanticModelColumn[];
   /** Real source-table columns the model doesn't have yet -- empty when
-   * nothing's missing, or (when not linked) every column of the table. */
+   * nothing's missing, or (when not linked) every column of the table.
+   * Always empty for a manual (has_real_source: false) model. */
   missing_columns: string[];
+  /** false for BC/HubSpot/Factorial/custom items: no live table backs the
+   * model, columns are defined by hand as a plain data dictionary. */
+  has_real_source: boolean;
 }
 
 export function fetchSemanticModelState(itemId: string): Promise<SemanticModelState> {
   return apiGet(`/fabric-catalog/items/${encodeURIComponent(itemId)}/semantic-model`);
 }
 
-/** Creates a new single-table DirectLake semantic model for this table --
- * columns auto-detected from its real schema, nothing to fill in by hand. */
-export function createSemanticModel(itemId: string): Promise<SemanticModelState> {
-  return apiPost(`/fabric-catalog/items/${encodeURIComponent(itemId)}/semantic-model`);
+/** Creates a new semantic model for this item. For a real Lakehouse table,
+ * columns are auto-detected from its schema and itemName/columns are
+ * ignored. Otherwise it's a manual data dictionary -- itemName and at
+ * least one column are required. */
+export function createSemanticModel(
+  itemId: string,
+  itemName: string = "",
+  columns: ManualColumn[] = []
+): Promise<SemanticModelState> {
+  return apiPost(`/fabric-catalog/items/${encodeURIComponent(itemId)}/semantic-model`, {
+    item_name: itemName,
+    columns,
+  });
 }
 
 export function updateSemanticModelDescriptions(
@@ -184,9 +209,19 @@ export function updateSemanticModelDescriptions(
 }
 
 /** Adds any column the real table has that the model doesn't yet -- schema
- * drift auto-detection, see missing_columns. */
+ * drift auto-detection, see missing_columns. Lakehouse tables only. */
 export function syncSemanticModelColumns(itemId: string): Promise<SemanticModelState> {
   return apiPost(`/fabric-catalog/items/${encodeURIComponent(itemId)}/semantic-model/sync-columns`);
+}
+
+/** Replaces the full column list of a manual (non-Lakehouse) semantic
+ * model -- used to add or remove columns by hand. Existing descriptions
+ * are preserved by column name. */
+export function setManualSemanticModelColumns(
+  itemId: string,
+  columns: ManualColumn[]
+): Promise<SemanticModelState> {
+  return apiPut(`/fabric-catalog/items/${encodeURIComponent(itemId)}/semantic-model/columns`, { columns });
 }
 
 /** The default icon key (see FABRIC_ICON_OPTIONS) shown for each catalog

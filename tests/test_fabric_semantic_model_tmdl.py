@@ -26,9 +26,12 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from src.fabric_pipelines.semantic_model_tmdl import (  # noqa: E402
     append_missing_columns,
+    build_new_manual_model_parts,
     build_new_model_parts,
     parse_table_columns,
+    parse_table_name,
     set_column_description,
+    set_manual_table_columns,
     sql_type_to_tmdl,
     tmdl_ident,
 )
@@ -198,7 +201,9 @@ def test_parse_table_columns_reads_names_and_empty_descriptions_from_the_real_mo
 def test_parse_table_columns_reads_a_description_from_a_doc_comment():
     tmdl = "table t\n\n\t/// Identificador de la cuenta contable.\n\tcolumn cuenta_contable\n\t\tdataType: string\n"
     columns = parse_table_columns(tmdl)
-    assert columns == [{"name": "cuenta_contable", "description": "Identificador de la cuenta contable."}]
+    assert columns == [
+        {"name": "cuenta_contable", "description": "Identificador de la cuenta contable.", "data_type": "string"}
+    ]
 
 
 def test_parse_table_columns_joins_multiline_doc_comments():
@@ -217,13 +222,13 @@ def test_parse_table_columns_does_not_leak_a_measures_doc_comment_onto_the_next_
         "\t\tdataType: int64\n"
     )
     columns = parse_table_columns(tmdl)
-    assert columns == [{"name": "a", "description": ""}]
+    assert columns == [{"name": "a", "description": "", "data_type": "int64"}]
 
 
 def test_parse_table_columns_unquotes_quoted_identifiers():
     tmdl = "table t\n\n\tcolumn 'Endeudamiento (1)'\n\t\tdataType: double\n"
     columns = parse_table_columns(tmdl)
-    assert columns == [{"name": "Endeudamiento (1)", "description": ""}]
+    assert columns == [{"name": "Endeudamiento (1)", "description": "", "data_type": "double"}]
 
 
 # --------------------------------------------------------------------------------------
@@ -305,3 +310,156 @@ def test_append_missing_columns_multiple_at_once():
     )
     names = [c["name"] for c in parse_table_columns(patched)]
     assert names == ["cuenta_contable", "importe", "a", "b"]
+
+
+# --------------------------------------------------------------------------------------
+# build_new_manual_model_parts / set_manual_table_columns -- no real data
+# source (BC/HubSpot/Factorial/custom catalog items), columns typed by hand.
+# --------------------------------------------------------------------------------------
+
+
+def test_build_new_manual_model_parts_has_no_lakehouse_dependent_parts():
+    parts = build_new_manual_model_parts(
+        display_name="m",
+        table="mi_tabla",
+        columns=[{"name": "nombre", "data_type": "string"}, {"name": "edad", "data_type": "int64"}],
+    )
+    paths = {p["path"] for p in parts}
+    # No definition/expressions.tmdl -- that's the DirectLake-only OneLake pointer.
+    assert paths == {
+        ".platform",
+        "definition.pbism",
+        "definition/database.tmdl",
+        "definition/model.tmdl",
+        "definition/tables/mi_tabla.tmdl",
+    }
+
+
+def test_build_new_manual_model_parts_table_tmdl_uses_a_datatable_partition():
+    parts = build_new_manual_model_parts(
+        display_name="m",
+        table="mi_tabla",
+        columns=[{"name": "nombre", "data_type": "string"}, {"name": "edad", "data_type": "int64"}],
+    )
+    table_part = next(p for p in parts if p["path"] == "definition/tables/mi_tabla.tmdl")
+    text = base64.b64decode(table_part["payload"]).decode("utf-8")
+    assert "column nombre" in text
+    assert "dataType: string" in text
+    assert "column edad" in text
+    assert "dataType: int64" in text
+    assert "mode: import" in text
+    assert 'source = DATATABLE("nombre", STRING, "edad", INTEGER, {})' in text
+
+
+def test_build_new_manual_model_parts_quotes_column_names_that_need_it():
+    parts = build_new_manual_model_parts(
+        display_name="m", table="t", columns=[{"name": "Fecha de alta", "data_type": "dateTime"}]
+    )
+    table_part = next(p for p in parts if p["path"] == "definition/tables/t.tmdl")
+    text = base64.b64decode(table_part["payload"]).decode("utf-8")
+    assert "column 'Fecha de alta'" in text
+    assert 'DATATABLE("Fecha de alta", DATETIME, {})' in text
+
+
+def test_build_new_manual_model_parts_rejects_no_columns():
+    with pytest.raises(ValueError, match="al menos una columna"):
+        build_new_manual_model_parts(display_name="m", table="t", columns=[])
+
+
+def test_build_new_manual_model_parts_rejects_duplicate_column_names():
+    with pytest.raises(ValueError, match="repetida"):
+        build_new_manual_model_parts(
+            display_name="m",
+            table="t",
+            columns=[{"name": "a", "data_type": "string"}, {"name": "a", "data_type": "int64"}],
+        )
+
+
+def test_set_manual_table_columns_adds_a_column_and_rebuilds_the_datatable_signature():
+    parts = build_new_manual_model_parts(
+        display_name="m", table="t", columns=[{"name": "a", "data_type": "string"}]
+    )
+    table_tmdl = base64.b64decode(next(p for p in parts if p["path"] == "definition/tables/t.tmdl")["payload"]).decode(
+        "utf-8"
+    )
+
+    updated = set_manual_table_columns(
+        table_tmdl, "t", [{"name": "a", "data_type": "string"}, {"name": "b", "data_type": "double"}]
+    )
+
+    names = [c["name"] for c in parse_table_columns(updated)]
+    assert names == ["a", "b"]
+    assert 'source = DATATABLE("a", STRING, "b", DOUBLE, {})' in updated
+
+
+def test_set_manual_table_columns_removes_a_column_and_rebuilds_the_datatable_signature():
+    parts = build_new_manual_model_parts(
+        display_name="m",
+        table="t",
+        columns=[{"name": "a", "data_type": "string"}, {"name": "b", "data_type": "double"}],
+    )
+    table_tmdl = base64.b64decode(next(p for p in parts if p["path"] == "definition/tables/t.tmdl")["payload"]).decode(
+        "utf-8"
+    )
+
+    updated = set_manual_table_columns(table_tmdl, "t", [{"name": "a", "data_type": "string"}])
+
+    names = [c["name"] for c in parse_table_columns(updated)]
+    assert names == ["a"]
+    assert 'source = DATATABLE("a", STRING, {})' in updated
+
+
+def test_set_manual_table_columns_preserves_an_existing_description():
+    parts = build_new_manual_model_parts(
+        display_name="m", table="t", columns=[{"name": "a", "data_type": "string"}]
+    )
+    table_tmdl = base64.b64decode(next(p for p in parts if p["path"] == "definition/tables/t.tmdl")["payload"]).decode(
+        "utf-8"
+    )
+    with_desc = set_column_description(table_tmdl, "a", "Columna A.")
+
+    updated = set_manual_table_columns(
+        with_desc, "t", [{"name": "a", "data_type": "string"}, {"name": "b", "data_type": "int64"}]
+    )
+
+    by_name = {c["name"]: c["description"] for c in parse_table_columns(updated)}
+    assert by_name["a"] == "Columna A."
+    assert by_name["b"] == ""
+
+
+def test_set_manual_table_columns_rejects_no_columns():
+    with pytest.raises(ValueError, match="al menos una columna"):
+        set_manual_table_columns("table t\n", "t", [])
+
+
+def test_set_manual_table_columns_rejects_duplicate_column_names():
+    with pytest.raises(ValueError, match="repetida"):
+        set_manual_table_columns(
+            "table t\n", "t", [{"name": "a", "data_type": "string"}, {"name": "a", "data_type": "int64"}]
+        )
+
+
+def test_build_new_manual_model_parts_rejects_a_blank_column_name():
+    with pytest.raises(ValueError, match="no puede estar vacío"):
+        build_new_manual_model_parts(display_name="m", table="t", columns=[{"name": "  ", "data_type": "string"}])
+
+
+def test_build_new_manual_model_parts_rejects_an_unknown_data_type():
+    with pytest.raises(ValueError, match="Tipo de dato desconocido"):
+        build_new_manual_model_parts(display_name="m", table="t", columns=[{"name": "a", "data_type": "money"}])
+
+
+def test_parse_table_name_reads_the_table_line():
+    parts = build_new_manual_model_parts(display_name="m", table="mi_tabla", columns=[{"name": "a", "data_type": "string"}])
+    table_tmdl = base64.b64decode(next(p for p in parts if p["path"] == "definition/tables/mi_tabla.tmdl")["payload"]).decode(
+        "utf-8"
+    )
+    assert parse_table_name(table_tmdl) == "mi_tabla"
+
+
+def test_parse_table_name_unquotes_a_quoted_table_name():
+    parts = build_new_manual_model_parts(display_name="m", table="Mi Tabla", columns=[{"name": "a", "data_type": "string"}])
+    table_tmdl = base64.b64decode(next(p for p in parts if p["path"] == "definition/tables/Mi Tabla.tmdl")["payload"]).decode(
+        "utf-8"
+    )
+    assert parse_table_name(table_tmdl) == "Mi Tabla"

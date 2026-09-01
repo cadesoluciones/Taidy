@@ -129,6 +129,7 @@ class TablePreviewOut(BaseModel):
 class SemanticModelColumnOut(BaseModel):
     name: str
     description: str = ""
+    data_type: str = ""
     in_source: bool = True
 
 
@@ -138,12 +139,35 @@ class SemanticModelStateOut(BaseModel):
     model_name: str = ""
     columns: List[SemanticModelColumnOut] = []
     # Real source-table columns the model doesn't have yet (schema drift, or
-    # not-yet-linked) -- drives the "sync columns" button.
+    # not-yet-linked) -- drives the "sync columns" button. Always empty for
+    # a manual (has_real_source: false) model -- nothing to sync against.
     missing_columns: List[str] = []
+    # Whether this item has a real, queryable table behind it (a Lakehouse
+    # table -- DirectLake, auto-detected columns) or not (BC/HubSpot/
+    # Factorial/custom -- manual columns, no live data connection). Tells
+    # the frontend which editing UI to show.
+    has_real_source: bool = False
+
+
+class ManualColumnIn(BaseModel):
+    name: str
+    data_type: str  # one of src.fabric_pipelines.semantic_model_tmdl.MANUAL_DATA_TYPES
 
 
 class UpdateSemanticModelDescriptionsRequest(BaseModel):
     descriptions: Dict[str, str]
+
+
+class CreateSemanticModelRequest(BaseModel):
+    # Both ignored for a Lakehouse table (columns always auto-detected).
+    # Both required for anything else -- item_name is the catalog item's
+    # own display name (this module has no independent way to look it up).
+    item_name: str = ""
+    columns: List[ManualColumnIn] = []
+
+
+class SetManualSemanticModelColumnsRequest(BaseModel):
+    columns: List[ManualColumnIn]
 
 
 class TypeIconsOut(BaseModel):

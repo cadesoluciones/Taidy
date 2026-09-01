@@ -452,6 +452,7 @@ def test_operator_can_read_semantic_model_state_when_not_linked(isolated_state, 
         "model_name": "",
         "columns": [],
         "missing_columns": ["id"],
+        "has_real_source": True,
     }
 
 
@@ -460,10 +461,11 @@ def test_operator_can_create_a_semantic_model(isolated_state, client, monkeypatc
     make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
     _login(client, "operator1", "OperatorPass2026!")
 
-    resp = client.post(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model")
+    resp = client.post(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model", json={})
     assert resp.status_code == 200
     body = resp.json()
     assert body["linked"] is True
+    assert body["has_real_source"] is True
     assert body["model_name"] == "ventas"
     assert [c["name"] for c in body["columns"]] == ["id"]
     assert body["missing_columns"] == []
@@ -474,8 +476,37 @@ def test_create_semantic_model_rejects_a_second_one_for_the_same_table(isolated_
     make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
     _login(client, "operator1", "OperatorPass2026!")
 
-    client.post(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model")
-    resp = client.post(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model")
+    client.post(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model", json={})
+    resp = client.post(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model", json={})
+    assert resp.status_code == 400
+
+
+def test_operator_can_create_a_manual_semantic_model_for_a_non_lakehouse_item(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.post(
+        "/fabric-catalog/items/bc:bc_customer/semantic-model",
+        json={"item_name": "bc_customer", "columns": [{"name": "email", "data_type": "string"}]},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["linked"] is True
+    assert body["has_real_source"] is False
+    assert body["model_name"] == "bc_customer"
+    assert [c["name"] for c in body["columns"]] == ["email"]
+
+
+def test_create_manual_semantic_model_rejects_an_unknown_data_type(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.post(
+        "/fabric-catalog/items/bc:bc_customer/semantic-model",
+        json={"item_name": "bc_customer", "columns": [{"name": "email", "data_type": "money"}]},
+    )
     assert resp.status_code == 400
 
 
@@ -484,7 +515,7 @@ def test_operator_can_update_semantic_model_descriptions(isolated_state, client,
     make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
     _login(client, "operator1", "OperatorPass2026!")
 
-    client.post(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model")
+    client.post(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model", json={})
     resp = client.patch(
         f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model",
         json={"descriptions": {"id": "Identificador de venta."}},
@@ -510,10 +541,65 @@ def test_operator_can_sync_semantic_model_columns(isolated_state, client, monkey
     make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
     _login(client, "operator1", "OperatorPass2026!")
 
-    client.post(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model")
+    client.post(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model", json={})
     resp = client.post(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model/sync-columns")
     assert resp.status_code == 200
     assert resp.json()["missing_columns"] == []
+
+
+def test_sync_semantic_model_columns_rejects_a_manual_model(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    client.post(
+        "/fabric-catalog/items/bc:bc_customer/semantic-model",
+        json={"item_name": "bc_customer", "columns": [{"name": "email", "data_type": "string"}]},
+    )
+    resp = client.post("/fabric-catalog/items/bc:bc_customer/semantic-model/sync-columns")
+    assert resp.status_code == 400
+
+
+def test_operator_can_set_manual_semantic_model_columns(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    client.post(
+        "/fabric-catalog/items/bc:bc_customer/semantic-model",
+        json={"item_name": "bc_customer", "columns": [{"name": "email", "data_type": "string"}]},
+    )
+    resp = client.put(
+        "/fabric-catalog/items/bc:bc_customer/semantic-model/columns",
+        json={"columns": [{"name": "email", "data_type": "string"}, {"name": "activo", "data_type": "boolean"}]},
+    )
+    assert resp.status_code == 200
+    assert [c["name"] for c in resp.json()["columns"]] == ["email", "activo"]
+
+
+def test_set_manual_semantic_model_columns_rejects_a_lakehouse_table(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    client.post(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model", json={})
+    resp = client.put(
+        f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model/columns",
+        json={"columns": [{"name": "x", "data_type": "string"}]},
+    )
+    assert resp.status_code == 400
+
+
+def test_reader_cannot_set_manual_semantic_model_columns(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+
+    resp = client.put(
+        "/fabric-catalog/items/bc:bc_customer/semantic-model/columns",
+        json={"columns": [{"name": "x", "data_type": "string"}]},
+    )
+    assert resp.status_code == 403
 
 
 def test_reader_cannot_create_a_semantic_model(isolated_state, client, monkeypatch):
@@ -521,7 +607,7 @@ def test_reader_cannot_create_a_semantic_model(isolated_state, client, monkeypat
     make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
     _login(client, "reader1", "ReaderPass2026!")
 
-    resp = client.post(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model")
+    resp = client.post(f"/fabric-catalog/items/{_VENTAS_ITEM}/semantic-model", json={})
     assert resp.status_code == 403
 
 

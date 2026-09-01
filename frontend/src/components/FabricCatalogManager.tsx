@@ -146,7 +146,6 @@ export function FabricCatalogManager() {
   }, [appearanceOpen]);
 
   const selected = items.find((i) => i.item_id === selectedId) ?? null;
-  const isLakehouseTable = !!selected?.item_id.startsWith(LAKEHOUSE_TABLE_ID_PREFIX);
 
   useEffect(() => {
     setShortDescriptionDraft(selected?.short_description ?? "");
@@ -657,32 +656,26 @@ export function FabricCatalogManager() {
 
                 <div className={`${styles.longDescColumn} no-print`}>
                   <div className={styles.detailHead}>
-                    {isLakehouseTable ? (
-                      <div className={styles.detailTabBar}>
-                        <button
-                          type="button"
-                          className={detailTab === "descripcion" ? styles.detailTabActive : styles.detailTab}
-                          onClick={() => setDetailTab("descripcion")}
-                        >
-                          Descripción detallada
-                        </button>
-                        <button
-                          type="button"
-                          className={detailTab === "modelo" ? styles.detailTabActive : styles.detailTab}
-                          onClick={() => {
-                            setDetailTab("modelo");
-                            setHasOpenedModeloTab(true);
-                          }}
-                        >
-                          Modelo semántico
-                        </button>
-                      </div>
-                    ) : (
-                      <label htmlFor="fc_long_description" style={{ marginBottom: 0 }}>
+                    <div className={styles.detailTabBar}>
+                      <button
+                        type="button"
+                        className={detailTab === "descripcion" ? styles.detailTabActive : styles.detailTab}
+                        onClick={() => setDetailTab("descripcion")}
+                      >
                         Descripción detallada
-                      </label>
-                    )}
-                    {(detailTab === "descripcion" || !isLakehouseTable) && (
+                      </button>
+                      <button
+                        type="button"
+                        className={detailTab === "modelo" ? styles.detailTabActive : styles.detailTab}
+                        onClick={() => {
+                          setDetailTab("modelo");
+                          setHasOpenedModeloTab(true);
+                        }}
+                      >
+                        Modelo semántico
+                      </button>
+                    </div>
+                    {detailTab === "descripcion" && (
                       <div className={styles.longDescActions}>
                         <button
                           type="button"
@@ -705,7 +698,7 @@ export function FabricCatalogManager() {
                     )}
                   </div>
 
-                  <div hidden={isLakehouseTable && detailTab !== "descripcion"}>
+                  <div className={styles.longDescBody} hidden={detailTab !== "descripcion"}>
                     {(saveSuccess || saveError) && (
                       <div>
                         {saveSuccess && <div className={formStyles.successBanner}>{saveSuccess}</div>}
@@ -733,7 +726,7 @@ export function FabricCatalogManager() {
 
                   {/* Mounted once (on first "Modelo semántico" click) and kept mounted for the
                       rest of this item's selection, just hidden via CSS -- see hasOpenedModeloTab. */}
-                  {isLakehouseTable && hasOpenedModeloTab && (
+                  {hasOpenedModeloTab && (
                     <div hidden={detailTab !== "modelo"}>
                       <FabricSemanticModelSection itemId={selected.item_id} itemName={selected.name} canEdit={canEdit} />
                     </div>

@@ -308,9 +308,20 @@ def _client_with_source_table(columns=None):
     )
 
 
-def test_get_semantic_model_state_rejects_a_non_lakehouse_table_id(isolated_state):
-    with pytest.raises(ValueError, match="no es una tabla de Lakehouse"):
-        fabric_catalog.get_semantic_model_state(_EMPTY_CLIENT, "bc:bc_customer")
+def test_get_semantic_model_state_for_a_non_lakehouse_item_is_manual_mode_not_linked(isolated_state):
+    """BC/HubSpot/Factorial/custom items have no real table to compare
+    against -- get_semantic_model_state() works for them too now (it used
+    to reject anything but a Lakehouse table id), just with
+    has_real_source: False and nothing to list as missing."""
+    state = fabric_catalog.get_semantic_model_state(_EMPTY_CLIENT, "bc:bc_customer")
+    assert state == {
+        "linked": False,
+        "model_item_id": "",
+        "model_name": "",
+        "columns": [],
+        "missing_columns": [],
+        "has_real_source": False,
+    }
 
 
 def test_get_semantic_model_state_not_linked_lists_every_source_column_as_missing(isolated_state):
@@ -322,6 +333,7 @@ def test_get_semantic_model_state_not_linked_lists_every_source_column_as_missin
         "model_name": "",
         "columns": [],
         "missing_columns": ["id", "importe"],
+        "has_real_source": True,
     }
 
 
@@ -436,6 +448,127 @@ def test_sync_semantic_model_columns_is_a_no_op_when_nothing_is_missing(isolated
     created = fabric_catalog.create_semantic_model(client, _TABLE_ITEM_ID)
     synced = fabric_catalog.sync_semantic_model_columns(client, _TABLE_ITEM_ID)
     assert synced == created
+
+
+# --------------------------------------------------------------------------------------
+# Manual semantic models -- BC/HubSpot/Factorial/custom items with no real
+# table this app can query, columns typed by hand instead of auto-detected.
+# --------------------------------------------------------------------------------------
+
+_MANUAL_ITEM_ID = "bc:bc_customer"
+
+
+def test_create_semantic_model_manual_mode_requires_item_name(isolated_state):
+    with pytest.raises(ValueError, match="nombre del elemento"):
+        fabric_catalog.create_semantic_model(
+            _EMPTY_CLIENT, _MANUAL_ITEM_ID, columns=[{"name": "a", "data_type": "string"}]
+        )
+
+
+def test_create_semantic_model_manual_mode_requires_at_least_one_column(isolated_state):
+    with pytest.raises(ValueError, match="al menos una columna"):
+        fabric_catalog.create_semantic_model(_EMPTY_CLIENT, _MANUAL_ITEM_ID, item_name="bc_customer")
+
+
+def test_create_semantic_model_manual_mode_creates_and_links(isolated_state):
+    client = _client_with_source_table()  # only needs create_item/get_item/get_definition, source table unused here
+    state = fabric_catalog.create_semantic_model(
+        client,
+        _MANUAL_ITEM_ID,
+        item_name="bc_customer",
+        columns=[{"name": "email", "data_type": "string"}, {"name": "activo", "data_type": "boolean"}],
+    )
+    assert state["linked"] is True
+    assert state["has_real_source"] is False
+    assert state["model_name"] == "bc_customer"
+    assert [c["name"] for c in state["columns"]] == ["email", "activo"]
+    assert state["missing_columns"] == []
+    assert fabric_catalog.get_metadata(_MANUAL_ITEM_ID)["semantic_model_item_id"] == state["model_item_id"]
+
+
+def test_create_semantic_model_manual_mode_rejects_a_second_one(isolated_state):
+    client = _client_with_source_table()
+    fabric_catalog.create_semantic_model(
+        client, _MANUAL_ITEM_ID, item_name="bc_customer", columns=[{"name": "a", "data_type": "string"}]
+    )
+    with pytest.raises(ValueError, match="ya tiene un modelo semántico"):
+        fabric_catalog.create_semantic_model(
+            client, _MANUAL_ITEM_ID, item_name="bc_customer", columns=[{"name": "b", "data_type": "string"}]
+        )
+
+
+def test_get_semantic_model_state_reads_back_a_manual_model(isolated_state):
+    client = _client_with_source_table()
+    created = fabric_catalog.create_semantic_model(
+        client, _MANUAL_ITEM_ID, item_name="bc_customer", columns=[{"name": "email", "data_type": "string"}]
+    )
+    state = fabric_catalog.get_semantic_model_state(client, _MANUAL_ITEM_ID)
+    assert state == created
+
+
+def test_update_semantic_model_descriptions_works_for_a_manual_model(isolated_state):
+    client = _client_with_source_table()
+    fabric_catalog.create_semantic_model(
+        client, _MANUAL_ITEM_ID, item_name="bc_customer", columns=[{"name": "email", "data_type": "string"}]
+    )
+    state = fabric_catalog.update_semantic_model_descriptions(
+        client, _MANUAL_ITEM_ID, {"email": "Correo del cliente."}
+    )
+    by_name = {c["name"]: c["description"] for c in state["columns"]}
+    assert by_name["email"] == "Correo del cliente."
+
+
+def test_set_manual_semantic_model_columns_adds_a_column(isolated_state):
+    client = _client_with_source_table()
+    fabric_catalog.create_semantic_model(
+        client, _MANUAL_ITEM_ID, item_name="bc_customer", columns=[{"name": "email", "data_type": "string"}]
+    )
+    state = fabric_catalog.set_manual_semantic_model_columns(
+        client,
+        _MANUAL_ITEM_ID,
+        [{"name": "email", "data_type": "string"}, {"name": "activo", "data_type": "boolean"}],
+    )
+    assert [c["name"] for c in state["columns"]] == ["email", "activo"]
+
+
+def test_set_manual_semantic_model_columns_removes_a_column_and_keeps_descriptions(isolated_state):
+    client = _client_with_source_table()
+    fabric_catalog.create_semantic_model(
+        client,
+        _MANUAL_ITEM_ID,
+        item_name="bc_customer",
+        columns=[{"name": "email", "data_type": "string"}, {"name": "activo", "data_type": "boolean"}],
+    )
+    fabric_catalog.update_semantic_model_descriptions(client, _MANUAL_ITEM_ID, {"email": "Correo."})
+
+    state = fabric_catalog.set_manual_semantic_model_columns(
+        client, _MANUAL_ITEM_ID, [{"name": "email", "data_type": "string"}]
+    )
+    assert [c["name"] for c in state["columns"]] == ["email"]
+    assert state["columns"][0]["description"] == "Correo."
+
+
+def test_set_manual_semantic_model_columns_rejects_a_lakehouse_table(isolated_state):
+    client = _client_with_source_table()
+    fabric_catalog.create_semantic_model(client, _TABLE_ITEM_ID)
+    with pytest.raises(ValueError, match="se detectan automáticamente"):
+        fabric_catalog.set_manual_semantic_model_columns(client, _TABLE_ITEM_ID, [{"name": "x", "data_type": "string"}])
+
+
+def test_set_manual_semantic_model_columns_requires_a_linked_model(isolated_state):
+    with pytest.raises(ValueError, match="todavía no tiene"):
+        fabric_catalog.set_manual_semantic_model_columns(
+            _EMPTY_CLIENT, _MANUAL_ITEM_ID, [{"name": "x", "data_type": "string"}]
+        )
+
+
+def test_sync_semantic_model_columns_rejects_a_manual_model(isolated_state):
+    client = _client_with_source_table()
+    fabric_catalog.create_semantic_model(
+        client, _MANUAL_ITEM_ID, item_name="bc_customer", columns=[{"name": "a", "data_type": "string"}]
+    )
+    with pytest.raises(ValueError, match="no es una tabla de Lakehouse"):
+        fabric_catalog.sync_semantic_model_columns(client, _MANUAL_ITEM_ID)
 
 
 def test_list_catalog_items_bc_table_keeps_its_saved_metadata(isolated_state, monkeypatch):

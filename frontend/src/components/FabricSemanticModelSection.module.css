@@ -73,3 +73,93 @@
   border-radius: 3px;
   padding: 1px 4px;
 }
+
+.draftList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-2) 0;
+}
+
+.draftColumns {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.draftColumns li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 12px;
+  background: var(--color-bg-muted, color-mix(in srgb, var(--color-text) 4%, var(--color-bg)));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+}
+
+.draftColumns li span:first-child {
+  flex: 1;
+  font-weight: 600;
+}
+
+.typeTag {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.addRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.colInput {
+  flex: 1;
+  min-width: 140px;
+  font-size: 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.colSelect {
+  font-size: 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.dupHint {
+  font-size: 11px;
+  color: var(--color-danger);
+  white-space: nowrap;
+}
+
+.removeButton {
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.removeButton:hover:not(:disabled) {
+  color: var(--color-danger);
+}
+
+.removeButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

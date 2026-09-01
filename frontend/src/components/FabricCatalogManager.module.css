@@ -131,6 +131,19 @@
   min-width: 0;
 }
 
+/* .mdTextarea/.mdPreview's flex:1 only stretches to fill the column when
+   they're a DIRECT flex child of .longDescColumn -- the tab content sits
+   one level deeper (in a wrapper toggled by the `hidden` attribute, so it
+   survives switching tabs instead of remounting), so that wrapper needs to
+   be a flex column itself and grow too, or the fill-height chain breaks. */
+.longDescBody {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: var(--space-2);
+  min-height: 0;
+}
+
 /* Independently scrollable so a long item list never depends on the whole
    page scrolling to reach items below the fold -- capped relative to the
    viewport, not to the (variable-height) content above it. */
