@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { Eye, EyeOff, Palette, Printer, Star, Table2, Trash2, X } from "lucide-react";
+import { Eye, EyeOff, Palette, Printer, Star, Table2, Trash2, WifiOff, X } from "lucide-react";
 
 import { ROLE_ADMIN, ROLE_OPERATOR } from "../api/auth";
 import { ApiError } from "../api/client";
@@ -10,6 +10,7 @@ import {
   addFabricRelationship,
   createCustomFabricItem,
   deleteCustomFabricItem,
+  deleteOfflineItem,
   fetchFabricCatalog,
   fetchFabricTablePreview,
   fetchTypeIcons,
@@ -114,6 +115,9 @@ export function FabricCatalogManager() {
   const [isCreatingCustom, setIsCreatingCustom] = useState(false);
   const [confirmDeleteCustomOpen, setConfirmDeleteCustomOpen] = useState(false);
   const [isDeletingCustom, setIsDeletingCustom] = useState(false);
+  const [confirmDeleteOfflineOpen, setConfirmDeleteOfflineOpen] = useState(false);
+  const [isDeletingOffline, setIsDeletingOffline] = useState(false);
+  const [deleteOfflineError, setDeleteOfflineError] = useState<string | null>(null);
 
   async function reload() {
     setIsLoading(true);
@@ -338,6 +342,22 @@ export function FabricCatalogManager() {
     }
   }
 
+  async function handleDeleteOffline() {
+    if (!selected) return;
+    setIsDeletingOffline(true);
+    setDeleteOfflineError(null);
+    try {
+      await deleteOfflineItem(selected.item_id);
+      setItems((prev) => prev.filter((i) => i.item_id !== selected.item_id));
+      setSelectedId(null);
+      setConfirmDeleteOfflineOpen(false);
+    } catch (err) {
+      setDeleteOfflineError(err instanceof ApiError ? err.message : "No se pudo eliminar.");
+    } finally {
+      setIsDeletingOffline(false);
+    }
+  }
+
   if (isLoading) return <p>Cargando catálogo de Fabric…</p>;
   if (loadError) return <div className={formStyles.errorBanner}>{loadError}</div>;
 
@@ -425,7 +445,13 @@ export function FabricCatalogManager() {
                   <Printer size={13} /> Imprimir
                 </button>
                 {selected.item_id.startsWith(LAKEHOUSE_TABLE_ID_PREFIX) && (
-                  <button type="button" className={`${styles.headToggle} no-print`} onClick={() => void handlePreview()}>
+                  <button
+                    type="button"
+                    className={`${styles.headToggle} no-print`}
+                    onClick={() => void handlePreview()}
+                    disabled={selected.connection_status === "offline"}
+                    title={selected.connection_status === "offline" ? "No disponible: este elemento está sin conexión" : undefined}
+                  >
                     <Table2 size={13} /> Vista previa
                   </button>
                 )}
@@ -438,10 +464,31 @@ export function FabricCatalogManager() {
                     <Trash2 size={13} /> Eliminar bloque
                   </button>
                 )}
+                {selected.connection_status === "offline" && canEdit && (
+                  <button
+                    type="button"
+                    className={`${styles.deleteCustomButton} no-print`}
+                    onClick={() => setConfirmDeleteOfflineOpen(true)}
+                  >
+                    <Trash2 size={13} /> Eliminar (sin conexión)
+                  </button>
+                )}
               </div>
               {selected.folder_path.length > 0 && (
                 <p className={styles.breadcrumb}>{selected.folder_path.join(" / ")}</p>
               )}
+              {selected.connection_status === "offline" && (
+                <div className={`${styles.offlineNotice} no-print`}>
+                  <WifiOff size={13} />
+                  <span>
+                    Sin conexión
+                    {selected.last_synced_at &&
+                      ` -- visto por última vez el ${new Date(selected.last_synced_at).toLocaleString("es-ES")}`}
+                    . Las acciones que necesitan Fabric en vivo (vista previa, modelo semántico) no están disponibles.
+                  </span>
+                </div>
+              )}
+              {deleteOfflineError && <div className={formStyles.errorBanner}>{deleteOfflineError}</div>}
 
               <div className={`${styles.printOnlySummary} print-only`}>
                 {selected.short_description && <p>{selected.short_description}</p>}
@@ -728,7 +775,12 @@ export function FabricCatalogManager() {
                       rest of this item's selection, just hidden via CSS -- see hasOpenedModeloTab. */}
                   {hasOpenedModeloTab && (
                     <div hidden={detailTab !== "modelo"}>
-                      <FabricSemanticModelSection itemId={selected.item_id} itemName={selected.name} canEdit={canEdit} />
+                      <FabricSemanticModelSection
+                        itemId={selected.item_id}
+                        itemName={selected.name}
+                        canEdit={canEdit}
+                        offline={selected.connection_status === "offline"}
+                      />
                     </div>
                   )}
                 </div>
@@ -824,6 +876,16 @@ export function FabricCatalogManager() {
         busy={isDeletingCustom}
         onConfirm={() => void handleDeleteCustom()}
         onCancel={() => setConfirmDeleteCustomOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteOfflineOpen}
+        title="Eliminar elemento sin conexión"
+        description={`"${selected?.name ?? ""}" se eliminará del catálogo (solo la copia local -- si Fabric vuelve a listarlo en una sincronización futura, reaparecerá). Esta acción no se puede deshacer.`}
+        confirmLabel="Eliminar"
+        busy={isDeletingOffline}
+        onConfirm={() => void handleDeleteOffline()}
+        onCancel={() => setConfirmDeleteOfflineOpen(false)}
       />
     </div>
   );

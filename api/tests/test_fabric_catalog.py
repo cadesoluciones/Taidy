@@ -117,6 +117,78 @@ def test_operator_can_list_catalog_items(isolated_state, client, monkeypatch):
     assert notebook["reviewed_by"] == ""
 
 
+def test_list_catalog_items_marks_fabric_items_online_and_bc_items_always_online(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    monkeypatch.setattr(fabric_catalog.table_configs, "list_bc_tables_full", lambda: [{"name": "bc_customer"}])
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    items = client.get("/fabric-catalog/items").json()["items"]
+    notebook = next(i for i in items if i["item_id"] == "nb-1")
+    assert notebook["connection_status"] == "online"
+    assert notebook["last_synced_at"] == ""
+    bc_table = next(i for i in items if i["item_id"] == "bc:bc_customer")
+    assert bc_table["connection_status"] == "online"
+
+
+def test_list_catalog_items_offline_item_can_be_deleted_and_reappears_if_seen_again(isolated_state, client, monkeypatch):
+    fake = _use_fake_fabric_client(monkeypatch)
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    first = client.get("/fabric-catalog/items").json()["items"]
+    assert {i["item_id"] for i in first} == {"nb-1", "pl-1"}
+
+    # Fabric stops returning "pl-1" -- e.g. its capacity/license lapsed.
+    fake.list_items = lambda: [{"id": "nb-1", "type": "Notebook", "displayName": "silver_facturas", "folderId": "f-silver"}]
+    second = client.get("/fabric-catalog/items").json()["items"]
+    pipeline = next(i for i in second if i["item_id"] == "pl-1")
+    assert pipeline["connection_status"] == "offline"
+
+    resp = client.delete("/fabric-catalog/items/pl-1")
+    assert resp.status_code == 204
+    third = client.get("/fabric-catalog/items").json()["items"]
+    assert "pl-1" not in {i["item_id"] for i in third}
+
+    # It's still a real item Fabric could list again -- coming back live
+    # should make it reappear, deleting only ever forgot the local copy.
+    fake.list_items = lambda: [
+        {"id": "nb-1", "type": "Notebook", "displayName": "silver_facturas", "folderId": "f-silver"},
+        {"id": "pl-1", "type": "DataPipeline", "displayName": "Pipeline_CADE_Bronce"},
+    ]
+    fourth = client.get("/fabric-catalog/items").json()["items"]
+    pipeline_again = next(i for i in fourth if i["item_id"] == "pl-1")
+    assert pipeline_again["connection_status"] == "online"
+
+
+def test_delete_offline_item_rejects_a_bc_item(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    monkeypatch.setattr(fabric_catalog.table_configs, "list_bc_tables_full", lambda: [{"name": "bc_customer"}])
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    resp = client.delete("/fabric-catalog/items/bc:bc_customer")
+    assert resp.status_code == 400
+
+
+def test_delete_offline_item_rejects_an_unknown_item(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("admin2", "AdminPass2026!", users_db.ROLE_ADMIN)
+    _login(client, "admin2", "AdminPass2026!")
+
+    resp = client.delete("/fabric-catalog/items/nb-does-not-exist")
+    assert resp.status_code == 400
+
+
+def test_reader_cannot_delete_an_offline_item(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+
+    resp = client.delete("/fabric-catalog/items/pl-1")
+    assert resp.status_code == 403
+
+
 def test_list_catalog_items_includes_bc_and_hubspot_tables(isolated_state, client, monkeypatch):
     monkeypatch.setattr(fabric_catalog_router, "_client", lambda: _FakeFabricClient())
     monkeypatch.setattr(

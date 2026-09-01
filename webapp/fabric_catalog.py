@@ -36,7 +36,7 @@ from src.fabric_pipelines.semantic_model_tmdl import (
     set_column_description,
     set_manual_table_columns,
 )
-from webapp import table_configs
+from webapp import fabric_catalog_cache, table_configs
 from webapp.state_dir import state_path
 
 _CATALOG_PATH = state_path("fabric_catalog.json", Path(__file__).resolve().parent)
@@ -459,8 +459,26 @@ _METADATA_FIELDS = (
 )
 
 
-def _shape_item(item_id: str, name: str, type_: str, folder_path: List[str], meta: dict, is_custom: bool) -> dict:
-    shaped = {"item_id": item_id, "name": name, "type": type_, "folder_path": folder_path, "is_custom": is_custom}
+def _shape_item(
+    item_id: str,
+    name: str,
+    type_: str,
+    folder_path: List[str],
+    meta: dict,
+    is_custom: bool,
+    *,
+    connection_status: str = "online",
+    last_synced_at: str = "",
+) -> dict:
+    shaped = {
+        "item_id": item_id,
+        "name": name,
+        "type": type_,
+        "folder_path": folder_path,
+        "is_custom": is_custom,
+        "connection_status": connection_status,
+        "last_synced_at": last_synced_at,
+    }
     for field in _METADATA_FIELDS:
         shaped[field] = meta[field]
     return shaped
@@ -476,28 +494,86 @@ def list_catalog_items(client: Any) -> List[dict]:
     level under "Business Central"/"HubSpot"/"Factorial"), and any custom
     items (under "Personalizados") -- all merged with locally-stored
     governance metadata. `client` is a FabricPipelineClient (passed in
-    rather than constructed here so tests can inject a fake)."""
-    fabric_items = client.list_items()
-    folders = client.list_folders()
-    folders_by_id = {f["id"]: f for f in folders}
+    rather than constructed here so tests can inject a fake).
+
+    The Fabric-discovered portion (workspace items + each Lakehouse's own
+    tables) is never trusted to just be there -- Fabric not returning
+    something this call (a real outage, or, confirmed live 2026-09-01, a
+    workspace whose Fabric capacity/license lapsed, where the API answers
+    200 but silently stops listing non-Power-BI item types) used to make it
+    vanish from the catalog with no trace. Every item actually seen live
+    this call is snapshotted into fabric_catalog_cache.py; anything cached
+    from an earlier call that isn't seen THIS time is still included, shaped
+    exactly the same way, with connection_status="offline" and its last
+    known last_synced_at, instead of disappearing outright. BC/HubSpot/
+    Factorial/custom items never go through this cache -- they're never
+    live-discovered, so they're always connection_status="online"."""
+    # Local imports: keep this module decoupled from these on the hot path,
+    # and only pull in exactly what "Fabric didn't answer this call" can
+    # actually look like -- a bad HTTP response (FabricPipelineError), no
+    # network/timeout (RequestException, which requests' ConnectionError/
+    # Timeout both inherit from), or a token request failing outright
+    # (ClientAuthenticationError, e.g. an expired/revoked client secret).
+    # Deliberately NOT a bare `except Exception` -- a real bug elsewhere in
+    # this call shouldn't get silently reinterpreted as "offline".
+    from azure.core.exceptions import ClientAuthenticationError
+    from requests.exceptions import RequestException
+
+    from src.fabric_pipelines.api import FabricPipelineError
+
+    _UNREACHABLE = (FabricPipelineError, RequestException, ClientAuthenticationError)
+
     metadata = list_metadata()
 
-    result: List[dict] = []
-    for item in fabric_items:
-        item_id = item.get("id", "")
-        display_name = item.get("displayName", "")
-        meta = {**_EMPTY_ENTRY, **metadata.get(item_id, {})}
-        folder_path = [FABRIC_FOLDER_LABEL, *_folder_path(item.get("folderId"), folders_by_id)]
-        result.append(_shape_item(item_id, display_name, item.get("type", ""), folder_path, meta, is_custom=False))
+    # item_id -> (name, type, folder_path) for everything actually seen live
+    # this call -- kept separate from the shaped result so a cache miss can
+    # still be told apart from a cache hit after the merge below.
+    live_facts: Dict[str, Tuple[str, str, List[str]]] = {}
+    try:
+        fabric_items = client.list_items()
+        folders = client.list_folders()
+        folders_by_id = {f["id"]: f for f in folders}
+        for item in fabric_items:
+            item_id = item.get("id", "")
+            display_name = item.get("displayName", "")
+            folder_path = [FABRIC_FOLDER_LABEL, *_folder_path(item.get("folderId"), folders_by_id)]
+            live_facts[item_id] = (display_name, item.get("type", ""), folder_path)
 
-        if item.get("type") == "Lakehouse":
-            for table in client.list_lakehouse_tables(item_id, display_name):
-                table_name = f"{table['schema']}.{table['table']}"
-                table_id = f"{LAKEHOUSE_TABLE_ID_PREFIX}{item_id}:{table_name}"
-                table_meta = {**_EMPTY_ENTRY, **metadata.get(table_id, {})}
-                result.append(
-                    _shape_item(table_id, table_name, "Tabla", [*folder_path, display_name], table_meta, is_custom=False)
-                )
+            if item.get("type") == "Lakehouse":
+                try:
+                    tables = client.list_lakehouse_tables(item_id, display_name)
+                except _UNREACHABLE:
+                    tables = None  # this one Lakehouse's SQL endpoint is down -- fall back to its cached tables below
+                if tables is not None:
+                    for table in tables:
+                        table_name = f"{table['schema']}.{table['table']}"
+                        table_id = f"{LAKEHOUSE_TABLE_ID_PREFIX}{item_id}:{table_name}"
+                        live_facts[table_id] = (table_name, "Tabla", [*folder_path, display_name])
+    except _UNREACHABLE:
+        pass  # Fabric unreachable this call -- fall back entirely to the cache below
+
+    live_snapshot = {
+        item_id: {"name": name, "type": type_, "folder_path": folder_path}
+        for item_id, (name, type_, folder_path) in live_facts.items()
+    }
+    cache = fabric_catalog_cache.merge_and_get(live_snapshot)
+
+    result: List[dict] = []
+    for item_id, facts in cache.items():
+        meta = {**_EMPTY_ENTRY, **metadata.get(item_id, {})}
+        is_online = item_id in live_facts
+        result.append(
+            _shape_item(
+                item_id,
+                facts["name"],
+                facts["type"],
+                facts["folder_path"],
+                meta,
+                is_custom=False,
+                connection_status="online" if is_online else "offline",
+                last_synced_at="" if is_online else facts.get("last_synced_at", ""),
+            )
+        )
 
     for table in table_configs.list_bc_tables_full():
         item_id = f"{BC_ID_PREFIX}{table.get('name', '')}"
@@ -520,6 +596,23 @@ def list_catalog_items(client: Any) -> List[dict]:
         meta = {**_EMPTY_ENTRY, **raw_meta}
         result.append(_shape_item(item_id, meta["name"], meta["type"], CUSTOM_FOLDER_PATH, meta, is_custom=True))
     return result
+
+
+def delete_offline_item(item_id: str) -> None:
+    """Forgets a Fabric-discovered item's local cache entry (see
+    fabric_catalog_cache.py) and any governance metadata attached to it --
+    for decluttering the catalog of something "sin conexión" that isn't
+    coming back. Never touches Fabric itself: if the real item still exists
+    there and is seen live again on a future call, it simply reappears.
+    Only meaningful for items that actually go through that cache -- BC/
+    HubSpot/Factorial items are always online (static config, not
+    Fabric-discovered) and custom items have their own delete_custom_item()."""
+    if item_id.startswith((BC_ID_PREFIX, HUBSPOT_ID_PREFIX, FACTORIAL_ID_PREFIX, CUSTOM_ID_PREFIX)):
+        raise ValueError(f"'{item_id}' no es un elemento descubierto en Fabric -- no aplica aquí.")
+    if item_id not in fabric_catalog_cache.list_cached_ids():
+        raise ValueError("Ese elemento no está en el catálogo.")
+    fabric_catalog_cache.delete_entry(item_id)
+    delete_metadata(item_id)
 
 
 def parse_lakehouse_table_id(item_id: str) -> Optional[Tuple[str, str, str]]:

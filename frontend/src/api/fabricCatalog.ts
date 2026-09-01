@@ -55,6 +55,16 @@ export interface FabricCatalogItem {
    * canvas -- keyed by the other item's id, never shared across items. */
   canvas_positions: Record<string, FabricCanvasPosition>;
   is_favorite: boolean;
+  /** "online": Fabric returned this item on the last catalog fetch.
+   * "offline": it didn't (an outage, or its capacity/license lapsed) -- this
+   * is the last-known copy instead of the item just disappearing. Always
+   * "online" for BC/HubSpot/Factorial/custom items -- they're static
+   * config, never Fabric-discovered. */
+  connection_status: "online" | "offline";
+  /** ISO timestamp of the last time this item was actually seen live --
+   * "" while connection_status is "online" (it's current, no need to say
+   * when). */
+  last_synced_at: string;
   is_hidden: boolean;
 }
 
@@ -77,10 +87,20 @@ export function fetchFabricCatalog(): Promise<{ items: FabricCatalogItem[] }> {
   return apiGet<{ items: FabricCatalogItem[] }>("/fabric-catalog/items");
 }
 
+/** Forgets a "sin conexión" item's local copy -- never touches Fabric
+ * itself, so a real item that's still there just reappears if Fabric lists
+ * it live again later. 400 for anything currently online, or a BC/HubSpot/
+ * Factorial/custom item (always online, doesn't apply). */
+export function deleteOfflineItem(itemId: string): Promise<void> {
+  return apiDelete(`/fabric-catalog/items/${encodeURIComponent(itemId)}`);
+}
+
 export function updateFabricCatalogItem(
   itemId: string,
   update: FabricCatalogItemUpdate,
-): Promise<Omit<FabricCatalogItem, "item_id" | "name" | "type" | "folder_path" | "is_custom">> {
+): Promise<
+  Omit<FabricCatalogItem, "item_id" | "name" | "type" | "folder_path" | "is_custom" | "connection_status" | "last_synced_at">
+> {
   return apiPatch(`/fabric-catalog/items/${encodeURIComponent(itemId)}`, update);
 }
 

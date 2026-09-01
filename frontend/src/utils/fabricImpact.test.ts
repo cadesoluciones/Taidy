@@ -27,6 +27,8 @@ function item(id: string, relationships: FabricCatalogItem["relationships"] = []
     canvas_positions: {},
     is_favorite: false,
     is_hidden: false,
+    connection_status: "online",
+    last_synced_at: "",
   };
 }
 

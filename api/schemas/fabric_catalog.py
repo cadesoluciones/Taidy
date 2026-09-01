@@ -49,6 +49,16 @@ class FabricCatalogItemOut(BaseModel):
     canvas_positions: Dict[str, PositionOut] = {}
     is_favorite: bool = False
     is_hidden: bool = False
+    # "online": seen in Fabric's own response this call. "offline": not seen
+    # this call (Fabric outage, or its capacity/license lapsed) -- served
+    # from the last successful sighting instead of just disappearing, see
+    # webapp/fabric_catalog_cache.py. Always "online" for BC/HubSpot/
+    # Factorial/custom items -- they're never Fabric-discovered. Not on
+    # UpdateFabricCatalogItemOut below on purpose: editing metadata never
+    # changes this, and the frontend's patch-merge would otherwise stomp a
+    # real "offline" back to the field's own default "online" on every save.
+    connection_status: str = "online"
+    last_synced_at: str = ""
 
 
 class FabricCatalogListOut(BaseModel):

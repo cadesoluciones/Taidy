@@ -19,6 +19,13 @@ interface FabricSemanticModelSectionProps {
   itemId: string;
   itemName: string;
   canEdit: boolean;
+  /** True when the catalog item itself is "sin conexión" (see
+   * FabricCatalogItem.connection_status) -- every action here needs a live
+   * Fabric round trip (state included: reading it calls get_item/
+   * get_definition too), so there's nothing this section can usefully do,
+   * successfully or not, while that's the case. Skips the fetch entirely
+   * instead of showing a load spinner for a call known to fail. */
+  offline?: boolean;
 }
 
 const DATA_TYPE_LABELS: Record<string, string> = {
@@ -95,7 +102,7 @@ function ColumnBuilderRow({
  * are typed in by hand and have no connection to real data. See
  * webapp/fabric_catalog.py's create_semantic_model()/set_manual_semantic_model_columns()
  * and src/fabric_pipelines/semantic_model_tmdl.py for how both shapes are built. */
-export function FabricSemanticModelSection({ itemId, itemName, canEdit }: FabricSemanticModelSectionProps) {
+export function FabricSemanticModelSection({ itemId, itemName, canEdit, offline = false }: FabricSemanticModelSectionProps) {
   const [state, setState] = useState<SemanticModelState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -143,11 +150,18 @@ export function FabricSemanticModelSection({ itemId, itemName, canEdit }: Fabric
 
   useEffect(() => {
     setState(null);
-    setIsLoading(true);
     setDraftColumns([]);
+    if (offline) {
+      // Even reading the state is a live Fabric call (get_item/
+      // get_definition) -- skip straight to the "no disponible" message
+      // instead of showing a spinner for a request known to fail.
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itemId]);
+  }, [itemId, offline]);
 
   async function handleCreate() {
     const requestedItemId = itemId;
@@ -248,6 +262,15 @@ export function FabricSemanticModelSection({ itemId, itemName, canEdit }: Fabric
   }
 
   const isDirty = !!state && state.columns.some((c) => (descDrafts[c.name] ?? "") !== c.description);
+
+  if (offline) {
+    return (
+      <p className={formStyles.hint}>
+        Modelo semántico no disponible: este elemento está sin conexión. Vuelve a intentarlo cuando Fabric lo liste de
+        nuevo.
+      </p>
+    );
+  }
 
   // Fabric's own getDefinition call can be a long-running operation right
   // after a model is created/edited (confirmed live: up to ~20s) -- setting

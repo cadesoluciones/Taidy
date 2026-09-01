@@ -69,6 +69,20 @@ def list_items() -> FabricCatalogListOut:
     return FabricCatalogListOut(items=[FabricCatalogItemOut(**i) for i in items])
 
 
+@router.delete("/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_offline_item(item_id: str) -> None:
+    """Forgets a Fabric-discovered item's local cache entry + governance
+    metadata -- only for an item currently "sin conexión" (see
+    connection_status on GET /items). Never touches Fabric itself; if the
+    real item still exists there and Fabric lists it again later, it just
+    reappears. 400 for a BC/HubSpot/Factorial/custom item (always online,
+    this doesn't apply) or one not in the catalog at all."""
+    try:
+        fabric_catalog.delete_offline_item(item_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
 @router.patch("/items/{item_id}", response_model=UpdateFabricCatalogItemOut)
 def update_item(
     item_id: str,

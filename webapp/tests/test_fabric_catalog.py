@@ -266,6 +266,143 @@ def test_list_catalog_items_lakehouse_table_keeps_its_saved_metadata(isolated_st
     assert table["data_owner"] == ["ana"]
 
 
+def test_list_catalog_items_fabric_items_are_online_when_seen_live(isolated_state, monkeypatch):
+    _no_bc_or_hubspot_tables(monkeypatch)
+    client = _FakeFabricClient(items=[{"id": "nb-1", "type": "Notebook", "displayName": "silver_facturas"}], folders=[])
+    items = fabric_catalog.list_catalog_items(client)
+    notebook = next(i for i in items if i["item_id"] == "nb-1")
+    assert notebook["connection_status"] == "online"
+    assert notebook["last_synced_at"] == ""
+
+
+@pytest.mark.parametrize(
+    "item_id,setup",
+    [
+        ("bc:bc_customer", lambda m: m.setattr(fabric_catalog.table_configs, "list_bc_tables_full", lambda: [{"name": "bc_customer"}])),
+        ("custom:abc", None),  # created directly below instead of via table_configs
+    ],
+)
+def test_list_catalog_items_non_fabric_items_are_always_online(isolated_state, monkeypatch, item_id, setup):
+    _no_bc_or_hubspot_tables(monkeypatch)
+    if setup is not None:
+        setup(monkeypatch)
+    else:
+        fabric_catalog.create_custom_item("Proceso manual", "Personalizado", created_by="admin")
+        item_id = next(iid for iid in fabric_catalog.list_metadata() if iid.startswith("custom:"))
+    client = _FakeFabricClient(items=[], folders=[])
+    items = fabric_catalog.list_catalog_items(client)
+    item = next(i for i in items if i["item_id"] == item_id)
+    assert item["connection_status"] == "online"
+
+
+def test_list_catalog_items_keeps_an_item_offline_once_fabric_stops_returning_it(isolated_state, monkeypatch):
+    """The scenario this whole cache exists for: confirmed live 2026-09-01
+    against a workspace whose Fabric capacity/license had lapsed -- Fabric
+    kept answering 200, just without Lakehouse/Notebook/DataPipeline items
+    it used to list. Previously that meant the item silently vanished from
+    the catalog with zero trace; now it stays, flagged offline."""
+    _no_bc_or_hubspot_tables(monkeypatch)
+    client = _FakeFabricClient(
+        items=[{"id": "lh-1", "type": "Lakehouse", "displayName": "Lakehouse", "folderId": "f-root"}],
+        folders=[{"id": "f-root", "displayName": "Sandbox"}],
+        lakehouse_tables={"lh-1": [{"schema": "bronze", "table": "bc_cuentas_contables"}]},
+    )
+    _set("lh-1", short_description="El lakehouse de verdad", data_owner=["ana"])
+    first = fabric_catalog.list_catalog_items(client)
+    assert {i["item_id"] for i in first} == {"lh-1", "lakehouse-table:lh-1:bronze.bc_cuentas_contables"}
+    assert all(i["connection_status"] == "online" for i in first)
+
+    # Fabric's next response no longer includes the Lakehouse (or, by
+    # extension, its tables) at all -- license lapsed, item deleted,
+    # permission revoked, whatever the real-world cause.
+    empty_client = _FakeFabricClient(items=[], folders=[])
+    second = fabric_catalog.list_catalog_items(empty_client)
+    assert len(second) == 2
+
+    lakehouse = next(i for i in second if i["item_id"] == "lh-1")
+    assert lakehouse["connection_status"] == "offline"
+    assert lakehouse["last_synced_at"] != ""
+    assert lakehouse["folder_path"] == ["Fabric", "Sandbox"]  # last-known facts preserved
+    assert lakehouse["short_description"] == "El lakehouse de verdad"  # governance metadata re-merged fresh, not stale
+    assert lakehouse["data_owner"] == ["ana"]
+
+    table = next(i for i in second if i["item_id"] == "lakehouse-table:lh-1:bronze.bc_cuentas_contables")
+    assert table["connection_status"] == "offline"
+    assert table["name"] == "bronze.bc_cuentas_contables"
+
+
+def test_list_catalog_items_falls_back_entirely_to_cache_when_fabric_is_unreachable(isolated_state, monkeypatch):
+    _no_bc_or_hubspot_tables(monkeypatch)
+    client = _FakeFabricClient(items=[{"id": "nb-1", "type": "Notebook", "displayName": "silver_facturas"}], folders=[])
+    fabric_catalog.list_catalog_items(client)  # first call: seeds the cache while Fabric is reachable
+
+    class _UnreachableClient(_FakeFabricClient):
+        def list_items(self):
+            from src.fabric_pipelines.api import FabricPipelineError
+
+            raise FabricPipelineError("HTTP 401: token inválido")
+
+    items = fabric_catalog.list_catalog_items(_UnreachableClient(items=[], folders=[]))
+    assert len(items) == 1
+    assert items[0]["item_id"] == "nb-1"
+    assert items[0]["connection_status"] == "offline"
+
+
+def test_list_catalog_items_an_edit_while_offline_shows_up_immediately(isolated_state, monkeypatch):
+    """canEdit stays true for an offline item (governance metadata is local,
+    it doesn't need Fabric) -- confirm a save right after going offline is
+    reflected without waiting for the item to come back online."""
+    _no_bc_or_hubspot_tables(monkeypatch)
+    client = _FakeFabricClient(items=[{"id": "nb-1", "type": "Notebook", "displayName": "silver_facturas"}], folders=[])
+    fabric_catalog.list_catalog_items(client)
+    fabric_catalog.list_catalog_items(_FakeFabricClient(items=[], folders=[]))  # goes offline
+
+    _set("nb-1", short_description="Añadido mientras estaba sin conexión")
+    items = fabric_catalog.list_catalog_items(_FakeFabricClient(items=[], folders=[]))
+    notebook = next(i for i in items if i["item_id"] == "nb-1")
+    assert notebook["connection_status"] == "offline"
+    assert notebook["short_description"] == "Añadido mientras estaba sin conexión"
+
+
+def test_delete_offline_item_removes_it_and_its_metadata(isolated_state, monkeypatch):
+    _no_bc_or_hubspot_tables(monkeypatch)
+    client = _FakeFabricClient(items=[{"id": "nb-1", "type": "Notebook", "displayName": "silver_facturas"}], folders=[])
+    fabric_catalog.list_catalog_items(client)
+    _set("nb-1", short_description="algo")
+    fabric_catalog.list_catalog_items(_FakeFabricClient(items=[], folders=[]))  # now offline
+
+    fabric_catalog.delete_offline_item("nb-1")
+
+    items = fabric_catalog.list_catalog_items(_FakeFabricClient(items=[], folders=[]))
+    assert "nb-1" not in {i["item_id"] for i in items}
+    assert fabric_catalog.get_metadata("nb-1")["short_description"] == ""
+
+
+def test_delete_offline_item_can_reappear_if_fabric_lists_it_again(isolated_state, monkeypatch):
+    """Deleting only forgets the LOCAL copy -- it never touches Fabric, so a
+    real item that's still there just comes back on the next sighting."""
+    _no_bc_or_hubspot_tables(monkeypatch)
+    live_item = {"id": "nb-1", "type": "Notebook", "displayName": "silver_facturas"}
+    fabric_catalog.list_catalog_items(_FakeFabricClient(items=[live_item], folders=[]))
+    fabric_catalog.list_catalog_items(_FakeFabricClient(items=[], folders=[]))  # offline
+    fabric_catalog.delete_offline_item("nb-1")
+
+    items = fabric_catalog.list_catalog_items(_FakeFabricClient(items=[live_item], folders=[]))
+    notebook = next(i for i in items if i["item_id"] == "nb-1")
+    assert notebook["connection_status"] == "online"
+
+
+def test_delete_offline_item_rejects_a_bc_hubspot_factorial_or_custom_item(isolated_state):
+    for item_id in ("bc:bc_customer", "hubspot:hubspot_contacts", "factorial:factorial_teams", "custom:abc"):
+        with pytest.raises(ValueError, match="no aplica"):
+            fabric_catalog.delete_offline_item(item_id)
+
+
+def test_delete_offline_item_rejects_an_unknown_item(isolated_state):
+    with pytest.raises(ValueError, match="no está en el catálogo"):
+        fabric_catalog.delete_offline_item("nb-does-not-exist")
+
+
 def test_parse_lakehouse_table_id_round_trips():
     parsed = fabric_catalog.parse_lakehouse_table_id("lakehouse-table:lh-1:bronze.bc_cuentas_contables")
     assert parsed == ("lh-1", "bronze", "bc_cuentas_contables")

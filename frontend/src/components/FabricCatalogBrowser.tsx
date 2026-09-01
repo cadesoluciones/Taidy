@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { Boxes, ChevronDown, Eye, EyeOff, Star } from "lucide-react";
+import { Boxes, ChevronDown, Eye, EyeOff, Star, WifiOff } from "lucide-react";
 
 import type { FabricCatalogItem } from "../api/fabricCatalog";
 import { fabricIconFor } from "../utils/fabricIcons";
@@ -198,6 +198,18 @@ export function FabricCatalogBrowser({
             )}
             {ItemIcon && <ItemIcon size={12} />}
             <strong className={styles.blockName}>{item.name}</strong>
+            {item.connection_status === "offline" && (
+              <span
+                className={styles.offlineBadge}
+                title={
+                  item.last_synced_at
+                    ? `Sin conexión -- visto por última vez el ${new Date(item.last_synced_at).toLocaleString("es-ES")}`
+                    : "Sin conexión"
+                }
+              >
+                <WifiOff size={11} />
+              </span>
+            )}
           </div>
           <span className={styles.blockSubtitle}>
             {item.type}
