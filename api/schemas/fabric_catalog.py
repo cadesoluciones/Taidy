@@ -16,6 +16,22 @@ class RelationshipOut(BaseModel):
     target_item_id: str
 
 
+class DetectedRelationshipOut(BaseModel):
+    # The item that would actually own the saved relationship (always a
+    # Notebook today) -- may differ from whichever item's editor asked for
+    # this, since a table's own candidates are declared by the notebook
+    # that produces/consumes it, not by the table itself.
+    owner_item_id: str
+    owner_name: str
+    type: str
+    target_item_id: str
+    target_name: str
+
+
+class DetectedRelationshipsOut(BaseModel):
+    candidates: List[DetectedRelationshipOut] = []
+
+
 class PositionIn(BaseModel):
     x: float
     y: float

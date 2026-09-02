@@ -747,3 +747,65 @@
   border-radius: 50%;
   margin-right: 4px;
 }
+
+.detectRelationships {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.detectHint {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.detectError {
+  font-size: 12px;
+  color: var(--color-danger);
+}
+
+.detectedList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.detectedList li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: 12px;
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-bg));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 25%, var(--color-border));
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+}
+
+.detectedActions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.detectedActions button {
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.detectedActions button:last-child {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}

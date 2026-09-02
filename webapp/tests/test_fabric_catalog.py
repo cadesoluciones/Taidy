@@ -9,6 +9,8 @@ persists locally.
 
 from __future__ import annotations
 
+import base64
+
 import pytest
 
 from webapp import fabric_catalog
@@ -1139,6 +1141,145 @@ def test_add_relationship_accepts_generates_and_updates(isolated_state):
         {"type": "generates", "target_item_id": "lh-gold"},
         {"type": "updates", "target_item_id": "lh-silver"},
     ]
+
+
+# --------------------------------------------------------------------------------------
+# Relationship detection -- parsed from real notebook code, never applied
+# automatically. Sample contents below are trimmed versions of what was
+# actually confirmed live against this workspace's own bronze/silver
+# notebooks (bronze_bc_customer_list, silver_planificacion_ingresos).
+# --------------------------------------------------------------------------------------
+
+_BRONZE_NOTEBOOK_CONTENT = """\
+df_raw = read_raw_file("bc_customer_list.csv", lakehouse_path_raw)
+write_df_to_lakehouse(df_raw, lakehouse_path_tables, "bronze", "bc_customer_list")
+"""
+
+_SILVER_NOTEBOOK_CONTENT = """\
+df_a = read_table_from_lakehouse('bc_job_planning_lines', lakehouse_path_tables, 'bronze')
+df_b = read_table_from_lakehouse('proyectos', lakehouse_path_tables, 'silver')
+write_df_to_lakehouse(df_silver_planificacion_ingresos, lakehouse_path_tables, "silver", "planificacion_ingresos")
+"""
+
+_NOTEBOOK_DEF_ONLY = """\
+def read_table_from_lakehouse(table_name, base_lakehouse_path, lakehouse_schema='dbo'):
+    pass
+
+def write_df_to_lakehouse(df, base_lakehouse_path, lakehouse_schema, table_name, mode='overwrite'):
+    pass
+"""
+
+
+def test_parse_notebook_table_refs_extracts_real_call_sites():
+    refs = fabric_catalog._parse_notebook_table_refs(_SILVER_NOTEBOOK_CONTENT)
+    assert refs["reads"] == [("bronze", "bc_job_planning_lines"), ("silver", "proyectos")]
+    assert refs["writes"] == [("silver", "planificacion_ingresos")]
+
+
+def test_parse_notebook_table_refs_ignores_the_bare_function_definitions():
+    """The two helper functions' own `def` lines have the same call shape
+    but with bare parameter names (no quotes) -- must not be mistaken for a
+    real call with a literal schema/table."""
+    refs = fabric_catalog._parse_notebook_table_refs(_NOTEBOOK_DEF_ONLY)
+    assert refs == {"reads": [], "writes": []}
+
+
+def _notebook_client(notebooks, lakehouse_tables=None):
+    """notebooks: [(item_id, display_name, content), ...]."""
+    items = [{"id": "lh-1", "type": "Lakehouse", "displayName": "Lakehouse"}]
+    items += [{"id": nb_id, "type": "Notebook", "displayName": name} for nb_id, name, _ in notebooks]
+    client = _FakeFabricClient(items=items, folders=[], lakehouse_tables={"lh-1": lakehouse_tables or []})
+    for nb_id, _, content in notebooks:
+        client._model_definitions[nb_id] = [
+            {"path": "notebook-content.py", "payload": base64.b64encode(content.encode("utf-8")).decode("ascii")}
+        ]
+    return client
+
+
+def test_detect_relationships_for_a_table_finds_its_producer_notebook(isolated_state):
+    client = _notebook_client(
+        [("nb-bronze", "bronze_bc_customer_list", _BRONZE_NOTEBOOK_CONTENT)],
+        lakehouse_tables=[{"schema": "bronze", "table": "bc_customer_list"}],
+    )
+    table_id = "lakehouse-table:lh-1:bronze.bc_customer_list"
+
+    candidates = fabric_catalog.detect_relationships(client, table_id)
+
+    assert candidates == [
+        {"owner_item_id": "nb-bronze", "owner_name": "bronze_bc_customer_list", "type": "writes_to", "target_item_id": table_id, "target_name": "bronze.bc_customer_list"}
+    ]
+
+
+def test_detect_relationships_for_a_notebook_finds_every_table_it_touches(isolated_state):
+    client = _notebook_client(
+        [("nb-silver", "silver_planificacion_ingresos", _SILVER_NOTEBOOK_CONTENT)],
+        lakehouse_tables=[
+            {"schema": "bronze", "table": "bc_job_planning_lines"},
+            {"schema": "silver", "table": "proyectos"},
+            {"schema": "silver", "table": "planificacion_ingresos"},
+        ],
+    )
+
+    candidates = fabric_catalog.detect_relationships(client, "nb-silver")
+
+    assert {(c["type"], c["target_name"]) for c in candidates} == {
+        ("reads_from", "bronze.bc_job_planning_lines"),
+        ("reads_from", "silver.proyectos"),
+        ("writes_to", "silver.planificacion_ingresos"),
+    }
+
+
+def test_detect_relationships_skips_a_reference_to_a_table_outside_the_catalog(isolated_state):
+    """A schema.table the notebook mentions but that isn't a real,
+    currently-discovered Lakehouse table (renamed, deleted, a typo, ...)
+    has nowhere to point to -- silently skipped, not an error."""
+    client = _notebook_client(
+        [("nb-bronze", "bronze_bc_customer_list", _BRONZE_NOTEBOOK_CONTENT)],
+        lakehouse_tables=[],  # the table this notebook writes to doesn't exist in the catalog
+    )
+    assert fabric_catalog.detect_relationships(client, "nb-bronze") == []
+
+
+def test_detect_relationships_excludes_already_saved_ones(isolated_state):
+    client = _notebook_client(
+        [("nb-bronze", "bronze_bc_customer_list", _BRONZE_NOTEBOOK_CONTENT)],
+        lakehouse_tables=[{"schema": "bronze", "table": "bc_customer_list"}],
+    )
+    table_id = "lakehouse-table:lh-1:bronze.bc_customer_list"
+    fabric_catalog.add_relationship("nb-bronze", "writes_to", table_id, reviewed_by="admin1")
+
+    assert fabric_catalog.detect_relationships(client, table_id) == []
+    assert fabric_catalog.detect_relationships(client, "nb-bronze") == []
+
+
+def test_detect_relationships_ignores_notebooks_unrelated_to_the_requested_item(isolated_state):
+    client = _notebook_client(
+        [
+            ("nb-bronze", "bronze_bc_customer_list", _BRONZE_NOTEBOOK_CONTENT),
+            ("nb-silver", "silver_planificacion_ingresos", _SILVER_NOTEBOOK_CONTENT),
+        ],
+        lakehouse_tables=[
+            {"schema": "bronze", "table": "bc_customer_list"},
+            {"schema": "bronze", "table": "bc_job_planning_lines"},
+            {"schema": "silver", "table": "proyectos"},
+            {"schema": "silver", "table": "planificacion_ingresos"},
+        ],
+    )
+    table_id = "lakehouse-table:lh-1:bronze.bc_customer_list"
+
+    candidates = fabric_catalog.detect_relationships(client, table_id)
+
+    assert [c["owner_item_id"] for c in candidates] == ["nb-bronze"]
+
+
+def test_detect_relationships_a_notebook_whose_definition_fails_contributes_nothing(isolated_state):
+    client = _notebook_client(
+        [("nb-bronze", "bronze_bc_customer_list", _BRONZE_NOTEBOOK_CONTENT)],
+        lakehouse_tables=[{"schema": "bronze", "table": "bc_customer_list"}],
+    )
+    client._fail_definition_for.add("nb-bronze")
+
+    assert fabric_catalog.detect_relationships(client, "nb-bronze") == []
 
 
 def test_set_metadata_rejects_an_unknown_relationship_type(isolated_state):

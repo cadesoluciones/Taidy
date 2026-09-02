@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import base64
+
 from src.fabric_pipelines.api import FabricPipelineError
 from webapp import fabric_catalog, users_db
 from webapp.tests.conftest import make_user
@@ -33,6 +35,7 @@ class _FakeFabricClient:
         self._model_definitions = {}
         self._next_id = 1
         self._lakehouse_files = {}  # {(lakehouse_item_id, path): "content"}
+        self._lakehouse_tables = {}  # {lakehouse_item_id: [{"schema": ..., "table": ...}, ...]}
 
     def list_items(self):
         return [
@@ -59,6 +62,9 @@ class _FakeFabricClient:
     def list_lakehouse_table_columns(self, item_id, display_name, schema, table):
         return self._lakehouse_columns.get((item_id, schema, table), [])
 
+    def list_lakehouse_tables(self, item_id, display_name):
+        return self._lakehouse_tables.get(item_id, [])
+
     def create_item(self, display_name, item_type, parts):
         item_id = f"model-{self._next_id}"
         self._next_id += 1
@@ -67,7 +73,13 @@ class _FakeFabricClient:
         return item_id
 
     def get_definition(self, item_id):
-        return {"definition": {"parts": self._model_definitions[item_id]}}
+        # .get(..., []) rather than a bare lookup: relationship-detection
+        # scans every Notebook's definition regardless of whether a given
+        # test cares about it (e.g. the default "nb-1" from list_items()
+        # below never gets a definition set up otherwise) -- an empty
+        # parts list is a realistic "nothing to parse here" shape, not a
+        # test setup bug the way a KeyError would be.
+        return {"definition": {"parts": self._model_definitions.get(item_id, [])}}
 
     def update_item_definition(self, item_id, parts):
         self._model_definitions[item_id] = parts
@@ -454,6 +466,66 @@ def test_reader_cannot_add_a_relationship(isolated_state, client, monkeypatch):
     _login(client, "reader1", "ReaderPass2026!")
 
     resp = client.post("/fabric-catalog/items/pl-1/relationships", json={"type": "reads_from", "target_item_id": "nb-1"})
+    assert resp.status_code == 403
+
+
+_BRONZE_NOTEBOOK_CONTENT = (
+    'write_df_to_lakehouse(df_raw, lakehouse_path_tables, "bronze", "bc_customer_list")\n'
+)
+
+
+def test_operator_can_detect_relationships_for_a_table(isolated_state, client, monkeypatch):
+    fake = _use_fake_fabric_client(monkeypatch)
+    fake.list_items = lambda: [
+        {"id": "lh-1", "type": "Lakehouse", "displayName": "Lakehouse"},
+        {"id": "nb-bronze", "type": "Notebook", "displayName": "bronze_bc_customer_list"},
+    ]
+    fake._lakehouse_tables["lh-1"] = [{"schema": "bronze", "table": "bc_customer_list"}]
+    fake._model_definitions["nb-bronze"] = [
+        {"path": "notebook-content.py", "payload": base64.b64encode(_BRONZE_NOTEBOOK_CONTENT.encode()).decode()}
+    ]
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    table_id = "lakehouse-table:lh-1:bronze.bc_customer_list"
+    resp = client.get(f"/fabric-catalog/items/{table_id}/detected-relationships")
+    assert resp.status_code == 200
+    assert resp.json()["candidates"] == [
+        {
+            "owner_item_id": "nb-bronze",
+            "owner_name": "bronze_bc_customer_list",
+            "type": "writes_to",
+            "target_item_id": table_id,
+            "target_name": "bronze.bc_customer_list",
+        }
+    ]
+
+    # Applying it (via the owner, exactly like the frontend would) makes it
+    # disappear from the next detection call -- already saved, not new anymore.
+    apply_resp = client.post(
+        "/fabric-catalog/items/nb-bronze/relationships", json={"type": "writes_to", "target_item_id": table_id}
+    )
+    assert apply_resp.status_code == 200
+    resp2 = client.get(f"/fabric-catalog/items/{table_id}/detected-relationships")
+    assert resp2.json()["candidates"] == []
+
+
+def test_detected_relationships_empty_for_an_item_with_nothing_to_detect(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.get("/fabric-catalog/items/pl-1/detected-relationships")
+    assert resp.status_code == 200
+    assert resp.json()["candidates"] == []
+
+
+def test_reader_cannot_fetch_detected_relationships(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+
+    resp = client.get("/fabric-catalog/items/pl-1/detected-relationships")
     assert resp.status_code == 403
 
 

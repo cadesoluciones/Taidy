@@ -11,6 +11,7 @@ import {
   createCustomFabricItem,
   deleteCustomFabricItem,
   deleteOfflineItem,
+  fetchDetectedRelationships,
   fetchFabricCatalog,
   fetchFabricTablePreview,
   fetchTypeIcons,
@@ -20,6 +21,7 @@ import {
   setFabricHidden,
   updateFabricCatalogItem,
   type DataRoleField,
+  type DetectedRelationship,
   type FabricCanvasPosition,
   type FabricCatalogItem,
   type FabricCriticality,
@@ -34,7 +36,7 @@ import { DATA_ROLE_INFO } from "../utils/dataRoles";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { FabricCatalogBrowser } from "./FabricCatalogBrowser";
 import { FabricCatalogManifestSection } from "./FabricCatalogManifestSection";
-import { FabricRelationshipCanvas } from "./FabricRelationshipCanvas";
+import { FabricRelationshipCanvas, RELATIONSHIP_LABELS } from "./FabricRelationshipCanvas";
 import { FabricSemanticModelSection } from "./FabricSemanticModelSection";
 import { FreeTagInput } from "./FreeTagInput";
 import { Modal } from "./Modal";
@@ -104,6 +106,11 @@ export function FabricCatalogManager() {
 
   const [relationshipModalOpen, setRelationshipModalOpen] = useState(false);
   const [canvasError, setCanvasError] = useState<string | null>(null);
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [detectError, setDetectError] = useState<string | null>(null);
+  // null: never run yet this time the modal's open (button still shows
+  // "Detectar relaciones"). [] after a run that found nothing new.
+  const [detectedCandidates, setDetectedCandidates] = useState<DetectedRelationship[] | null>(null);
 
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewItemId, setPreviewItemId] = useState<string | null>(null);
@@ -254,6 +261,35 @@ export function FabricCatalogManager() {
     } catch (err) {
       setCanvasError(err instanceof ApiError ? err.message : "No se pudo quitar la relación.");
     }
+  }
+
+  async function handleDetectRelationships() {
+    if (!selected) return;
+    setIsDetecting(true);
+    setDetectError(null);
+    try {
+      const result = await fetchDetectedRelationships(selected.item_id);
+      setDetectedCandidates(result.candidates);
+    } catch (err) {
+      setDetectError(err instanceof ApiError ? err.message : "No se pudieron detectar relaciones.");
+    } finally {
+      setIsDetecting(false);
+    }
+  }
+
+  async function handleApplyDetectedCandidate(candidate: DetectedRelationship) {
+    setDetectError(null);
+    try {
+      const updated = await addFabricRelationship(candidate.owner_item_id, candidate.type, candidate.target_item_id);
+      applyItemPatch(candidate.owner_item_id, updated);
+      setDetectedCandidates((prev) => (prev ?? []).filter((c) => c !== candidate));
+    } catch (err) {
+      setDetectError(err instanceof ApiError ? err.message : "No se pudo guardar la relación.");
+    }
+  }
+
+  function handleDismissDetectedCandidate(candidate: DetectedRelationship) {
+    setDetectedCandidates((prev) => (prev ?? []).filter((c) => c !== candidate));
   }
 
   async function handleCanvasPositionsChange(positions: Record<string, FabricCanvasPosition>) {
@@ -685,7 +721,11 @@ export function FabricCatalogManager() {
                         <button
                           type="button"
                           className={`${styles.relType} no-print`}
-                          onClick={() => setRelationshipModalOpen(true)}
+                          onClick={() => {
+                            setDetectedCandidates(null);
+                            setDetectError(null);
+                            setRelationshipModalOpen(true);
+                          }}
                         >
                           Editar relaciones
                         </button>
@@ -828,6 +868,50 @@ export function FabricCatalogManager() {
                 subtitle="Arrastra desde el borde de un bloque a otro para conectarlos. Añade bloques sueltos con “Añadir bloque” y luego conéctalos."
                 onClose={() => setRelationshipModalOpen(false)}
               >
+                {canEdit && (
+                  <div className={styles.detectRelationships}>
+                    <button
+                      type="button"
+                      className={styles.relType}
+                      disabled={isDetecting}
+                      onClick={() => void handleDetectRelationships()}
+                    >
+                      {isDetecting ? "Detectando…" : "Detectar relaciones"}
+                    </button>
+                    {isDetecting && (
+                      <span className={styles.detectHint}>
+                        Revisando el código de los notebooks del workspace -- puede tardar uno o dos minutos.
+                      </span>
+                    )}
+                    {detectError && <span className={styles.detectError}>{detectError}</span>}
+                    {detectedCandidates !== null && !isDetecting && (
+                      <>
+                        {detectedCandidates.length === 0 ? (
+                          <span className={styles.detectHint}>No se han detectado relaciones nuevas.</span>
+                        ) : (
+                          <ul className={styles.detectedList}>
+                            {detectedCandidates.map((c) => (
+                              <li key={`${c.owner_item_id}|${c.type}|${c.target_item_id}`}>
+                                <span>
+                                  <strong>{c.owner_name}</strong> {RELATIONSHIP_LABELS[c.type].toLowerCase()}{" "}
+                                  <strong>{c.target_name}</strong>
+                                </span>
+                                <span className={styles.detectedActions}>
+                                  <button type="button" onClick={() => void handleApplyDetectedCandidate(c)}>
+                                    Añadir
+                                  </button>
+                                  <button type="button" onClick={() => handleDismissDetectedCandidate(c)}>
+                                    Descartar
+                                  </button>
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
                 {relationshipModalOpen && (
                   // Only mounted once the dialog is actually open -- a
                   // <dialog> without the open attribute is display:none,

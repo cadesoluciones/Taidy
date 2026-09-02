@@ -137,6 +137,25 @@ export function removeFabricRelationship(
   return apiDelete(`/fabric-catalog/items/${encodeURIComponent(ownerItemId)}/relationships?${params.toString()}`);
 }
 
+export interface DetectedRelationship {
+  /** The item that would actually own the saved relationship (always a
+   * Notebook today) -- may differ from whichever item's editor this came
+   * from, since a table's own candidates are declared by the notebook
+   * that produces/consumes it, not by the table itself. */
+  owner_item_id: string;
+  owner_name: string;
+  type: FabricRelationshipType;
+  target_item_id: string;
+  target_name: string;
+}
+
+/** Best-effort candidates parsed from Notebook code (never applied
+ * automatically) -- see webapp/fabric_catalog.py's detect_relationships().
+ * Only ever returns candidates not already saved. */
+export function fetchDetectedRelationships(itemId: string): Promise<{ candidates: DetectedRelationship[] }> {
+  return apiGet(`/fabric-catalog/items/${encodeURIComponent(itemId)}/detected-relationships`);
+}
+
 export function setFabricCanvasPositions(
   itemId: string,
   positions: Record<string, FabricCanvasPosition>,

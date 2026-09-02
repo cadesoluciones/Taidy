@@ -371,6 +371,140 @@ def _resave_with_relationships(current: dict, item_id: str, relationships: List[
     )
 
 
+# --------------------------------------------------------------------------------------
+# Relationship detection -- best-effort candidate reads_from/writes_to edges
+# parsed out of this workspace's own Notebook code, never applied
+# automatically (see the "Detectar relaciones" button: it only ever
+# suggests, add_relationship() above is still what actually saves one).
+# Deliberately on-demand per item, not a background/cached scan -- the user
+# explicitly asked for a button instead of this running silently, precisely
+# so a relationship edited by hand never gets silently reinterpreted.
+#
+# Notebooks in this workspace read/write Lakehouse tables through two of
+# their own helper functions, confirmed live against real bronze/silver
+# notebooks: read_table_from_lakehouse(table_name, base_lakehouse_path,
+# lakehouse_schema) and write_df_to_lakehouse(df, base_lakehouse_path,
+# lakehouse_schema, table_name). Matching only calls with quoted string
+# literal schema/table (not bare identifiers) is what naturally excludes
+# these two functions' own `def` lines from matching -- a notebook using
+# PySpark directly, or passing a variable instead of a literal, just
+# contributes nothing here, not an error.
+# --------------------------------------------------------------------------------------
+
+_NOTEBOOK_READ_CALL_RE = re.compile(r"read_table_from_lakehouse\(\s*['\"]([^'\"]+)['\"]\s*,\s*[^,()]+\s*,\s*['\"]([^'\"]+)['\"]\s*\)")
+_NOTEBOOK_WRITE_CALL_RE = re.compile(r"write_df_to_lakehouse\(\s*[^,()]+\s*,\s*[^,()]+\s*,\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([^'\"]+)['\"]")
+
+
+def _parse_notebook_table_refs(content: str) -> Dict[str, List[Tuple[str, str]]]:
+    """{"reads": [(schema, table), ...], "writes": [(schema, table), ...]}
+    for a single notebook's decoded Python source."""
+    reads = [(schema, table) for table, schema in _NOTEBOOK_READ_CALL_RE.findall(content)]
+    writes = [(schema, table) for schema, table in _NOTEBOOK_WRITE_CALL_RE.findall(content)]
+    return {"reads": reads, "writes": writes}
+
+
+def _scan_notebook_table_refs(client: Any) -> Dict[str, Dict[str, List[Tuple[str, str]]]]:
+    """Fetches and parses every Notebook's own definition, in parallel
+    (this workspace already has ~90 of them -- sequential get_definition
+    calls would make the button feel broken). A notebook whose definition
+    can't be read (deleted mid-scan, a transient long-running-operation
+    failure, no notebook-content.py part at all) just contributes nothing;
+    a real bug elsewhere isn't masked since only FabricPipelineError --
+    the documented "Fabric didn't answer" shape -- is caught here."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from src.fabric_pipelines.api import FabricPipelineError
+
+    notebooks = [i for i in client.list_items() if i.get("type") == "Notebook"]
+
+    def _one(notebook: Dict[str, Any]) -> Tuple[str, Optional[Dict[str, List[Tuple[str, str]]]]]:
+        try:
+            defn = client.get_definition(notebook["id"])
+        except FabricPipelineError:
+            return notebook["id"], None
+        parts = defn.get("definition", {}).get("parts", [])
+        content_part = next((p for p in parts if p.get("path") == "notebook-content.py"), None)
+        if content_part is None:
+            return notebook["id"], None
+        content = base64.b64decode(content_part["payload"]).decode("utf-8", errors="replace")
+        return notebook["id"], _parse_notebook_table_refs(content)
+
+    # 25, not 10: confirmed live this workspace's ~90 notebooks took 200s end
+    # to end at 10 workers -- each get_definition() can itself cost ~20s
+    # (Fabric's own long-running-operation polling, the same cost already
+    # documented for semantic models), so wall-clock time here is basically
+    # (notebook_count / worker_count) * ~20s. Not pushed much higher than
+    # this without knowing this tenant's actual Fabric API rate limits.
+    with ThreadPoolExecutor(max_workers=25) as pool:
+        results = list(pool.map(_one, notebooks))
+    return {notebook_id: refs for notebook_id, refs in results if refs is not None}
+
+
+def _lakehouse_table_index(client: Any) -> Dict[Tuple[str, str], str]:
+    """{(schema, table): "lakehouse-table:<lakehouse_id>:<schema>.<table>"}
+    for every Lakehouse's own tables in the workspace -- lets a notebook's
+    parsed (schema, table) reference resolve to a real catalog item id
+    without needing to know which Lakehouse the notebook itself targets
+    (its own metadata header has that, but this is simpler and works the
+    same either way). Two different Lakehouses sharing the exact same
+    schema.table name would collide here (last one wins) -- an accepted,
+    rare edge case for a best-effort heuristic."""
+    index: Dict[Tuple[str, str], str] = {}
+    for item in client.list_items():
+        if item.get("type") != "Lakehouse":
+            continue
+        lakehouse_id = item.get("id", "")
+        display_name = item.get("displayName", "")
+        for t in client.list_lakehouse_tables(lakehouse_id, display_name):
+            index[(t["schema"], t["table"])] = f"{LAKEHOUSE_TABLE_ID_PREFIX}{lakehouse_id}:{t['schema']}.{t['table']}"
+    return index
+
+
+def detect_relationships(client: Any, item_id: str) -> List[Dict[str, str]]:
+    """Best-effort candidate relationships involving `item_id`, detected
+    from notebook code rather than drawn by hand -- reads_from/writes_to
+    edges are always declared on the notebook (the "owner"), which may or
+    may not be `item_id` itself (a table's own candidates are declared by
+    whichever notebook produces/consumes it). Never writes anything --
+    the caller still goes through add_relationship() to actually save one.
+    Only ever returns candidates NOT already saved, so a relationship
+    already edited by hand (or already applied from a previous detection)
+    never gets suggested again."""
+    refs_by_notebook = _scan_notebook_table_refs(client)
+    table_index = _lakehouse_table_index(client)
+    notebooks_by_id = {i["id"]: i for i in client.list_items() if i.get("type") == "Notebook"}
+    metadata = list_metadata()
+
+    candidates: List[Dict[str, str]] = []
+    for notebook_id, refs in refs_by_notebook.items():
+        notebook = notebooks_by_id.get(notebook_id)
+        if notebook is None:
+            continue
+        for rel_type, pairs in (("reads_from", refs.get("reads", [])), ("writes_to", refs.get("writes", []))):
+            for schema, table in pairs:
+                target_id = table_index.get((schema, table))
+                if target_id is None:
+                    continue
+                if notebook_id != item_id and target_id != item_id:
+                    continue
+                already_saved = any(
+                    r.get("type") == rel_type and r.get("target_item_id") == target_id
+                    for r in metadata.get(notebook_id, {}).get("relationships", [])
+                )
+                if already_saved:
+                    continue
+                candidates.append(
+                    {
+                        "owner_item_id": notebook_id,
+                        "owner_name": notebook.get("displayName", ""),
+                        "type": rel_type,
+                        "target_item_id": target_id,
+                        "target_name": f"{schema}.{table}",
+                    }
+                )
+    return candidates
+
+
 def delete_metadata(item_id: str) -> None:
     """Not exposed via the API today (items are never deleted through this
     module, only through the upstream system itself) -- kept for

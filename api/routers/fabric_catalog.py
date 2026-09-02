@@ -30,6 +30,8 @@ from ..schemas.fabric_catalog import (
     CatalogManifestOut,
     CreateCustomFabricItemRequest,
     CreateSemanticModelRequest,
+    DetectedRelationshipOut,
+    DetectedRelationshipsOut,
     FabricCatalogListOut,
     FabricCatalogItemOut,
     FlagOut,
@@ -168,6 +170,22 @@ def remove_relationship(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     return UpdateFabricCatalogItemOut(**entry)
+
+
+@router.get("/items/{item_id}/detected-relationships", response_model=DetectedRelationshipsOut)
+def get_detected_relationships(item_id: str) -> DetectedRelationshipsOut:
+    """Best-effort candidate relationships for this item, parsed from
+    Notebook code (read_table_from_lakehouse()/write_df_to_lakehouse()
+    calls) rather than drawn by hand -- see fabric_catalog.detect_relationships().
+    Never applies anything; POST .../relationships (using each candidate's
+    own owner_item_id, which may differ from `item_id`) is what actually
+    saves one. Only ever returns candidates not already saved. 502 if
+    Fabric can't be reached to scan notebooks right now."""
+    try:
+        candidates = fabric_catalog.detect_relationships(_client(), item_id)
+    except FabricPipelineError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    return DetectedRelationshipsOut(candidates=[DetectedRelationshipOut(**c) for c in candidates])
 
 
 @router.put("/items/{item_id}/canvas-positions", response_model=CanvasPositionsOut)
