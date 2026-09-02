@@ -110,6 +110,20 @@
    bundle isn't guaranteed by import order. !important sidesteps that. */
 .detailCard {
   max-width: none !important;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Same budget as .groups below (both sit under the same header/search
+   stack, at the same row) -- on a tall screen the card otherwise stops
+   wherever its content happens to end, leaving a wasted gap down to the
+   bottom of the viewport instead of using it. Skipped below 900px, where
+   .layout stacks to a single column and forcing a tall card would just add
+   scroll under an already-visible list, not fill anything useful. */
+@media (min-width: 901px) {
+  .detailCard {
+    min-height: calc(100vh - 220px);
+  }
 }
 
 /* The general governance fields and the long description live side by
@@ -117,11 +131,18 @@
    reads as "3 columns" overall. `stretch` (the grid default) makes both
    columns match the row's tallest height, so the description column's
    editor/preview can flex to fill it instead of leaving blank space below
-   a fixed-size box. Collapses to stacked on narrow viewports. */
+   a fixed-size box. Collapses to stacked on narrow viewports.
+   flex: 1 + the explicit 1fr row (grid's own implicit-row sizing doesn't
+   reliably stretch to fill a taller container on its own) is what actually
+   lets that "fill" reach all the way down to .detailCard's own min-height
+   above, rather than just leaving blank space below this grid instead. */
 .fieldsGrid {
   display: grid;
   grid-template-columns: 1.2fr 1fr;
+  grid-template-rows: minmax(0, 1fr);
   gap: var(--space-4);
+  flex: 1;
+  min-height: 0;
 }
 
 @media (max-width: 760px) {
