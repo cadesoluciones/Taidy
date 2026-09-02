@@ -189,6 +189,33 @@ class SuggestedColumnsOut(BaseModel):
     columns: List[SuggestedColumnOut]
 
 
+class CatalogManifestColumnOut(BaseModel):
+    name: str
+    data_type: str = ""
+    description: str = ""
+    example: str = ""
+
+
+class CatalogManifestOut(BaseModel):
+    table_description: str = ""
+    columns: List[CatalogManifestColumnOut] = []
+    # False: no catalog_manifests/<table>.yml exists yet -- `columns` was
+    # seeded from the real table schema instead, nothing saved yet.
+    has_manifest: bool = False
+
+
+class CatalogManifestColumnIn(BaseModel):
+    name: str
+    data_type: str = ""
+    description: str = ""
+    example: str = ""
+
+
+class SetCatalogManifestRequest(BaseModel):
+    table_description: str = ""
+    columns: List[CatalogManifestColumnIn]
+
+
 class TypeIconsOut(BaseModel):
     icons: Dict[str, str]
 

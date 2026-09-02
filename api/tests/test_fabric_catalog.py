@@ -32,6 +32,7 @@ class _FakeFabricClient:
         self._lakehouse_columns = {("lh-1", "bronze", "ventas"): [{"name": "id", "sql_type": "int"}]}
         self._model_definitions = {}
         self._next_id = 1
+        self._lakehouse_files = {}  # {(lakehouse_item_id, path): "content"}
 
     def list_items(self):
         return [
@@ -70,6 +71,12 @@ class _FakeFabricClient:
 
     def update_item_definition(self, item_id, parts):
         self._model_definitions[item_id] = parts
+
+    def read_lakehouse_file(self, lakehouse_item_id, path):
+        return self._lakehouse_files.get((lakehouse_item_id, path))
+
+    def write_lakehouse_file(self, lakehouse_item_id, path, content):
+        self._lakehouse_files[(lakehouse_item_id, path)] = content
 
 
 def _use_fake_fabric_client(monkeypatch):
@@ -562,6 +569,63 @@ def test_reader_cannot_fetch_suggested_columns(isolated_state, client, monkeypat
 
 
 _VENTAS_ITEM = "lakehouse-table:lh-1:bronze.ventas"
+
+
+def test_operator_can_read_a_catalog_manifest_seeded_from_the_real_schema(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.get(f"/fabric-catalog/items/{_VENTAS_ITEM}/catalog-manifest")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["has_manifest"] is False
+    assert body["columns"] == [{"name": "id", "data_type": "int", "description": "", "example": ""}]
+
+
+def test_operator_can_write_and_read_back_a_catalog_manifest(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    payload = {
+        "table_description": "Ventas por proyecto",
+        "columns": [{"name": "id", "data_type": "int", "description": "Identificador", "example": "123"}],
+    }
+    put_resp = client.put(f"/fabric-catalog/items/{_VENTAS_ITEM}/catalog-manifest", json=payload)
+    assert put_resp.status_code == 200
+    assert put_resp.json()["has_manifest"] is True
+    assert put_resp.json()["table_description"] == "Ventas por proyecto"
+
+    get_resp = client.get(f"/fabric-catalog/items/{_VENTAS_ITEM}/catalog-manifest")
+    assert get_resp.json() == put_resp.json()
+
+
+def test_set_catalog_manifest_rejects_a_non_lakehouse_item(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.put("/fabric-catalog/items/nb-1/catalog-manifest", json={"table_description": "", "columns": [{"name": "x"}]})
+    assert resp.status_code == 400
+
+
+def test_reader_cannot_read_a_catalog_manifest(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+
+    resp = client.get(f"/fabric-catalog/items/{_VENTAS_ITEM}/catalog-manifest")
+    assert resp.status_code == 403
+
+
+def test_reader_cannot_write_a_catalog_manifest(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+
+    resp = client.put(f"/fabric-catalog/items/{_VENTAS_ITEM}/catalog-manifest", json={"table_description": "", "columns": [{"name": "x"}]})
+    assert resp.status_code == 403
 
 
 def test_operator_can_read_semantic_model_state_when_not_linked(isolated_state, client, monkeypatch):

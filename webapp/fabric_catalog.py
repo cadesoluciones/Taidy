@@ -27,6 +27,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import yaml
+
 from src.fabric_pipelines.semantic_model_tmdl import (
     append_missing_columns,
     build_new_manual_model_parts,
@@ -644,6 +646,103 @@ def preview_lakehouse_table(client: Any, item_id: str, *, limit: int = 10) -> Di
     lakehouse_item = client.get_item(lakehouse_id)
     display_name = lakehouse_item.get("displayName", "")
     return client.preview_lakehouse_table(lakehouse_id, display_name, schema, table, limit=limit)
+
+
+# --------------------------------------------------------------------------------------
+# Catalog manifests -- a YAML data-contract per Lakehouse table
+# (Files/catalog_manifests/<table>.yml, read/written via OneLake's own DFS
+# API) this workspace's own `catalog_metadata` notebook already reads to
+# (re)generate a matching catalog.<table> Delta table (schema/type/
+# description/example per column). Confirmed live: that notebook writes
+# catalog.<table> with mode="overwrite" every time it runs, wholesale
+# replacing whatever was there -- so editing catalog.<table> directly would
+# just get silently discarded on the next run. The manifest YAML is the
+# actual, durable source of truth; this module only ever reads/writes that.
+# --------------------------------------------------------------------------------------
+
+_CATALOG_MANIFEST_DIR = "catalog_manifests"
+
+
+def _catalog_manifest_path(schema: str, table: str) -> str:
+    # Confirmed live: catalog.<schema>_<table> mirrors bronze.bc_customer_list
+    # as catalog.bronze_bc_customer_list -- the manifest filename follows the
+    # exact same <schema>_<table> convention (catalog_manifests/bronze_bc_customer.yml
+    # for bronze.bc_customer), not just the bare table name.
+    return f"{_CATALOG_MANIFEST_DIR}/{schema}_{table}.yml"
+
+
+def _empty_catalog_manifest(columns: List[Dict[str, str]], *, has_manifest: bool) -> Dict[str, Any]:
+    return {"table_description": "", "columns": columns, "has_manifest": has_manifest}
+
+
+def get_catalog_manifest(client: Any, item_id: str) -> Dict[str, Any]:
+    """This Lakehouse table's catalog_manifests/<table>.yml, parsed into
+    {table_description, columns: [{name, data_type, description, example}],
+    has_manifest}. A table with no manifest yet (has_manifest: False) is a
+    normal state, not an error -- its columns are seeded from the real
+    table schema instead (the same live SQL lookup the semantic model's
+    auto-detect already uses) so there's something to start filling in
+    rather than a blank form."""
+    parsed = parse_lakehouse_table_id(item_id)
+    if parsed is None:
+        raise ValueError(f"'{item_id}' no es una tabla de Lakehouse -- no tiene manifiesto de catálogo.")
+    lakehouse_id, schema, table = parsed
+
+    raw = client.read_lakehouse_file(lakehouse_id, _catalog_manifest_path(schema, table))
+    if raw is None:
+        source_columns = _lakehouse_table_source_columns(client, lakehouse_id, schema, table)
+        seeded = [{"name": c["name"], "data_type": c.get("sql_type", ""), "description": "", "example": ""} for c in source_columns]
+        return _empty_catalog_manifest(seeded, has_manifest=False)
+
+    data = yaml.safe_load(raw) or {}
+    step = data.get("step") or {}
+    properties = (step.get("schema") or {}).get("properties") or {}
+    columns = [
+        {
+            "name": name,
+            "data_type": (info or {}).get("type") or "",
+            "description": (info or {}).get("description") or "",
+            "example": str((info or {}).get("example") or ""),
+        }
+        for name, info in properties.items()
+    ]
+    return {"table_description": step.get("description") or "", "columns": columns, "has_manifest": True}
+
+
+def set_catalog_manifest(client: Any, item_id: str, *, table_description: str, columns: List[Dict[str, str]]) -> Dict[str, Any]:
+    """Writes catalog_manifests/<table>.yml -- the source catalog_metadata's
+    notebook regenerates catalog.<table> from on its own schedule; this
+    never touches that Delta table directly (see module note above)."""
+    parsed = parse_lakehouse_table_id(item_id)
+    if parsed is None:
+        raise ValueError(f"'{item_id}' no es una tabla de Lakehouse -- no tiene manifiesto de catálogo.")
+    lakehouse_id, schema, table = parsed
+
+    if not columns:
+        raise ValueError("El manifiesto necesita al menos una columna.")
+    properties: Dict[str, Any] = {}
+    for col in columns:
+        name = (col.get("name") or "").strip()
+        if not name:
+            raise ValueError("Cada columna del manifiesto necesita un nombre.")
+        if name in properties:
+            raise ValueError(f"La columna '{name}' está repetida en el manifiesto.")
+        entry: Dict[str, str] = {"type": (col.get("data_type") or "").strip(), "description": (col.get("description") or "").strip()}
+        example = (col.get("example") or "").strip()
+        if example:
+            entry["example"] = example
+        properties[name] = entry
+
+    manifest = {
+        "step": {
+            "name": table,
+            "description": (table_description or "").strip(),
+            "schema": {"type": "object", "properties": properties},
+        }
+    }
+    content = yaml.safe_dump(manifest, allow_unicode=True, sort_keys=False, default_flow_style=False)
+    client.write_lakehouse_file(lakehouse_id, _catalog_manifest_path(schema, table), content)
+    return get_catalog_manifest(client, item_id)
 
 
 # --------------------------------------------------------------------------------------

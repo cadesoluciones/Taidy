@@ -33,6 +33,7 @@ import { FABRIC_ICON_OPTIONS, fabricIconFor } from "../utils/fabricIcons";
 import { DATA_ROLE_INFO } from "../utils/dataRoles";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { FabricCatalogBrowser } from "./FabricCatalogBrowser";
+import { FabricCatalogManifestSection } from "./FabricCatalogManifestSection";
 import { FabricRelationshipCanvas } from "./FabricRelationshipCanvas";
 import { FabricSemanticModelSection } from "./FabricSemanticModelSection";
 import { FreeTagInput } from "./FreeTagInput";
@@ -77,16 +78,18 @@ export function FabricCatalogManager() {
   const [shortDescriptionDraft, setShortDescriptionDraft] = useState("");
   const [longDescriptionDraft, setLongDescriptionDraft] = useState("");
   const [longDescriptionView, setLongDescriptionView] = useState<"editar" | "vista previa">("editar");
-  const [detailTab, setDetailTab] = useState<"descripcion" | "modelo">("descripcion");
-  // Tracks whether the semantic-model tab has been opened at least once for
-  // the CURRENTLY selected item -- once true, FabricSemanticModelSection
-  // stays mounted (just CSS-hidden) across further tab switches instead of
-  // unmounting, so its already-fetched state survives instead of refetching
-  // from Fabric (confirmed live: getDefinition alone can take ~20s) every
-  // single time the user tabs back to it. Reset to false whenever the
-  // selected item changes, so a genuinely different table still fetches
-  // fresh the first time, not stale data left over from mounting once.
+  const [detailTab, setDetailTab] = useState<"descripcion" | "modelo" | "catalogo">("descripcion");
+  // Tracks whether the semantic-model/catalog-manifest tabs have each been
+  // opened at least once for the CURRENTLY selected item -- once true, the
+  // corresponding section stays mounted (just CSS-hidden) across further
+  // tab switches instead of unmounting, so its already-fetched state
+  // survives instead of refetching from Fabric (confirmed live:
+  // getDefinition alone can take ~20s) every single time the user tabs
+  // back to it. Reset to false whenever the selected item changes, so a
+  // genuinely different table still fetches fresh the first time, not
+  // stale data left over from mounting once.
   const [hasOpenedModeloTab, setHasOpenedModeloTab] = useState(false);
+  const [hasOpenedCatalogoTab, setHasOpenedCatalogoTab] = useState(false);
   const [roleDrafts, setRoleDrafts] = useState<Record<DataRoleField, string[]>>(EMPTY_ROLE_DRAFTS);
   const [criticalityDraft, setCriticalityDraft] = useState<FabricCriticality>("");
   const [statusDraft, setStatusDraft] = useState<FabricStatus>("");
@@ -157,6 +160,7 @@ export function FabricCatalogManager() {
     setLongDescriptionView("editar");
     setDetailTab("descripcion");
     setHasOpenedModeloTab(false);
+    setHasOpenedCatalogoTab(false);
     setRoleDrafts({
       data_owner: selected?.data_owner ?? [],
       data_steward: selected?.data_steward ?? [],
@@ -721,6 +725,18 @@ export function FabricCatalogManager() {
                       >
                         Modelo semántico
                       </button>
+                      {selected.item_id.startsWith(LAKEHOUSE_TABLE_ID_PREFIX) && (
+                        <button
+                          type="button"
+                          className={detailTab === "catalogo" ? styles.detailTabActive : styles.detailTab}
+                          onClick={() => {
+                            setDetailTab("catalogo");
+                            setHasOpenedCatalogoTab(true);
+                          }}
+                        >
+                          Catálogo
+                        </button>
+                      )}
                     </div>
                     {detailTab === "descripcion" && (
                       <div className={styles.longDescActions}>
@@ -778,6 +794,18 @@ export function FabricCatalogManager() {
                       <FabricSemanticModelSection
                         itemId={selected.item_id}
                         itemName={selected.name}
+                        canEdit={canEdit}
+                        offline={selected.connection_status === "offline"}
+                      />
+                    </div>
+                  )}
+
+                  {/* Same mount-once-then-hide pattern as Modelo semántico above. Only
+                      reachable for a Lakehouse table (see the tab button itself). */}
+                  {hasOpenedCatalogoTab && (
+                    <div hidden={detailTab !== "catalogo"}>
+                      <FabricCatalogManifestSection
+                        itemId={selected.item_id}
                         canEdit={canEdit}
                         offline={selected.connection_status === "offline"}
                       />

@@ -56,6 +56,10 @@ class _FakeFabricClient:
         # get_definition fails for an unrelated reason (e.g. Fabric's own
         # getDefinition polling timing out).
         self._fail_definition_for: set = set()
+        # {(lakehouse_item_id, path): "file content"} -- backs
+        # read_lakehouse_file()/write_lakehouse_file(), see
+        # get_catalog_manifest()/set_catalog_manifest().
+        self._lakehouse_files: dict = {}
 
     def list_items(self):
         return self._items
@@ -100,6 +104,12 @@ class _FakeFabricClient:
 
     def update_item_definition(self, item_id, parts):
         self._model_definitions[item_id] = parts
+
+    def read_lakehouse_file(self, lakehouse_item_id, path):
+        return self._lakehouse_files.get((lakehouse_item_id, path))
+
+    def write_lakehouse_file(self, lakehouse_item_id, path, content):
+        self._lakehouse_files[(lakehouse_item_id, path)] = content
 
 
 _EMPTY_CLIENT = _FakeFabricClient(items=[], folders=[])
@@ -534,6 +544,130 @@ def _client_with_source_table(columns=None):
         folders=[],
         lakehouse_columns={("lh-1", "bronze", "ventas"): columns if columns is not None else list(_SOURCE_COLUMNS)},
     )
+
+
+# --------------------------------------------------------------------------------------
+# Catalog manifests -- catalog_manifests/<table>.yml, read/written via
+# OneLake, never the catalog.<table> Delta table a notebook regenerates.
+# --------------------------------------------------------------------------------------
+
+_REAL_MANIFEST_YAML = """\
+step:
+  name: ventas
+  description: Ventas por proyecto
+  schema:
+    type: object
+    properties:
+      id:
+        type: int
+        description: Identificador
+        example: '123'
+      importe:
+        type: decimal
+        description: ''
+"""
+
+
+def test_get_catalog_manifest_rejects_a_non_lakehouse_item(isolated_state):
+    with pytest.raises(ValueError, match="Lakehouse"):
+        fabric_catalog.get_catalog_manifest(_EMPTY_CLIENT, "bc:bc_customer")
+
+
+def test_get_catalog_manifest_seeds_from_the_real_schema_when_no_manifest_exists(isolated_state):
+    client = _client_with_source_table()
+    state = fabric_catalog.get_catalog_manifest(client, _TABLE_ITEM_ID)
+    assert state == {
+        "table_description": "",
+        "columns": [
+            {"name": "id", "data_type": "int", "description": "", "example": ""},
+            {"name": "importe", "data_type": "decimal", "description": "", "example": ""},
+        ],
+        "has_manifest": False,
+    }
+
+
+def test_get_catalog_manifest_parses_a_real_manifest(isolated_state):
+    client = _client_with_source_table()
+    client.write_lakehouse_file("lh-1", "catalog_manifests/bronze_ventas.yml", _REAL_MANIFEST_YAML)
+
+    state = fabric_catalog.get_catalog_manifest(client, _TABLE_ITEM_ID)
+
+    assert state == {
+        "table_description": "Ventas por proyecto",
+        "columns": [
+            {"name": "id", "data_type": "int", "description": "Identificador", "example": "123"},
+            {"name": "importe", "data_type": "decimal", "description": "", "example": ""},
+        ],
+        "has_manifest": True,
+    }
+
+
+def test_set_catalog_manifest_rejects_a_non_lakehouse_item(isolated_state):
+    with pytest.raises(ValueError, match="Lakehouse"):
+        fabric_catalog.set_catalog_manifest(_EMPTY_CLIENT, "bc:bc_customer", table_description="", columns=[{"name": "x"}])
+
+
+def test_set_catalog_manifest_rejects_no_columns(isolated_state):
+    client = _client_with_source_table()
+    with pytest.raises(ValueError, match="al menos una columna"):
+        fabric_catalog.set_catalog_manifest(client, _TABLE_ITEM_ID, table_description="", columns=[])
+
+
+def test_set_catalog_manifest_rejects_a_blank_column_name(isolated_state):
+    client = _client_with_source_table()
+    with pytest.raises(ValueError, match="nombre"):
+        fabric_catalog.set_catalog_manifest(client, _TABLE_ITEM_ID, table_description="", columns=[{"name": "  "}])
+
+
+def test_set_catalog_manifest_rejects_duplicate_column_names(isolated_state):
+    client = _client_with_source_table()
+    with pytest.raises(ValueError, match="repetida"):
+        fabric_catalog.set_catalog_manifest(
+            client, _TABLE_ITEM_ID, table_description="", columns=[{"name": "id"}, {"name": "id"}]
+        )
+
+
+def test_set_catalog_manifest_writes_and_reads_back(isolated_state):
+    client = _client_with_source_table()
+
+    result = fabric_catalog.set_catalog_manifest(
+        client,
+        _TABLE_ITEM_ID,
+        table_description="Ventas por proyecto",
+        columns=[
+            {"name": "id", "data_type": "int", "description": "Identificador", "example": "123"},
+            {"name": "importe", "data_type": "decimal", "description": "", "example": ""},
+        ],
+    )
+
+    assert result == {
+        "table_description": "Ventas por proyecto",
+        "columns": [
+            {"name": "id", "data_type": "int", "description": "Identificador", "example": "123"},
+            {"name": "importe", "data_type": "decimal", "description": "", "example": ""},
+        ],
+        "has_manifest": True,
+    }
+
+    # A second write with a different column set fully replaces the first --
+    # not merged, matching how the real notebook already overwrites wholesale.
+    second = fabric_catalog.set_catalog_manifest(
+        client, _TABLE_ITEM_ID, table_description="", columns=[{"name": "solo_esta", "data_type": "", "description": "", "example": ""}]
+    )
+    assert [c["name"] for c in second["columns"]] == ["solo_esta"]
+
+
+def test_set_catalog_manifest_uses_the_schema_prefixed_filename(isolated_state):
+    """Confirmed live: catalog.bronze_bc_customer_list mirrors the real
+    bronze.bc_customer_list table -- the manifest filename follows the same
+    <schema>_<table> convention (catalog_manifests/bronze_ventas.yml for
+    bronze.ventas here), not just the bare table name. Caught as a real bug
+    before this shipped: the first version used table-only filenames."""
+    client = _client_with_source_table()
+    fabric_catalog.set_catalog_manifest(
+        client, _TABLE_ITEM_ID, table_description="", columns=[{"name": "id", "data_type": "int", "description": "", "example": ""}]
+    )
+    assert ("lh-1", "catalog_manifests/bronze_ventas.yml") in client._lakehouse_files
 
 
 def test_get_semantic_model_state_for_a_non_lakehouse_item_is_manual_mode_not_linked(isolated_state):

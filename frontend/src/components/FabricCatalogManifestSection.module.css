@@ -1,0 +1,133 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.seedHint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 12px;
+  color: var(--color-text-muted);
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-bg));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 25%, var(--color-border));
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+}
+
+.tableDescField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tableDescField label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tableDescInput {
+  width: 100%;
+  font-size: 13px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.columnsTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.columnsTable th {
+  text-align: left;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.columnsTable td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+.cellInput {
+  width: 100%;
+  font-size: 12px;
+  padding: 3px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.nameCell {
+  min-width: 120px;
+}
+
+.typeCell {
+  width: 110px;
+}
+
+.exampleCell {
+  width: 110px;
+}
+
+.addRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.colInput {
+  flex: 1;
+  min-width: 100px;
+  font-size: 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.linkButton {
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.linkButton:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.removeButton {
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.removeButton:hover:not(:disabled) {
+  color: var(--color-danger);
+}
+
+.removeButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

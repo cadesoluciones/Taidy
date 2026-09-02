@@ -27,12 +27,14 @@ from ..dependencies import CurrentUser, get_current_user, require_any_role, requ
 from ..schemas.fabric_catalog import (
     AddRelationshipRequest,
     CanvasPositionsOut,
+    CatalogManifestOut,
     CreateCustomFabricItemRequest,
     CreateSemanticModelRequest,
     FabricCatalogListOut,
     FabricCatalogItemOut,
     FlagOut,
     SemanticModelStateOut,
+    SetCatalogManifestRequest,
     SetCanvasPositionsRequest,
     SetFavoriteRequest,
     SetHiddenRequest,
@@ -203,6 +205,41 @@ def preview_table(item_id: str) -> TablePreviewOut:
     except FabricPipelineError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
     return TablePreviewOut(**result)
+
+
+@router.get("/items/{item_id}/catalog-manifest", response_model=CatalogManifestOut)
+def get_catalog_manifest(item_id: str) -> CatalogManifestOut:
+    """This Lakehouse table's catalog_manifests/<table>.yml -- the data
+    contract a `catalog_metadata` notebook in this workspace reads to
+    (re)generate a matching catalog.<table> Delta table from. `has_manifest:
+    false` means no manifest exists yet, so `columns` is seeded from the
+    real table schema instead. 400 for anything that isn't a Lakehouse
+    table (there's no manifest concept for those); 502 if Fabric/OneLake
+    can't be reached right now."""
+    try:
+        result = fabric_catalog.get_catalog_manifest(_client(), item_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except FabricPipelineError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    return CatalogManifestOut(**result)
+
+
+@router.put("/items/{item_id}/catalog-manifest", response_model=CatalogManifestOut)
+def set_catalog_manifest(item_id: str, payload: SetCatalogManifestRequest) -> CatalogManifestOut:
+    """Overwrites catalog_manifests/<table>.yml wholesale (never the
+    catalog.<table> Delta table itself -- a notebook run would just discard
+    an edit made there). 400 for anything that isn't a Lakehouse table, no
+    columns, a blank/duplicate column name; 502 for a real OneLake failure."""
+    try:
+        result = fabric_catalog.set_catalog_manifest(
+            _client(), item_id, table_description=payload.table_description, columns=[c.model_dump() for c in payload.columns]
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except FabricPipelineError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    return CatalogManifestOut(**result)
 
 
 @router.get("/items/{item_id}/suggested-columns", response_model=SuggestedColumnsOut)

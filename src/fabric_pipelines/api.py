@@ -41,6 +41,20 @@ _FABRIC_SCOPE = "https://api.fabric.microsoft.com/.default"
 _SQL_SCOPE = "https://database.windows.net/.default"
 _SQL_COPT_SS_ACCESS_TOKEN = 1256
 
+# OneLake's own ADLS Gen2-compatible DFS API -- for reading/writing plain
+# files under a Lakehouse's Files/ area (e.g. catalog_manifests/*.yml), a
+# different surface entirely from the Fabric REST API above (list_items,
+# get_definition, ...) and from the SQL analytics endpoint (Tables/ only,
+# read-only). Same service principal, yet another token audience.
+# {workspaceId}/{itemId}/Files/{path} (stable GUIDs) works exactly the same
+# as the {workspaceName}/{itemName}.Lakehouse/Files/{path} form Fabric's own
+# notebooks use -- confirmed live -- so this uses the GUID form, consistent
+# with everything else in this client never trusting a display name to
+# survive a rename.
+_STORAGE_SCOPE = "https://storage.azure.com/.default"
+_ONELAKE_DFS_BASE = "https://onelake.dfs.fabric.microsoft.com"
+_ONELAKE_DFS_API_VERSION = "2023-11-03"
+
 # T-SQL has no parameter placeholder for identifiers (only for values), so
 # a schema/table name headed into a raw SELECT is validated against this
 # instead of interpolated on trust -- see preview_lakehouse_table().
@@ -88,6 +102,10 @@ class FabricPipelineClient:
     def _headers(self) -> Dict[str, str]:
         token = self._credential.get_token(_FABRIC_SCOPE)
         return {"Authorization": f"Bearer {token.token}", "Content-Type": "application/json"}
+
+    def _storage_headers(self) -> Dict[str, str]:
+        token = self._credential.get_token(_STORAGE_SCOPE)
+        return {"Authorization": f"Bearer {token.token}", "x-ms-version": _ONELAKE_DFS_API_VERSION}
 
     # Retries only transient, transport-level failures (dropped connection,
     # timeout) -- same policy as src/bc_client/api.py's _get. A bad HTTP
@@ -354,6 +372,48 @@ class FabricPipelineClient:
             raise FabricPipelineError(f"No se pudo consultar la tabla {schema}.{table}: {exc}")
         finally:
             conn.close()
+
+    def read_lakehouse_file(self, lakehouse_item_id: str, path: str) -> Optional[str]:
+        """Reads a plain text file from a Lakehouse's own Files/ area (e.g.
+        catalog_manifests/<table>.yml, the source catalog_metadata's own
+        notebook regenerates its catalog.<table> Delta table from -- see
+        webapp/fabric_catalog.py's module docstring for why that Delta
+        table itself must never be edited directly). Returns None for a
+        missing file (a table that has no manifest yet is an expected,
+        normal state) rather than raising."""
+        url = f"{_ONELAKE_DFS_BASE}/{self._settings.workspace_id}/{lakehouse_item_id}/Files/{path}"
+        response = self._request("GET", url, headers=self._storage_headers())
+        if response.status_code == 404:
+            return None
+        if response.status_code != 200:
+            raise FabricPipelineError(f"No se pudo leer '{path}' del Lakehouse (HTTP {response.status_code}): {response.text}")
+        return response.text
+
+    def write_lakehouse_file(self, lakehouse_item_id: str, path: str, content: str) -> None:
+        """Creates or overwrites a plain text file in a Lakehouse's Files/
+        area. OneLake's DFS API is ADLS Gen2-compatible, which -- unlike a
+        simple blob PUT-with-body -- needs three calls for this: create the
+        (empty) file, append the content, then flush to make it visible.
+        Confirmed live end to end (create/write/read-back/delete) against
+        the real workspace before this was written."""
+        url = f"{_ONELAKE_DFS_BASE}/{self._settings.workspace_id}/{lakehouse_item_id}/Files/{path}"
+        headers = self._storage_headers()
+        create = self._request("PUT", url, headers=headers, params={"resource": "file"})
+        if create.status_code not in (200, 201):
+            raise FabricPipelineError(f"No se pudo crear '{path}' en el Lakehouse (HTTP {create.status_code}): {create.text}")
+        data = content.encode("utf-8")
+        append = self._request(
+            "PATCH",
+            url,
+            headers={**headers, "Content-Type": "application/octet-stream"},
+            params={"action": "append", "position": "0"},
+            data=data,
+        )
+        if append.status_code not in (200, 202):
+            raise FabricPipelineError(f"No se pudo escribir '{path}' en el Lakehouse (HTTP {append.status_code}): {append.text}")
+        flush = self._request("PATCH", url, headers=headers, params={"action": "flush", "position": str(len(data))})
+        if flush.status_code != 200:
+            raise FabricPipelineError(f"No se pudo confirmar la escritura de '{path}' (HTTP {flush.status_code}): {flush.text}")
 
     def get_definition(self, item_id: str) -> Dict[str, Any]:
         """Fetches a Data Pipeline item's definition (its activities and

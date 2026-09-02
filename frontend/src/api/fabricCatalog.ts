@@ -215,6 +215,44 @@ export function fetchSuggestedColumns(itemId: string): Promise<{ columns: Manual
   return apiGet(`/fabric-catalog/items/${encodeURIComponent(itemId)}/suggested-columns`);
 }
 
+export interface CatalogManifestColumn {
+  name: string;
+  data_type: string;
+  description: string;
+  example: string;
+}
+
+export interface CatalogManifest {
+  table_description: string;
+  columns: CatalogManifestColumn[];
+  /** false: no catalog_manifests/<table>.yml exists yet in the Lakehouse --
+   * `columns` was seeded from the real table schema instead of read from a
+   * saved manifest, nothing persisted yet. */
+  has_manifest: boolean;
+}
+
+/** This Lakehouse table's own catalog_manifests/<table>.yml -- the YAML data
+ * contract a `catalog_metadata` notebook in the workspace reads to
+ * (re)generate a matching catalog.<table> Delta table from. Lakehouse
+ * tables only (400 for anything else -- there's no manifest concept for a
+ * BC/HubSpot/Factorial/custom item). */
+export function fetchCatalogManifest(itemId: string): Promise<CatalogManifest> {
+  return apiGet(`/fabric-catalog/items/${encodeURIComponent(itemId)}/catalog-manifest`);
+}
+
+/** Overwrites the manifest wholesale -- never the catalog.<table> Delta
+ * table itself, a notebook re-run would just discard an edit made there. */
+export function setCatalogManifest(
+  itemId: string,
+  tableDescription: string,
+  columns: CatalogManifestColumn[]
+): Promise<CatalogManifest> {
+  return apiPut(`/fabric-catalog/items/${encodeURIComponent(itemId)}/catalog-manifest`, {
+    table_description: tableDescription,
+    columns,
+  });
+}
+
 /** Creates a new semantic model for this item. For a real Lakehouse table,
  * columns are auto-detected from its schema and itemName/columns are
  * ignored. Otherwise it's a manual data dictionary -- itemName and at
