@@ -101,8 +101,15 @@
   min-width: 0;
 }
 
+/* Overrides Form.module.css's shared .card { max-width: 640px } -- this
+   card should fill whatever width .detailColumn has instead of capping out
+   partway across a wide screen, wasting real space next to it (confirmed
+   live: with only "max-width: none" here, the 640px cap from .card still
+   won -- both are separate CSS-module files combined via string
+   concatenation in the className, so which one's rule loads later in the
+   bundle isn't guaranteed by import order. !important sidesteps that. */
 .detailCard {
-  max-width: none;
+  max-width: none !important;
 }
 
 /* The general governance fields and the long description live side by

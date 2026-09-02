@@ -1,5 +1,8 @@
+/* Overrides Form.module.css's shared .card { max-width: 640px } -- see the
+   identical fix (and the "why !important" reasoning) on
+   FabricCatalogManager.module.css's .detailCard. */
 .wideCard {
-  max-width: none;
+  max-width: none !important;
 }
 
 .keyRow {
