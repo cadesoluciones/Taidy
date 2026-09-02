@@ -403,6 +403,97 @@ def test_delete_offline_item_rejects_an_unknown_item(isolated_state):
         fabric_catalog.delete_offline_item("nb-does-not-exist")
 
 
+class _FakeHubspotClient:
+    def __init__(self, settings):
+        self.settings = settings
+
+    def list_properties(self, object_type, include_hidden=False):
+        assert object_type == "contacts"
+        return [
+            {"name": "email", "label": "Email", "hidden": False, "calculated": False, "type": "string"},
+            {"name": "firstname", "label": "First name", "hidden": False, "calculated": False, "type": "string"},
+            {"name": "hs_object_id", "label": "Record ID", "hidden": True, "calculated": False, "type": "number"},
+            {"name": "hs_signed_up_at", "label": "Signed up", "hidden": False, "calculated": False, "type": "datetime"},
+        ]
+
+
+def _patch_hubspot_client(monkeypatch):
+    from src.hubspot_client import config as hubspot_config
+
+    monkeypatch.setattr(hubspot_config, "load_settings", lambda: object())
+    monkeypatch.setattr("src.hubspot_client.api.HubspotClient", _FakeHubspotClient)
+
+
+def test_suggest_manual_columns_hubspot_returns_names_and_mapped_types(isolated_state, monkeypatch):
+    monkeypatch.setattr(
+        fabric_catalog.table_configs,
+        "list_hubspot_tables_full",
+        lambda: [{"name": "hubspot_contacts", "object_type": "contacts", "fields": ["email", "hs_object_id", "hs_signed_up_at"]}],
+    )
+    _patch_hubspot_client(monkeypatch)
+
+    columns = fabric_catalog.suggest_manual_columns("hubspot:hubspot_contacts")
+    assert columns == [
+        {"name": "email", "data_type": "string"},
+        {"name": "hs_object_id", "data_type": "double"},
+        {"name": "hs_signed_up_at", "data_type": "dateTime"},
+    ]
+
+
+def test_suggest_manual_columns_hubspot_falls_back_to_string_for_a_field_hubspot_no_longer_lists(isolated_state, monkeypatch):
+    monkeypatch.setattr(
+        fabric_catalog.table_configs,
+        "list_hubspot_tables_full",
+        lambda: [{"name": "hubspot_contacts", "object_type": "contacts", "fields": ["email", "some_removed_field"]}],
+    )
+    _patch_hubspot_client(monkeypatch)
+
+    columns = fabric_catalog.suggest_manual_columns("hubspot:hubspot_contacts")
+    assert columns == [
+        {"name": "email", "data_type": "string"},
+        {"name": "some_removed_field", "data_type": "string"},
+    ]
+
+
+def test_suggest_manual_columns_hubspot_unknown_table_returns_empty(isolated_state, monkeypatch):
+    monkeypatch.setattr(fabric_catalog.table_configs, "list_hubspot_tables_full", lambda: [])
+    assert fabric_catalog.suggest_manual_columns("hubspot:does_not_exist") == []
+
+
+def test_suggest_manual_columns_factorial_returns_names_only(isolated_state, monkeypatch):
+    monkeypatch.setattr(
+        fabric_catalog.table_configs,
+        "list_factorial_tables_full",
+        lambda: [{"name": "factorial_teams", "fields": ["id", "name"]}],
+    )
+    columns = fabric_catalog.suggest_manual_columns("factorial:factorial_teams")
+    assert columns == [{"name": "id", "data_type": "string"}, {"name": "name", "data_type": "string"}]
+
+
+def test_suggest_manual_columns_factorial_unknown_table_returns_empty(isolated_state, monkeypatch):
+    monkeypatch.setattr(fabric_catalog.table_configs, "list_factorial_tables_full", lambda: [])
+    assert fabric_catalog.suggest_manual_columns("factorial:does_not_exist") == []
+
+
+def test_suggest_manual_columns_bc_reads_last_extractions_csv_header(isolated_state, monkeypatch):
+    monkeypatch.setattr(
+        fabric_catalog.table_configs, "bc_table_fields", lambda name: ["id", "name"] if name == "bc_customer" else []
+    )
+    columns = fabric_catalog.suggest_manual_columns("bc:bc_customer")
+    assert columns == [{"name": "id", "data_type": "string"}, {"name": "name", "data_type": "string"}]
+
+
+def test_suggest_manual_columns_bc_before_first_extraction_returns_empty(isolated_state, monkeypatch):
+    monkeypatch.setattr(fabric_catalog.table_configs, "bc_table_fields", lambda name: [])
+    assert fabric_catalog.suggest_manual_columns("bc:bc_customer") == []
+
+
+def test_suggest_manual_columns_returns_empty_for_anything_without_a_source_table():
+    assert fabric_catalog.suggest_manual_columns("lakehouse-table:lh-1:bronze.foo") == []
+    assert fabric_catalog.suggest_manual_columns("nb-1") == []
+    assert fabric_catalog.suggest_manual_columns("custom:abc") == []
+
+
 def test_parse_lakehouse_table_id_round_trips():
     parsed = fabric_catalog.parse_lakehouse_table_id("lakehouse-table:lh-1:bronze.bc_cuentas_contables")
     assert parsed == ("lh-1", "bronze", "bc_cuentas_contables")

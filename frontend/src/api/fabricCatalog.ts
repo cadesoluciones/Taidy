@@ -206,6 +206,15 @@ export function fetchSemanticModelState(itemId: string): Promise<SemanticModelSt
   return apiGet(`/fabric-catalog/items/${encodeURIComponent(itemId)}/semantic-model`);
 }
 
+/** Best-effort starting point for a manual model's column builder, sourced
+ * from what each system already exposes about a table's fields -- no live
+ * Fabric call. HubSpot returns real name+type; Factorial/BC return name
+ * only (data_type defaults to "string", still fully editable). [] for a
+ * Lakehouse table or anything else with no source table to suggest from. */
+export function fetchSuggestedColumns(itemId: string): Promise<{ columns: ManualColumn[] }> {
+  return apiGet(`/fabric-catalog/items/${encodeURIComponent(itemId)}/suggested-columns`);
+}
+
 /** Creates a new semantic model for this item. For a real Lakehouse table,
  * columns are auto-detected from its schema and itemName/columns are
  * ignored. Otherwise it's a manual data dictionary -- itemName and at

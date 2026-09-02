@@ -217,6 +217,12 @@ class HubspotClient:
                 "label": r.get("label") or "",
                 "hidden": bool(r.get("hidden")),
                 "calculated": bool(r.get("calculated")),
+                # HubSpot's own type vocabulary (string/number/date/datetime/
+                # enumeration/bool/phone_number/json/...) -- kept as-is here,
+                # not translated to anything else. webapp/fabric_catalog.py's
+                # suggest_manual_columns() is the one place that maps this to
+                # the semantic model's own MANUAL_DATA_TYPES.
+                "type": r.get("type") or "",
             }
             for r in results
             if isinstance(r, dict) and r.get("name")

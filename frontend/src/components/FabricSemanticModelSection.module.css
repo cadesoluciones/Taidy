@@ -145,6 +145,11 @@
   white-space: nowrap;
 }
 
+.suggestHint {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
 .removeButton {
   border: none;
   background: none;

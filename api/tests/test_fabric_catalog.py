@@ -508,6 +508,59 @@ def test_reader_cannot_preview_a_table(isolated_state, client, monkeypatch):
     assert resp.status_code == 403
 
 
+def test_operator_can_fetch_suggested_columns_for_a_hubspot_table(isolated_state, client, monkeypatch):
+    from src.hubspot_client import config as hubspot_config
+
+    _use_fake_fabric_client(monkeypatch)
+    monkeypatch.setattr(
+        fabric_catalog.table_configs,
+        "list_hubspot_tables_full",
+        lambda: [{"name": "hubspot_contacts", "object_type": "contacts", "fields": ["email", "hs_object_id"]}],
+    )
+
+    class _FakeHubspotClient:
+        def __init__(self, settings):
+            pass
+
+        def list_properties(self, object_type, include_hidden=False):
+            return [
+                {"name": "email", "label": "Email", "hidden": False, "calculated": False, "type": "string"},
+                {"name": "hs_object_id", "label": "Record ID", "hidden": True, "calculated": False, "type": "number"},
+            ]
+
+    monkeypatch.setattr(hubspot_config, "load_settings", lambda: object())
+    monkeypatch.setattr("src.hubspot_client.api.HubspotClient", _FakeHubspotClient)
+
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.get("/fabric-catalog/items/hubspot:hubspot_contacts/suggested-columns")
+    assert resp.status_code == 200
+    assert resp.json()["columns"] == [
+        {"name": "email", "data_type": "string"},
+        {"name": "hs_object_id", "data_type": "double"},
+    ]
+
+
+def test_suggested_columns_for_a_lakehouse_table_is_empty(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.get("/fabric-catalog/items/nb-1/suggested-columns")
+    assert resp.status_code == 200
+    assert resp.json()["columns"] == []
+
+
+def test_reader_cannot_fetch_suggested_columns(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+
+    resp = client.get("/fabric-catalog/items/nb-1/suggested-columns")
+    assert resp.status_code == 403
+
+
 _VENTAS_ITEM = "lakehouse-table:lh-1:bronze.ventas"
 
 

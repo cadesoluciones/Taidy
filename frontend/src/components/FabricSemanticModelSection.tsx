@@ -4,6 +4,7 @@ import { ApiError } from "../api/client";
 import {
   createSemanticModel,
   fetchSemanticModelState,
+  fetchSuggestedColumns,
   MANUAL_DATA_TYPES,
   setManualSemanticModelColumns,
   syncSemanticModelColumns,
@@ -110,6 +111,9 @@ export function FabricSemanticModelSection({ itemId, itemName, canEdit, offline 
   const [descDrafts, setDescDrafts] = useState<Record<string, string>>({});
   const [confirmCreateOpen, setConfirmCreateOpen] = useState(false);
   const [draftColumns, setDraftColumns] = useState<ManualColumn[]>([]);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
+  const [suggestEmptyHint, setSuggestEmptyHint] = useState(false);
 
   // Fabric's own read (getDefinition) can take 20s+ -- long enough that the
   // user switches to a different table before a request resolves. Every
@@ -151,6 +155,8 @@ export function FabricSemanticModelSection({ itemId, itemName, canEdit, offline 
   useEffect(() => {
     setState(null);
     setDraftColumns([]);
+    setSuggestError(null);
+    setSuggestEmptyHint(false);
     if (offline) {
       // Even reading the state is a live Fabric call (get_item/
       // get_definition) -- skip straight to the "no disponible" message
@@ -181,6 +187,27 @@ export function FabricSemanticModelSection({ itemId, itemName, canEdit, offline 
       setError(err instanceof ApiError ? err.message : "No se pudo crear el modelo semántico.");
     } finally {
       if (currentItemIdRef.current === requestedItemId) setBusy(false);
+    }
+  }
+
+  async function handleSuggest() {
+    const requestedItemId = itemId;
+    setIsSuggesting(true);
+    setSuggestError(null);
+    setSuggestEmptyHint(false);
+    try {
+      const result = await fetchSuggestedColumns(requestedItemId);
+      if (currentItemIdRef.current !== requestedItemId) return;
+      if (result.columns.length === 0) {
+        setSuggestEmptyHint(true);
+      } else {
+        setDraftColumns(result.columns);
+      }
+    } catch (err) {
+      if (currentItemIdRef.current !== requestedItemId) return;
+      setSuggestError(err instanceof ApiError ? err.message : "No se pudieron sugerir columnas.");
+    } finally {
+      if (currentItemIdRef.current === requestedItemId) setIsSuggesting(false);
     }
   }
 
@@ -299,6 +326,24 @@ export function FabricSemanticModelSection({ itemId, itemName, canEdit, offline 
 
           {canEdit && !hasRealSource && (
             <div className={styles.draftList}>
+              {draftColumns.length === 0 && (
+                <div className={styles.addRow}>
+                  <button
+                    type="button"
+                    className={styles.linkButton}
+                    disabled={isSuggesting}
+                    onClick={() => void handleSuggest()}
+                  >
+                    {isSuggesting ? "Sugiriendo…" : "Sugerir columnas"}
+                  </button>
+                  <span className={styles.suggestHint}>
+                    {suggestEmptyHint
+                      ? "No se ha podido sugerir ninguna columna -- añádelas a mano."
+                      : "A partir de los campos ya configurados para esta tabla."}
+                  </span>
+                </div>
+              )}
+              {suggestError && <div className={formStyles.errorBanner}>{suggestError}</div>}
               {draftColumns.length > 0 && (
                 <ul className={styles.draftColumns}>
                   {draftColumns.map((col) => (

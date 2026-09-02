@@ -799,6 +799,91 @@ def get_semantic_model_state(client: Any, item_id: str) -> Dict[str, Any]:
     }
 
 
+# HubSpot's own property `type` (string/number/date/datetime/enumeration/
+# bool/phone_number/json/...) mapped onto the semantic model's own
+# MANUAL_DATA_TYPES vocabulary. Deliberately narrow and defensive: anything
+# not listed here (an HTTP type HubSpot adds later, or an empty string when
+# the property has none) falls back to "string" -- always a safe, always-
+# valid guess the user can fix by hand, never a crash.
+_HUBSPOT_TYPE_TO_MANUAL = {
+    "string": "string",
+    "number": "double",
+    "date": "dateTime",
+    "datetime": "dateTime",
+    "enumeration": "string",
+    "bool": "boolean",
+    "phone_number": "string",
+    "json": "string",
+}
+
+
+def suggest_manual_columns(item_id: str) -> List[Dict[str, str]]:
+    """Best-effort starting point for a manual semantic model's column list
+    -- [{"name": ..., "data_type": ...}, ...], sourced from whatever each
+    system already exposes about a table's fields, with NO new live call to
+    Fabric (Lakehouse tables never reach this function -- they auto-detect
+    their own real columns instead, see create_semantic_model()). Always
+    just a suggestion: the manual column builder is still fully editable
+    afterward, and this never fails loudly for "nothing to suggest" --
+    only for a genuine HubSpot API error, so a misconfigured integration is
+    visible instead of silently producing an empty list.
+
+    - HubSpot: a real live call (HubspotClient.list_properties) -- HubSpot's
+      properties API returns both name AND type, so this is the one system
+      here that can suggest real types, not just names. See
+      _HUBSPOT_TYPE_TO_MANUAL above for the mapping and its fallback.
+    - Factorial: names only, from factorial_tables.yaml's own `fields` list
+      (already there for extraction, no live call). data_type always
+      "string" -- NOTE for future extension: Factorial's API may or may not
+      expose per-field types of its own; nothing in this codebase reads its
+      schema today, so this is a real place to improve on if that turns out
+      to be available.
+    - Business Central: names only, best-effort from the last full
+      extraction's CSV header (table_configs.bc_table_fields) -- empty
+      before the table's ever been extracted. data_type always "string" --
+      NOTE for future extension: BC's OData $metadata endpoint has real EDM
+      types (Edm.String/Edm.Decimal/Edm.DateTimeOffset/...) but nothing in
+      this codebase calls it anywhere; wiring it up would let BC suggest
+      real types too, the same way HubSpot already does.
+    - Anything else (a plain Fabric item, a Lakehouse table, a custom
+      block): [] -- there's no source table to suggest from.
+    """
+    if item_id.startswith(HUBSPOT_ID_PREFIX):
+        table_name = item_id[len(HUBSPOT_ID_PREFIX) :]
+        table = next((t for t in table_configs.list_hubspot_tables_full() if t.get("name") == table_name), None)
+        if table is None:
+            return []
+        wanted = set(table.get("fields", []))
+        if not wanted:
+            return []
+
+        from src.hubspot_client.api import HubspotClient
+        from src.hubspot_client.config import load_settings as load_hubspot_settings
+
+        hubspot_client = HubspotClient(settings=load_hubspot_settings())
+        properties = hubspot_client.list_properties(table.get("object_type", ""), include_hidden=True)
+        by_name = {p["name"]: p for p in properties}
+        return [
+            {"name": name, "data_type": _HUBSPOT_TYPE_TO_MANUAL.get(by_name[name]["type"], "string")}
+            if name in by_name
+            else {"name": name, "data_type": "string"}
+            for name in sorted(wanted)
+        ]
+
+    if item_id.startswith(FACTORIAL_ID_PREFIX):
+        table_name = item_id[len(FACTORIAL_ID_PREFIX) :]
+        table = next((t for t in table_configs.list_factorial_tables_full() if t.get("name") == table_name), None)
+        if table is None:
+            return []
+        return [{"name": f, "data_type": "string"} for f in table.get("fields", [])]
+
+    if item_id.startswith(BC_ID_PREFIX):
+        table_name = item_id[len(BC_ID_PREFIX) :]
+        return [{"name": f, "data_type": "string"} for f in table_configs.bc_table_fields(table_name)]
+
+    return []
+
+
 def create_semantic_model(
     client: Any,
     item_id: str,

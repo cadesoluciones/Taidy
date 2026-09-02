@@ -45,10 +45,16 @@ class _FakeReadSession:
 
 _SAMPLE_PAYLOAD = {
     "results": [
-        {"name": "email", "label": "Email", "hidden": False, "calculated": False},
-        {"name": "firstname", "label": "First Name", "hidden": False, "calculated": False},
-        {"name": "hs_object_id", "label": "Record ID", "hidden": True, "calculated": False},
-        {"name": "hs_lifecyclestage_marketingqualifiedlead_date", "label": "MQL date", "hidden": False, "calculated": True},
+        {"name": "email", "label": "Email", "hidden": False, "calculated": False, "type": "string"},
+        {"name": "firstname", "label": "First Name", "hidden": False, "calculated": False, "type": "string"},
+        {"name": "hs_object_id", "label": "Record ID", "hidden": True, "calculated": False, "type": "number"},
+        {
+            "name": "hs_lifecyclestage_marketingqualifiedlead_date",
+            "label": "MQL date",
+            "hidden": False,
+            "calculated": True,
+            "type": "datetime",
+        },
     ]
 }
 
@@ -98,6 +104,24 @@ def test_list_properties_carries_the_label():
 
     by_name = {p["name"]: p["label"] for p in props}
     assert by_name["email"] == "Email"
+
+
+def test_list_properties_carries_hubspots_own_type():
+    client = HubspotClient(settings=_settings(), session=_FakeReadSession(_SAMPLE_PAYLOAD))
+
+    props = client.list_properties("contacts")
+
+    by_name = {p["name"]: p["type"] for p in props}
+    assert by_name["email"] == "string"
+
+
+def test_list_properties_type_defaults_to_empty_string_when_missing():
+    payload = {"results": [{"name": "custom_field", "label": "Custom"}]}
+    client = HubspotClient(settings=_settings(), session=_FakeReadSession(payload))
+
+    props = client.list_properties("contacts")
+
+    assert props[0]["type"] == ""
 
 
 # --------------------------------------------------------------------------------------

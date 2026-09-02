@@ -180,6 +180,15 @@ class SetManualSemanticModelColumnsRequest(BaseModel):
     columns: List[ManualColumnIn]
 
 
+class SuggestedColumnOut(BaseModel):
+    name: str
+    data_type: str  # "string" unless the source system exposes a real type -- see suggest_manual_columns()
+
+
+class SuggestedColumnsOut(BaseModel):
+    columns: List[SuggestedColumnOut]
+
+
 class TypeIconsOut(BaseModel):
     icons: Dict[str, str]
 

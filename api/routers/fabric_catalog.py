@@ -38,6 +38,8 @@ from ..schemas.fabric_catalog import (
     SetHiddenRequest,
     SetManualSemanticModelColumnsRequest,
     SetTypeIconRequest,
+    SuggestedColumnOut,
+    SuggestedColumnsOut,
     TablePreviewOut,
     TypeIconsOut,
     UpdateFabricCatalogItemOut,
@@ -201,6 +203,24 @@ def preview_table(item_id: str) -> TablePreviewOut:
     except FabricPipelineError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
     return TablePreviewOut(**result)
+
+
+@router.get("/items/{item_id}/suggested-columns", response_model=SuggestedColumnsOut)
+def suggested_columns(item_id: str) -> SuggestedColumnsOut:
+    """Best-effort starting point for a manual semantic model's column
+    builder -- see fabric_catalog.suggest_manual_columns() for exactly what
+    each system (HubSpot/Factorial/BC) can offer; [] for anything else
+    (nothing to suggest). 400 for a HubSpot configuration problem (e.g.
+    missing credentials); 502 if the live HubSpot call itself fails."""
+    from src.hubspot_client.api import HubspotError
+
+    try:
+        columns = fabric_catalog.suggest_manual_columns(item_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except HubspotError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    return SuggestedColumnsOut(columns=[SuggestedColumnOut(**c) for c in columns])
 
 
 @router.get("/items/{item_id}/semantic-model", response_model=SemanticModelStateOut)
