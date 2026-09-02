@@ -625,10 +625,25 @@
   padding: 0;
 }
 
+/* The relationships canvas is the last field in .generalColumn, and (like
+   .longDescBody/.mdTextarea on the other side, see the comment there) the
+   one meant to grow into whatever extra height .detailCard's min-height
+   adds -- otherwise it stays boxed at a fixed 200px, leaving the same kind
+   of wasted blank space below it that the description textarea used to
+   have. min-height keeps it from the previous fixed look on a short card. */
+.relationshipsField {
+  flex: 1;
+  min-height: 200px;
+}
+
 .diagramWrap {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 /* The description column stretches to match the general-fields column's

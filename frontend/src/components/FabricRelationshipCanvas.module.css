@@ -1,7 +1,17 @@
+/* flex: 1 + min-height: 0 only ever matter when THIS component's own
+   parent is itself a flex container (a no-op otherwise) -- that's the
+   `fill` prop's case (see .canvas below and FabricCatalogManager's
+   .diagramWrap), where this is the missing link that was quietly
+   swallowing the whole chain: .diagramWrap really was flex:1 with a real
+   resolved height, but this wrapper sat between it and .canvas with no
+   flex-grow of its own, so .canvas's flex:1 had nothing to grow into and
+   rendered at ~2px -- confirmed live via getBoundingClientRect(). */
 .wrapper {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  flex: 1;
+  min-height: 0;
 }
 
 .toolbar {

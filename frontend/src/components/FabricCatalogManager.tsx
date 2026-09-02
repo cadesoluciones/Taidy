@@ -674,7 +674,7 @@ export function FabricCatalogManager() {
                     </div>
                   </div>
 
-                  <div className={formStyles.field}>
+                  <div className={`${formStyles.field} ${styles.relationshipsField}`}>
                     <div className={styles.detailHead}>
                       <label style={{ marginBottom: 0 }}>Relaciones</label>
                       {canEdit && (
@@ -693,7 +693,7 @@ export function FabricCatalogManager() {
                         centerId={selected.item_id}
                         canvasPositions={selected.canvas_positions}
                         interactive={false}
-                        height={200}
+                        fill
                         testId="fabric-catalog-relationship-preview"
                       />
                     </div>

@@ -269,6 +269,16 @@ interface FabricRelationshipCanvasProps {
   canvasPositions: Record<string, FabricCanvasPosition>;
   interactive: boolean;
   height?: number | string;
+  /** Grows to fill the parent's remaining height instead of using `height`
+   * -- the parent must itself be a flex container (display:flex) for this
+   * to have any effect. A plain CSS `height: 100%` on this component's own
+   * root div does NOT reliably resolve here even when the parent's own
+   * height is definite via flex-grow (confirmed live: it measured 2px,
+   * react-flow rendered nothing, not even the background dots) -- flex:1
+   * chained through an ancestor that's ALSO already resolved via flex-grow
+   * is the one that's actually reliable, so this stays inside that same
+   * mechanism instead of switching to percentages partway down. */
+  fill?: boolean;
   /** How many hops out from the center to gather (both directions), and
    * every relationship between two OTHER items that both land inside that
    * neighborhood -- not just edges touching the center. Defaults to 2 (the
@@ -294,6 +304,7 @@ export function FabricRelationshipCanvas({
   canvasPositions,
   interactive,
   height = 260,
+  fill = false,
   hops = 2,
   showControls,
   onAddRelationship,
@@ -484,7 +495,12 @@ export function FabricRelationshipCanvas({
           </button>
         </div>
       )}
-      <div ref={canvasContainerRef} className={styles.canvas} style={{ height }} data-testid={testId}>
+      <div
+        ref={canvasContainerRef}
+        className={styles.canvas}
+        style={fill ? { flex: 1, minHeight: 0 } : { height }}
+        data-testid={testId}
+      >
         <ReactFlow
           nodes={nodes}
           edges={edges}
