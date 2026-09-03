@@ -315,6 +315,7 @@ export function FabricRelationshipCanvas({
 }: FabricRelationshipCanvasProps) {
   const [extraNodeIds, setExtraNodeIds] = useState<string[]>([]);
   const [pendingConnection, setPendingConnection] = useState<{ source: string; target: string } | null>(null);
+  const [pendingRemoval, setPendingRemoval] = useState<EdgeInfo | null>(null);
   const [addPickerOpen, setAddPickerOpen] = useState(false);
   const [addSearch, setAddSearch] = useState("");
   const canvasContainerRef = useRef<HTMLDivElement>(null);
@@ -495,6 +496,28 @@ export function FabricRelationshipCanvas({
           </button>
         </div>
       )}
+      {pendingRemoval && (
+        <div className={styles.removePrompt}>
+          <span>
+            ¿Eliminar la relación <strong>{itemsById.get(pendingRemoval.ownerId)?.name ?? pendingRemoval.ownerId}</strong>{" "}
+            {RELATIONSHIP_LABELS[pendingRemoval.type].toLowerCase()}{" "}
+            <strong>{itemsById.get(pendingRemoval.targetId)?.name ?? pendingRemoval.targetId}</strong>?
+          </span>
+          <button
+            type="button"
+            className={styles.removeConfirm}
+            onClick={() => {
+              onRemoveRelationship?.(pendingRemoval.ownerId, pendingRemoval.type, pendingRemoval.targetId);
+              setPendingRemoval(null);
+            }}
+          >
+            Eliminar
+          </button>
+          <button type="button" className={styles.typeCancel} onClick={() => setPendingRemoval(null)}>
+            Cancelar
+          </button>
+        </div>
+      )}
       <div
         ref={canvasContainerRef}
         className={styles.canvas}
@@ -510,7 +533,7 @@ export function FabricRelationshipCanvas({
           onEdgeClick={(_e, edge) => {
             if (!interactive || !onRemoveRelationship) return;
             const info = edgeInfos.find((i) => i.id === edge.id);
-            if (info) onRemoveRelationship(info.ownerId, info.type, info.targetId);
+            if (info) setPendingRemoval(info);
           }}
           nodesDraggable={interactive}
           nodesConnectable={interactive}

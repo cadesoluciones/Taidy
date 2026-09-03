@@ -462,14 +462,17 @@ def _lakehouse_table_index(client: Any) -> Dict[Tuple[str, str], str]:
 
 def detect_relationships(client: Any, item_id: str) -> List[Dict[str, str]]:
     """Best-effort candidate relationships involving `item_id`, detected
-    from notebook code rather than drawn by hand -- reads_from/writes_to
-    edges are always declared on the notebook (the "owner"), which may or
-    may not be `item_id` itself (a table's own candidates are declared by
-    whichever notebook produces/consumes it). Never writes anything --
-    the caller still goes through add_relationship() to actually save one.
-    Only ever returns candidates NOT already saved, so a relationship
-    already edited by hand (or already applied from a previous detection)
-    never gets suggested again."""
+    from notebook code rather than drawn by hand. A writes_to edge is
+    declared on the notebook (the "owner") since its wording is active from
+    the notebook's own perspective; a reads_from edge is declared on the
+    table instead, since its wording ("Se lee en" / "is read at") is
+    passive from the table's perspective -- either way `item_id` itself
+    may end up as the owner or the target (a table's own candidates are
+    declared by whichever notebook produces/consumes it). Never writes
+    anything -- the caller still goes through add_relationship() to
+    actually save one. Only ever returns candidates NOT already saved, so a
+    relationship already edited by hand (or already applied from a
+    previous detection) never gets suggested again."""
     refs_by_notebook = _scan_notebook_table_refs(client)
     table_index = _lakehouse_table_index(client)
     notebooks_by_id = {i["id"]: i for i in client.list_items() if i.get("type") == "Notebook"}
@@ -482,24 +485,40 @@ def detect_relationships(client: Any, item_id: str) -> List[Dict[str, str]]:
             continue
         for rel_type, pairs in (("reads_from", refs.get("reads", [])), ("writes_to", refs.get("writes", []))):
             for schema, table in pairs:
-                target_id = table_index.get((schema, table))
-                if target_id is None:
+                table_id = table_index.get((schema, table))
+                if table_id is None:
                     continue
-                if notebook_id != item_id and target_id != item_id:
+                if notebook_id != item_id and table_id != item_id:
                     continue
+                # "writes_to" reads at face value from the notebook's own
+                # perspective ("this notebook writes to this table"), so the
+                # notebook is the owner. "reads_from" is worded passively
+                # from the OTHER side (RELATIONSHIP_LABELS: "Se lee en" =
+                # "is read at") -- the table being read is the owner, and
+                # the notebook that reads it is the target, matching how a
+                # hand-drawn reads_from relationship is stored. Getting this
+                # backwards silently inverted the up/downstream direction in
+                # the relationship canvas: the table rendered as if it
+                # consumed the notebook that actually produces/feeds it.
+                if rel_type == "reads_from":
+                    owner_id, owner_name = table_id, f"{schema}.{table}"
+                    target_id, target_name = notebook_id, notebook.get("displayName", "")
+                else:
+                    owner_id, owner_name = notebook_id, notebook.get("displayName", "")
+                    target_id, target_name = table_id, f"{schema}.{table}"
                 already_saved = any(
                     r.get("type") == rel_type and r.get("target_item_id") == target_id
-                    for r in metadata.get(notebook_id, {}).get("relationships", [])
+                    for r in metadata.get(owner_id, {}).get("relationships", [])
                 )
                 if already_saved:
                     continue
                 candidates.append(
                     {
-                        "owner_item_id": notebook_id,
-                        "owner_name": notebook.get("displayName", ""),
+                        "owner_item_id": owner_id,
+                        "owner_name": owner_name,
                         "type": rel_type,
                         "target_item_id": target_id,
-                        "target_name": f"{schema}.{table}",
+                        "target_name": target_name,
                     }
                 )
     return candidates

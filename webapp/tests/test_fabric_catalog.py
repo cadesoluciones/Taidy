@@ -1222,11 +1222,41 @@ def test_detect_relationships_for_a_notebook_finds_every_table_it_touches(isolat
 
     candidates = fabric_catalog.detect_relationships(client, "nb-silver")
 
-    assert {(c["type"], c["target_name"]) for c in candidates} == {
-        ("reads_from", "bronze.bc_job_planning_lines"),
-        ("reads_from", "silver.proyectos"),
-        ("writes_to", "silver.planificacion_ingresos"),
+    # reads_from candidates are owned by the TABLE being read (passive
+    # wording, "Se lee en" / "is read at"), with the notebook as their
+    # target -- the opposite of writes_to, whose active wording keeps the
+    # notebook as owner.
+    assert {(c["type"], c["owner_name"], c["target_name"]) for c in candidates} == {
+        ("reads_from", "bronze.bc_job_planning_lines", "silver_planificacion_ingresos"),
+        ("reads_from", "silver.proyectos", "silver_planificacion_ingresos"),
+        ("writes_to", "silver_planificacion_ingresos", "silver.planificacion_ingresos"),
     }
+
+
+def test_detect_relationships_reads_from_is_owned_by_the_table_being_read(isolated_state):
+    """Querying from the READ table's own side must return the reading
+    notebook as the target, not the owner -- the reverse of writes_to."""
+    client = _notebook_client(
+        [("nb-silver", "silver_planificacion_ingresos", _SILVER_NOTEBOOK_CONTENT)],
+        lakehouse_tables=[
+            {"schema": "bronze", "table": "bc_job_planning_lines"},
+            {"schema": "silver", "table": "proyectos"},
+            {"schema": "silver", "table": "planificacion_ingresos"},
+        ],
+    )
+    table_id = "lakehouse-table:lh-1:bronze.bc_job_planning_lines"
+
+    candidates = fabric_catalog.detect_relationships(client, table_id)
+
+    assert candidates == [
+        {
+            "owner_item_id": table_id,
+            "owner_name": "bronze.bc_job_planning_lines",
+            "type": "reads_from",
+            "target_item_id": "nb-silver",
+            "target_name": "silver_planificacion_ingresos",
+        }
+    ]
 
 
 def test_detect_relationships_skips_a_reference_to_a_table_outside_the_catalog(isolated_state):
