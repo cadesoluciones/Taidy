@@ -285,6 +285,24 @@
   font-weight: 600;
 }
 
+/* Rail-collapsed only -- see railAccentColor() in NavShell.tsx for why this
+   exists (Business Central/Factorial/HubSpot's icons are otherwise
+   identical once the rail hides their section labels). */
+.railIconWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.railAccentDot {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1px solid var(--color-bg);
+}
+
 .content {
   grid-area: content;
   padding: var(--space-5);

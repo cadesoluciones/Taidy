@@ -215,6 +215,54 @@ function breadcrumbFor(sections: NavSection[], pathname: string): string {
   return "Panel de datos";
 }
 
+// Business Central/Factorial/HubSpot (and whatever gets added later) each
+// have their own "Extraer"/"Subir"/"Sync" items sharing the exact same
+// Download/Upload/RefreshCw icons -- with the rail collapsed to icons only,
+// those three sections become 9 indistinguishable icons in a row. Every
+// OTHER section (Actividad, Administración, ...) already has icons that
+// don't repeat anywhere else, so they don't have this problem at all --
+// tried giving every rail icon a colored dot first and confirmed live that
+// was actively worse: with only a handful of hues and a dozen sections,
+// sections that never needed a dot collided with each other anyway, adding
+// noise for no benefit. Only icons an actual OTHER section also uses get
+// a dot now, computed from the live section list so it never needs a
+// per-system allowlist -- a brand new integration automatically gets one
+// the moment it reuses Extraer/Subir/Sync (or any other icon that turns
+// out to collide), and nothing changes for sections that don't.
+function ambiguousRailIcons(sections: NavSection[]): Set<LucideIcon> {
+  const sectionsByIcon = new Map<LucideIcon, Set<string>>();
+  for (const section of sections) {
+    for (const item of section.items) {
+      if (!sectionsByIcon.has(item.icon)) sectionsByIcon.set(item.icon, new Set());
+      sectionsByIcon.get(item.icon)!.add(section.label);
+    }
+  }
+  const ambiguous = new Set<LucideIcon>();
+  for (const [icon, labels] of sectionsByIcon) {
+    if (labels.size > 1) ambiguous.add(icon);
+  }
+  return ambiguous;
+}
+
+// Hashed from the section's own label (not its position in the array) so a
+// reorder, or a brand new section inserted earlier, never reassigns an
+// existing system's color -- it just lands on whichever hue its own name
+// already hashes to. Spread around the wheel avoiding red (already
+// --color-danger) and the app's own teal/blue primary+info hues (~185-210)
+// so the accent never reads as "active" or "error". Mid saturation/
+// lightness reads reasonably on both the light and dark theme without
+// needing separate values per theme.
+const RAIL_ACCENT_HUES = [40, 75, 110, 145, 260, 300, 330];
+
+function railAccentColor(label: string): string {
+  let hash = 0;
+  for (let i = 0; i < label.length; i++) {
+    hash = (hash * 31 + label.charCodeAt(i)) | 0;
+  }
+  const hue = RAIL_ACCENT_HUES[Math.abs(hash) % RAIL_ACCENT_HUES.length];
+  return `hsl(${hue} 65% 45%)`;
+}
+
 export function NavShell() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -287,6 +335,7 @@ export function NavShell() {
     ACCOUNT_SECTION,
   ];
   const breadcrumb = breadcrumbFor(sections, location.pathname);
+  const ambiguousIcons = ambiguousRailIcons(sections);
 
   return (
     <div className={`${styles.shell} ${railCollapsed ? styles.shellRailCollapsed : ""}`}>
@@ -357,20 +406,27 @@ export function NavShell() {
           {railCollapsed ? <ChevronsRight size={15} /> : <ChevronsLeft size={15} />}
         </button>
         {railCollapsed
-          ? sections.flatMap((section) =>
-              section.items.map((item) => (
+          ? sections.flatMap((section) => {
+              const title = section.label ? `${section.label} · ` : "";
+              const accentColor = railAccentColor(section.label);
+              return section.items.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}
                   end
                   className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ""}`}
-                  title={item.label}
-                  aria-label={item.label}
+                  title={`${title}${item.label}`}
+                  aria-label={`${title}${item.label}`}
                 >
-                  <item.icon size={16} aria-hidden="true" />
+                  <span className={styles.railIconWrap}>
+                    <item.icon size={16} aria-hidden="true" />
+                    {ambiguousIcons.has(item.icon) && (
+                      <span className={styles.railAccentDot} style={{ background: accentColor }} aria-hidden="true" />
+                    )}
+                  </span>
                 </NavLink>
-              )),
-            )
+              ));
+            })
           : sections.map((section) => {
               const collapsible = section.items.length > 1;
               const isCollapsed = collapsible && collapsedSections.has(section.label);
