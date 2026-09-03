@@ -1312,6 +1312,18 @@ def test_detect_relationships_a_notebook_whose_definition_fails_contributes_noth
     assert fabric_catalog.detect_relationships(client, "nb-bronze") == []
 
 
+def test_get_notebook_content_returns_the_decoded_source(isolated_state):
+    client = _notebook_client([("nb-bronze", "bronze_bc_customer_list", _BRONZE_NOTEBOOK_CONTENT)])
+    assert fabric_catalog.get_notebook_content(client, "nb-bronze") == _BRONZE_NOTEBOOK_CONTENT
+
+
+def test_get_notebook_content_rejects_an_item_with_no_notebook_part(isolated_state):
+    client = _notebook_client([])
+    client._model_definitions["pl-1"] = [{"path": "pipeline-content.json", "payload": "e30="}]
+    with pytest.raises(ValueError, match="notebook"):
+        fabric_catalog.get_notebook_content(client, "pl-1")
+
+
 def test_set_metadata_rejects_an_unknown_relationship_type(isolated_state):
     with pytest.raises(ValueError, match="relación"):
         _set("nb-1", relationships=[{"type": "deletes", "target_item_id": "x"}])

@@ -152,6 +152,10 @@ class TablePreviewOut(BaseModel):
     rows: List[List[str]]
 
 
+class NotebookContentOut(BaseModel):
+    content: str
+
+
 class SemanticModelColumnOut(BaseModel):
     name: str
     description: str = ""

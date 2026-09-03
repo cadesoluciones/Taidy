@@ -529,6 +529,37 @@ def test_reader_cannot_fetch_detected_relationships(isolated_state, client, monk
     assert resp.status_code == 403
 
 
+def test_operator_can_read_a_notebooks_content(isolated_state, client, monkeypatch):
+    fake = _use_fake_fabric_client(monkeypatch)
+    fake._model_definitions["nb-1"] = [
+        {"path": "notebook-content.py", "payload": base64.b64encode(_BRONZE_NOTEBOOK_CONTENT.encode()).decode()}
+    ]
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.get("/fabric-catalog/items/nb-1/notebook-content")
+    assert resp.status_code == 200
+    assert resp.json()["content"] == _BRONZE_NOTEBOOK_CONTENT
+
+
+def test_notebook_content_400s_for_an_item_with_no_notebook_part(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    resp = client.get("/fabric-catalog/items/pl-1/notebook-content")
+    assert resp.status_code == 400
+
+
+def test_reader_cannot_read_a_notebooks_content(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+
+    resp = client.get("/fabric-catalog/items/nb-1/notebook-content")
+    assert resp.status_code == 403
+
+
 def test_set_favorite_and_hidden_endpoints(isolated_state, client, monkeypatch):
     _use_fake_fabric_client(monkeypatch)
     make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)

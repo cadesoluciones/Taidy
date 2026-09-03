@@ -35,6 +35,7 @@ from ..schemas.fabric_catalog import (
     FabricCatalogListOut,
     FabricCatalogItemOut,
     FlagOut,
+    NotebookContentOut,
     SemanticModelStateOut,
     SetCatalogManifestRequest,
     SetCanvasPositionsRequest,
@@ -186,6 +187,21 @@ def get_detected_relationships(item_id: str) -> DetectedRelationshipsOut:
     except FabricPipelineError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
     return DetectedRelationshipsOut(candidates=[DetectedRelationshipOut(**c) for c in candidates])
+
+
+@router.get("/items/{item_id}/notebook-content", response_model=NotebookContentOut)
+def get_notebook_content(item_id: str) -> NotebookContentOut:
+    """This Notebook's own Python source, straight from Fabric's
+    get_definition() -- read-only, there's no way to edit it from here.
+    400 for anything that isn't a real notebook definition; 502 if Fabric
+    can't be reached right now."""
+    try:
+        content = fabric_catalog.get_notebook_content(_client(), item_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except FabricPipelineError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    return NotebookContentOut(content=content)
 
 
 @router.put("/items/{item_id}/canvas-positions", response_model=CanvasPositionsOut)

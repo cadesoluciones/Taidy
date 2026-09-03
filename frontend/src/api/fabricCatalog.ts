@@ -272,6 +272,15 @@ export function setCatalogManifest(
   });
 }
 
+/** A Notebook's own Python source, straight from Fabric's get_definition()
+ * -- read-only, there's no editing path here. Notebooks only (400 for
+ * anything else). Can take a while: same get_definition() long-running-
+ * operation cost already documented for semantic models/relationship
+ * detection (~15-20s). */
+export function fetchNotebookContent(itemId: string): Promise<{ content: string }> {
+  return apiGet(`/fabric-catalog/items/${encodeURIComponent(itemId)}/notebook-content`);
+}
+
 /** Creates a new semantic model for this item. For a real Lakehouse table,
  * columns are auto-detected from its schema and itemName/columns are
  * ignored. Otherwise it's a manual data dictionary -- itemName and at

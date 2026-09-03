@@ -524,6 +524,21 @@ def detect_relationships(client: Any, item_id: str) -> List[Dict[str, str]]:
     return candidates
 
 
+def get_notebook_content(client: Any, item_id: str) -> str:
+    """Decoded Python source of a single Notebook's own definition -- the
+    same `get_definition()` call and "notebook-content.py" part that
+    _scan_notebook_table_refs() already reads when scanning every notebook
+    at once, just for one on demand. Read-only: there's no way to edit a
+    notebook's code from here. Raises ValueError for anything that isn't a
+    real notebook definition (wrong item type, or no code part at all)."""
+    defn = client.get_definition(item_id)
+    parts = defn.get("definition", {}).get("parts", [])
+    content_part = next((p for p in parts if p.get("path") == "notebook-content.py"), None)
+    if content_part is None:
+        raise ValueError("Este elemento no tiene contenido de notebook.")
+    return base64.b64decode(content_part["payload"]).decode("utf-8", errors="replace")
+
+
 def delete_metadata(item_id: str) -> None:
     """Not exposed via the API today (items are never deleted through this
     module, only through the upstream system itself) -- kept for

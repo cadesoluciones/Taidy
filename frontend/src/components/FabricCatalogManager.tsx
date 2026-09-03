@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { Eye, EyeOff, Palette, Printer, Star, Table2, Trash2, WifiOff, X } from "lucide-react";
+import { Check, Copy, Eye, EyeOff, Palette, Printer, Star, Table2, Trash2, WifiOff, X } from "lucide-react";
 
 import { ROLE_ADMIN, ROLE_OPERATOR } from "../api/auth";
 import { ApiError } from "../api/client";
@@ -36,6 +36,7 @@ import { DATA_ROLE_INFO } from "../utils/dataRoles";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { FabricCatalogBrowser } from "./FabricCatalogBrowser";
 import { FabricCatalogManifestSection } from "./FabricCatalogManifestSection";
+import { FabricNotebookContentSection } from "./FabricNotebookContentSection";
 import { FabricRelationshipCanvas, RELATIONSHIP_LABELS } from "./FabricRelationshipCanvas";
 import { FabricSemanticModelSection } from "./FabricSemanticModelSection";
 import { FreeTagInput } from "./FreeTagInput";
@@ -80,7 +81,7 @@ export function FabricCatalogManager() {
   const [shortDescriptionDraft, setShortDescriptionDraft] = useState("");
   const [longDescriptionDraft, setLongDescriptionDraft] = useState("");
   const [longDescriptionView, setLongDescriptionView] = useState<"editar" | "vista previa">("editar");
-  const [detailTab, setDetailTab] = useState<"descripcion" | "modelo" | "catalogo">("descripcion");
+  const [detailTab, setDetailTab] = useState<"descripcion" | "modelo" | "catalogo" | "contenido">("descripcion");
   // Tracks whether the semantic-model/catalog-manifest tabs have each been
   // opened at least once for the CURRENTLY selected item -- once true, the
   // corresponding section stays mounted (just CSS-hidden) across further
@@ -92,6 +93,7 @@ export function FabricCatalogManager() {
   // stale data left over from mounting once.
   const [hasOpenedModeloTab, setHasOpenedModeloTab] = useState(false);
   const [hasOpenedCatalogoTab, setHasOpenedCatalogoTab] = useState(false);
+  const [hasOpenedContenidoTab, setHasOpenedContenidoTab] = useState(false);
   const [roleDrafts, setRoleDrafts] = useState<Record<DataRoleField, string[]>>(EMPTY_ROLE_DRAFTS);
   const [criticalityDraft, setCriticalityDraft] = useState<FabricCriticality>("");
   const [statusDraft, setStatusDraft] = useState<FabricStatus>("");
@@ -117,6 +119,7 @@ export function FabricCatalogManager() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewData, setPreviewData] = useState<FabricTablePreview | null>(null);
+  const [previewCopied, setPreviewCopied] = useState(false);
 
   const [customFormOpen, setCustomFormOpen] = useState(false);
   const [customName, setCustomName] = useState("");
@@ -168,6 +171,7 @@ export function FabricCatalogManager() {
     setDetailTab("descripcion");
     setHasOpenedModeloTab(false);
     setHasOpenedCatalogoTab(false);
+    setHasOpenedContenidoTab(false);
     setRoleDrafts({
       data_owner: selected?.data_owner ?? [],
       data_steward: selected?.data_steward ?? [],
@@ -310,6 +314,7 @@ export function FabricCatalogManager() {
     setPreviewLoading(true);
     setPreviewError(null);
     setPreviewData(null);
+    setPreviewCopied(false);
     try {
       const result = await fetchFabricTablePreview(targetId);
       setPreviewData(result);
@@ -317,6 +322,21 @@ export function FabricCatalogManager() {
       setPreviewError(err instanceof ApiError ? err.message : "No se pudo previsualizar la tabla.");
     } finally {
       setPreviewLoading(false);
+    }
+  }
+
+  // Tab-separated so a paste into Excel/Sheets lands one value per cell
+  // instead of the whole table in cell A1 -- the same shape those apps
+  // themselves use for "copy as table".
+  async function handleCopyPreview() {
+    if (!previewData) return;
+    const lines = [previewData.columns, ...previewData.rows].map((row) => row.join("\t"));
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      setPreviewCopied(true);
+      setTimeout(() => setPreviewCopied(false), 1500);
+    } catch {
+      setPreviewError("No se pudo copiar al portapapeles (permiso denegado por el navegador).");
     }
   }
 
@@ -755,16 +775,22 @@ export function FabricCatalogManager() {
                       >
                         Descripción detallada
                       </button>
-                      <button
-                        type="button"
-                        className={detailTab === "modelo" ? styles.detailTabActive : styles.detailTab}
-                        onClick={() => {
-                          setDetailTab("modelo");
-                          setHasOpenedModeloTab(true);
-                        }}
-                      >
-                        Modelo semántico
-                      </button>
+                      {/* Only a Lakehouse table has real columns/rows for a semantic
+                          model to describe -- a Notebook, Pipeline, Report... has
+                          nothing meaningful to show here, so the tab itself hides
+                          instead of opening onto an empty/nonsensical section. */}
+                      {selected.item_id.startsWith(LAKEHOUSE_TABLE_ID_PREFIX) && (
+                        <button
+                          type="button"
+                          className={detailTab === "modelo" ? styles.detailTabActive : styles.detailTab}
+                          onClick={() => {
+                            setDetailTab("modelo");
+                            setHasOpenedModeloTab(true);
+                          }}
+                        >
+                          Modelo semántico
+                        </button>
+                      )}
                       {selected.item_id.startsWith(LAKEHOUSE_TABLE_ID_PREFIX) && (
                         <button
                           type="button"
@@ -775,6 +801,18 @@ export function FabricCatalogManager() {
                           }}
                         >
                           Catálogo
+                        </button>
+                      )}
+                      {selected.type === "Notebook" && (
+                        <button
+                          type="button"
+                          className={detailTab === "contenido" ? styles.detailTabActive : styles.detailTab}
+                          onClick={() => {
+                            setDetailTab("contenido");
+                            setHasOpenedContenidoTab(true);
+                          }}
+                        >
+                          Contenido
                         </button>
                       )}
                     </div>
@@ -847,6 +885,17 @@ export function FabricCatalogManager() {
                       <FabricCatalogManifestSection
                         itemId={selected.item_id}
                         canEdit={canEdit}
+                        offline={selected.connection_status === "offline"}
+                      />
+                    </div>
+                  )}
+
+                  {/* Same mount-once-then-hide pattern as Modelo semántico/Catálogo
+                      above. Only reachable for a Notebook (see the tab button itself). */}
+                  {hasOpenedContenidoTab && (
+                    <div hidden={detailTab !== "contenido"}>
+                      <FabricNotebookContentSection
+                        itemId={selected.item_id}
                         offline={selected.connection_status === "offline"}
                       />
                     </div>
@@ -949,6 +998,10 @@ export function FabricCatalogManager() {
                 {previewError && <div className={formStyles.errorBanner}>{previewError}</div>}
                 {previewData && (
                   <div className={styles.previewTableWrap}>
+                    <button type="button" className={styles.previewCopyButton} onClick={() => void handleCopyPreview()}>
+                      {previewCopied ? <Check size={13} /> : <Copy size={13} />}
+                      {previewCopied ? "Copiado" : "Copiar al portapapeles"}
+                    </button>
                     <table className={styles.previewTable}>
                       <thead>
                         <tr>
