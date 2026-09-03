@@ -62,6 +62,37 @@ function subGroupKey(topKey: string, subKey: string): string {
   return `${topKey} :: ${subKey}`;
 }
 
+const UNTAGGED_KEY = "Sin grupo";
+
+/** The "Mis grupos" view: reuses each item's existing free-text `tags`
+ * (already multi-value, already editable from the item's own detail
+ * form -- see TagMultiSelect/FreeTagInput) as user-defined groups, instead
+ * of introducing a second, parallel grouping concept. Unlike folder_path
+ * (one home per item), a tag is many-to-many -- an item with two tags
+ * shows up under both, on purpose. Flat (no sub-groups): tags don't nest
+ * the way folder paths do, so every group's items sit directly under it. */
+function groupByTags(items: FabricCatalogItem[]): TopGroup[] {
+  const byTag = new Map<string, FabricCatalogItem[]>();
+  const untagged: FabricCatalogItem[] = [];
+  for (const item of items) {
+    if (item.tags.length === 0) {
+      untagged.push(item);
+      continue;
+    }
+    for (const tag of item.tags) {
+      if (!byTag.has(tag)) byTag.set(tag, []);
+      byTag.get(tag)!.push(item);
+    }
+  }
+  const groups: TopGroup[] = Array.from(byTag.entries())
+    .map(([tag, tagItems]) => ({ key: tag, subGroups: [[ROOT_SUBKEY, tagItems]] as [string, FabricCatalogItem[]][] }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+  if (untagged.length > 0) {
+    groups.push({ key: UNTAGGED_KEY, subGroups: [[ROOT_SUBKEY, untagged]] });
+  }
+  return groups;
+}
+
 interface FabricCatalogBrowserProps {
   items: FabricCatalogItem[];
   selectedId: string | null;
@@ -100,6 +131,7 @@ export function FabricCatalogBrowser({
   const [search, setSearch] = useState("");
   const [showHidden, setShowHidden] = useState(false);
   const [activeTypes, setActiveTypes] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<"sistema" | "grupos">("sistema");
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const hasAutoCollapsedRef = useRef(false);
 
@@ -137,11 +169,11 @@ export function FabricCatalogBrowser({
 
   const grouped = useMemo(() => {
     const favorites = filteredItems.filter((i) => i.is_favorite);
-    const rest = groupByTopAndRest(filteredItems);
+    const rest = viewMode === "grupos" ? groupByTags(filteredItems) : groupByTopAndRest(filteredItems);
     if (favorites.length === 0) return rest;
     const favoriteGroup: TopGroup = { key: FAVORITES_KEY, subGroups: [[ROOT_SUBKEY, favorites]] };
     return [favoriteGroup, ...rest];
-  }, [filteredItems]);
+  }, [filteredItems, viewMode]);
 
   // First load only: start every group (top-level AND nested sub-groups)
   // collapsed so the sidebar opens short instead of dumping every item at
@@ -289,6 +321,30 @@ export function FabricCatalogBrowser({
             );
           })}
         </div>
+      )}
+
+      <div className={styles.viewModeRow}>
+        <button
+          type="button"
+          className={viewMode === "sistema" ? styles.viewModeButtonActive : styles.viewModeButton}
+          onClick={() => setViewMode("sistema")}
+          title="Agrupar por sistema y carpeta de origen"
+        >
+          Por sistema
+        </button>
+        <button
+          type="button"
+          className={viewMode === "grupos" ? styles.viewModeButtonActive : styles.viewModeButton}
+          onClick={() => setViewMode("grupos")}
+          title="Agrupar por las etiquetas de cada bloque -- añade etiquetas desde su ficha para crear tus propios grupos"
+        >
+          Mis grupos
+        </button>
+      </div>
+      {viewMode === "grupos" && (
+        <p className={formStyles.hint}>
+          Los grupos son las etiquetas de cada bloque -- añádelas desde su ficha para organizarlos a tu manera.
+        </p>
       )}
 
       {actionError && <div className={formStyles.errorBanner}>{actionError}</div>}

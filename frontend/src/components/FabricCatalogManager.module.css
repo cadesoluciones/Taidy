@@ -72,6 +72,36 @@
   font-weight: 700;
 }
 
+/* Segmented toggle between the fixed system/folder view and the
+   tag-based "Mis grupos" view -- see groupByTags() in
+   FabricCatalogBrowser.tsx for why tags (already a free-text, multi-value
+   field on every item) double as user-defined groups instead of a new
+   backend concept. */
+.viewModeRow {
+  display: flex;
+  gap: 4px;
+  margin-top: var(--space-2);
+}
+
+.viewModeButton,
+.viewModeButtonActive {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.viewModeButtonActive {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-bg));
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
 /* Side-by-side: the item list on the left, the selected item's detail
    panel on the right -- collapses to a single column on narrow viewports,
    where a side-by-side layout would squeeze both into uselessness. The
