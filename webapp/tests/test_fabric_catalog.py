@@ -1383,6 +1383,45 @@ def test_detect_relationships_use_cache_bootstraps_and_saves_on_first_use(isolat
     assert fabric_catalog.get_notebook_scan_cache_status()["cached"] is True
 
 
+def test_detect_relationships_use_cache_ignores_a_partial_cache_from_a_content_lookup(isolated_state):
+    """Regression: opening a notebook's "Contenido" tab lazily merges just
+    THAT one notebook into the cache file via get_notebook_content_cached()
+    -- confirmed live that, before is_full existed, a subsequent
+    use_cache=True detection saw the cache file "exists" and trusted it as
+    complete, silently never finding candidates from any OTHER notebook
+    the workspace has. A partial cache must still trigger a full scan."""
+    client = _notebook_client(
+        [
+            ("nb-bronze", "bronze_bc_customer_list", _BRONZE_NOTEBOOK_CONTENT),
+            ("nb-silver", "silver_planificacion_ingresos", _SILVER_NOTEBOOK_CONTENT),
+        ],
+        lakehouse_tables=[
+            {"schema": "bronze", "table": "bc_customer_list"},
+            {"schema": "bronze", "table": "bc_job_planning_lines"},
+            {"schema": "silver", "table": "proyectos"},
+            {"schema": "silver", "table": "planificacion_ingresos"},
+        ],
+    )
+    # Someone opens nb-bronze's "Contenido" tab first -- nothing was ever
+    # cached yet, so this creates a PARTIAL, non-full cache with only
+    # nb-bronze in it.
+    fabric_catalog.get_notebook_content_cached(client, "nb-bronze")
+    assert fabric_catalog.get_notebook_scan_cache_status() == {"cached": False, "cached_at": ""}
+
+    # nb-silver's own candidates must still be found -- not silently
+    # missing because it wasn't in that partial cache. (reads_from's owner
+    # is the table being read, not nb-silver -- see the direction fix
+    # elsewhere; only writes_to's target_name is the table here.)
+    candidates = fabric_catalog.detect_relationships(client, "nb-silver", use_cache=True)
+
+    assert {(c["type"], c["owner_name"], c["target_name"]) for c in candidates} == {
+        ("reads_from", "bronze.bc_job_planning_lines", "silver_planificacion_ingresos"),
+        ("reads_from", "silver.proyectos", "silver_planificacion_ingresos"),
+        ("writes_to", "silver_planificacion_ingresos", "silver.planificacion_ingresos"),
+    }
+    assert fabric_catalog.get_notebook_scan_cache_status()["cached"] is True
+
+
 def test_get_notebook_content_returns_the_decoded_source(isolated_state):
     client = _notebook_client([("nb-bronze", "bronze_bc_customer_list", _BRONZE_NOTEBOOK_CONTENT)])
     assert fabric_catalog.get_notebook_content(client, "nb-bronze") == _BRONZE_NOTEBOOK_CONTENT
@@ -1393,6 +1432,60 @@ def test_get_notebook_content_rejects_an_item_with_no_notebook_part(isolated_sta
     client._model_definitions["pl-1"] = [{"path": "pipeline-content.json", "payload": "e30="}]
     with pytest.raises(ValueError, match="notebook"):
         fabric_catalog.get_notebook_content(client, "pl-1")
+
+
+def test_get_notebook_content_cached_reads_from_the_scan_cache(isolated_state):
+    """A cache built by refresh_notebook_scan_cache() must serve a
+    notebook's content instantly, without another live get_definition()
+    call -- confirmed here by having the live client return something
+    ELSE afterward and asserting the cached copy still wins."""
+    client = _notebook_client([("nb-bronze", "bronze_bc_customer_list", _BRONZE_NOTEBOOK_CONTENT)])
+    fabric_catalog.refresh_notebook_scan_cache(client)
+
+    client._model_definitions["nb-bronze"] = [
+        {"path": "notebook-content.py", "payload": base64.b64encode(b"# changed live\n").decode("ascii")}
+    ]
+
+    assert fabric_catalog.get_notebook_content_cached(client, "nb-bronze") == _BRONZE_NOTEBOOK_CONTENT
+
+
+def test_get_notebook_content_cached_bootstraps_a_single_miss_without_a_full_rescan(isolated_state):
+    """A notebook cache with OTHER entries but not this one (e.g. created
+    after the last refresh) falls back to a live fetch of just this one
+    notebook, merging it in -- not a full rescan, and not an error."""
+    client = _notebook_client(
+        [
+            ("nb-bronze", "bronze_bc_customer_list", _BRONZE_NOTEBOOK_CONTENT),
+            ("nb-new", "brand_new_notebook", "write_df_to_lakehouse(df, p, 'gold', 'new_table')\n"),
+        ]
+    )
+    # Cache built before nb-new existed -- only nb-bronze is in it.
+    only_bronze_client = _notebook_client([("nb-bronze", "bronze_bc_customer_list", _BRONZE_NOTEBOOK_CONTENT)])
+    fabric_catalog.refresh_notebook_scan_cache(only_bronze_client)
+
+    content = fabric_catalog.get_notebook_content_cached(client, "nb-new")
+
+    assert content == "write_df_to_lakehouse(df, p, 'gold', 'new_table')\n"
+    # Merged into the cache, alongside the untouched nb-bronze entry --
+    # not a full rescan/overwrite that would have dropped it.
+    cached = fabric_catalog._load_notebook_scan_cache()
+    assert set(cached[0].keys()) == {"nb-bronze", "nb-new"}
+    assert cached[0]["nb-bronze"]["content"] == _BRONZE_NOTEBOOK_CONTENT
+
+
+def test_get_notebook_content_cached_force_refresh_ignores_the_cache(isolated_state):
+    client = _notebook_client([("nb-bronze", "bronze_bc_customer_list", _BRONZE_NOTEBOOK_CONTENT)])
+    fabric_catalog.refresh_notebook_scan_cache(client)
+
+    client._model_definitions["nb-bronze"] = [
+        {"path": "notebook-content.py", "payload": base64.b64encode(b"# changed live\n").decode("ascii")}
+    ]
+
+    content = fabric_catalog.get_notebook_content_cached(client, "nb-bronze", force_refresh=True)
+
+    assert content == "# changed live\n"
+    cached = fabric_catalog._load_notebook_scan_cache()
+    assert cached[0]["nb-bronze"]["content"] == "# changed live\n"
 
 
 def test_set_metadata_rejects_an_unknown_relationship_type(isolated_state):

@@ -297,13 +297,15 @@ export function setCatalogManifest(
   });
 }
 
-/** A Notebook's own Python source, straight from Fabric's get_definition()
- * -- read-only, there's no editing path here. Notebooks only (400 for
- * anything else). Can take a while: same get_definition() long-running-
- * operation cost already documented for semantic models/relationship
- * detection (~15-20s). */
-export function fetchNotebookContent(itemId: string): Promise<{ content: string }> {
-  return apiGet(`/fabric-catalog/items/${encodeURIComponent(itemId)}/notebook-content`);
+/** A Notebook's own Python source -- read-only, there's no editing path
+ * here. Notebooks only (400 for anything else). Prefers the notebook-scan
+ * cache's own copy (instant once cached, same cache "Detectar relaciones"
+ * reads from); a cache miss falls back to a live fetch (~15-20s) that
+ * also fills the cache for next time. `refresh`: always fetch live and
+ * update the cached copy for this one notebook (the "Recargar" button). */
+export function fetchNotebookContent(itemId: string, refresh = false): Promise<{ content: string }> {
+  const params = refresh ? "?refresh=true" : "";
+  return apiGet(`/fabric-catalog/items/${encodeURIComponent(itemId)}/notebook-content${params}`);
 }
 
 /** Creates a new semantic model for this item. For a real Lakehouse table,

@@ -410,21 +410,28 @@ def _parse_notebook_table_refs(content: str) -> Dict[str, List[Tuple[str, str]]]
     return {"reads": reads, "writes": writes}
 
 
-def _scan_notebook_table_refs(client: Any) -> Dict[str, Dict[str, List[Tuple[str, str]]]]:
+def _scan_notebook_table_refs(client: Any) -> Dict[str, Dict[str, Any]]:
     """Fetches and parses every Notebook's own definition, in parallel
     (this workspace already has ~90 of them -- sequential get_definition
     calls would make the button feel broken). A notebook whose definition
     can't be read (deleted mid-scan, a transient long-running-operation
     failure, no notebook-content.py part at all) just contributes nothing;
     a real bug elsewhere isn't masked since only FabricPipelineError --
-    the documented "Fabric didn't answer" shape -- is caught here."""
+    the documented "Fabric didn't answer" shape -- is caught here.
+
+    Each entry is {"reads": [...], "writes": [...], "content": "..."} --
+    the decoded source is kept alongside the parsed refs (not just parsed
+    and discarded) so refresh_notebook_scan_cache() can save it too and
+    get_notebook_content_cached() can serve a Notebook's own "Contenido"
+    tab from the exact same call this already paid for, instead of a
+    second live get_definition() per notebook someone happens to open."""
     from concurrent.futures import ThreadPoolExecutor
 
     from src.fabric_pipelines.api import FabricPipelineError
 
     notebooks = [i for i in client.list_items() if i.get("type") == "Notebook"]
 
-    def _one(notebook: Dict[str, Any]) -> Tuple[str, Optional[Dict[str, List[Tuple[str, str]]]]]:
+    def _one(notebook: Dict[str, Any]) -> Tuple[str, Optional[Dict[str, Any]]]:
         try:
             defn = client.get_definition(notebook["id"])
         except FabricPipelineError:
@@ -434,7 +441,7 @@ def _scan_notebook_table_refs(client: Any) -> Dict[str, Dict[str, List[Tuple[str
         if content_part is None:
             return notebook["id"], None
         content = base64.b64decode(content_part["payload"]).decode("utf-8", errors="replace")
-        return notebook["id"], _parse_notebook_table_refs(content)
+        return notebook["id"], {**_parse_notebook_table_refs(content), "content": content}
 
     # 25, not 10: confirmed live this workspace's ~90 notebooks took 200s end
     # to end at 10 workers -- each get_definition() can itself cost ~20s
@@ -467,9 +474,25 @@ def _lakehouse_table_index(client: Any) -> Dict[Tuple[str, str], str]:
     return index
 
 
-def _load_notebook_scan_cache() -> Optional[Tuple[Dict[str, Dict[str, List[Tuple[str, str]]]], Dict[Tuple[str, str], str], str]]:
-    """None if refresh_notebook_scan_cache() has never run (or the file's
-    unreadable); otherwise (refs_by_notebook, table_index, cached_at)."""
+def _load_notebook_scan_cache() -> Optional[Tuple[Dict[str, Dict[str, Any]], Dict[Tuple[str, str], str], str, bool]]:
+    """None if nothing's ever been cached (or the file's unreadable);
+    otherwise (refs_by_notebook, table_index, cached_at, is_full).
+
+    is_full is True only for a cache written by refresh_notebook_scan_cache()
+    (every Notebook in the workspace, scanned together) -- False for one
+    that only has entries lazily merged in one at a time by
+    get_notebook_content_cached()'s cache-miss fallback. That distinction
+    matters because detect_relationships(use_cache=True) needs the WHOLE
+    workspace to give a correct answer (a candidate for a notebook that
+    isn't in the cache yet would just silently never appear), while
+    get_notebook_content_cached() is fine serving a single notebook out of
+    an incomplete cache -- so each reads is_full differently, see below.
+
+    Each refs_by_notebook entry carries "reads"/"writes" (for
+    detect_relationships) and "content" (for get_notebook_content_cached())
+    -- "content" reads back as "" for an entry saved before this field
+    existed, which get_notebook_content_cached() treats as a cache miss
+    for just that notebook, not a reason to distrust the whole cache."""
     if not _NOTEBOOK_SCAN_CACHE_PATH.exists():
         return None
     try:
@@ -480,21 +503,26 @@ def _load_notebook_scan_cache() -> Optional[Tuple[Dict[str, Dict[str, List[Tuple
         notebook_id: {
             "reads": [(schema, table) for schema, table in refs.get("reads", [])],
             "writes": [(schema, table) for schema, table in refs.get("writes", [])],
+            "content": refs.get("content", ""),
         }
         for notebook_id, refs in payload.get("refs_by_notebook", {}).items()
     }
     # Tuple keys aren't valid JSON object keys -- stored/read back as
     # [schema, table, item_id] triples instead.
     table_index = {(schema, table): item_id for schema, table, item_id in payload.get("table_index", [])}
-    return refs_by_notebook, table_index, payload.get("cached_at", "")
+    # False (not True) for a cache saved before is_full existed -- a stale
+    # file from before this distinction was tracked can't be trusted to be
+    # a full scan, so it self-heals into one on the next detection.
+    return refs_by_notebook, table_index, payload.get("cached_at", ""), payload.get("is_full", False)
 
 
 def _save_notebook_scan_cache(
-    refs_by_notebook: Dict[str, Dict[str, List[Tuple[str, str]]]], table_index: Dict[Tuple[str, str], str]
+    refs_by_notebook: Dict[str, Dict[str, Any]], table_index: Dict[Tuple[str, str], str], *, is_full: bool
 ) -> str:
     cached_at = datetime.now(timezone.utc).isoformat()
     payload = {
         "cached_at": cached_at,
+        "is_full": is_full,
         "refs_by_notebook": refs_by_notebook,
         "table_index": [[schema, table, item_id] for (schema, table), item_id in table_index.items()],
     }
@@ -507,22 +535,74 @@ def _save_notebook_scan_cache(
 
 def refresh_notebook_scan_cache(client: Any) -> str:
     """Re-scans every Notebook's code + every Lakehouse's tables live and
-    overwrites the cache detect_relationships(..., use_cache=True) reads
-    from -- the same ~1-2 minute cost as a single live/"Datos directo"
-    detection (this IS that same scan), just done once and reused
-    afterward instead of repeated on every click. This is the ONLY thing
-    that ever writes this cache -- a cached detect never refreshes it on
-    its own, so what "Datos cacheados" shows stays put between review
-    sessions until someone explicitly asks for a refresh. Returns the new
-    cached_at timestamp."""
+    overwrites the cache detect_relationships(..., use_cache=True) AND
+    get_notebook_content_cached() both read from -- the same ~1-2 minute
+    cost as a single live/"Datos directo" detection (this IS that same
+    scan), just done once and reused afterward instead of repeated on
+    every click, and it's also every Notebook's own full source in one
+    pass, not just the parsed reads/writes. This is the ONLY thing that
+    ever refreshes every notebook at once -- a cached detect never
+    refreshes it on its own, so what "Datos cacheados" shows stays put
+    between review sessions until someone explicitly asks for a refresh.
+    Returns the new cached_at timestamp."""
     refs_by_notebook = _scan_notebook_table_refs(client)
     table_index = _lakehouse_table_index(client)
-    return _save_notebook_scan_cache(refs_by_notebook, table_index)
+    return _save_notebook_scan_cache(refs_by_notebook, table_index, is_full=True)
 
 
 def get_notebook_scan_cache_status() -> Dict[str, Any]:
+    """"cached" here specifically means "a full scan is ready" -- a cache
+    that only has one or two notebooks lazily merged in from someone
+    opening their "Contenido" tab is real and useful (see
+    get_notebook_content_cached()), but reporting it as "cached" here
+    would wrongly tell "Detectar relaciones" it can skip stright to a fast
+    read when it still needs the full ~1-2 minute scan."""
     cached = _load_notebook_scan_cache()
-    return {"cached": cached is not None, "cached_at": cached[2] if cached else ""}
+    is_full = cached is not None and cached[3]
+    return {"cached": is_full, "cached_at": cached[2] if is_full else ""}
+
+
+def _merge_one_notebook_into_cache(client: Any, item_id: str) -> str:
+    """Live-fetches and decodes ONE notebook's own content and merges just
+    that entry into whatever's cached (creating the cache if nothing was
+    there yet), without re-scanning every other notebook -- used both to
+    fill a single cache miss and to force-refresh one notebook (the
+    "Recargar" button) without paying the full workspace-wide rescan cost
+    for it. Preserves the existing cache's is_full flag either way -- one
+    freshly-merged notebook doesn't turn an already-full cache incomplete,
+    and doesn't turn a partial one full either. Raises ValueError/
+    FabricPipelineError exactly like get_notebook_content() -- there's
+    nothing to merge if that fails."""
+    content = get_notebook_content(client, item_id)
+    cached = _load_notebook_scan_cache()
+    refs_by_notebook = dict(cached[0]) if cached else {}
+    table_index = cached[1] if cached else {}
+    is_full = cached[3] if cached else False
+    refs_by_notebook[item_id] = {**_parse_notebook_table_refs(content), "content": content}
+    _save_notebook_scan_cache(refs_by_notebook, table_index, is_full=is_full)
+    return content
+
+
+def get_notebook_content_cached(client: Any, item_id: str, *, force_refresh: bool = False) -> str:
+    """Prefers the notebook-scan cache's own copy of this Notebook's code
+    (see refresh_notebook_scan_cache()) -- instant once cached, since it's
+    the exact same get_definition() call "Detectar relaciones" already
+    paid for. Unlike detect_relationships(use_cache=True), a PARTIAL cache
+    (is_full=False) is perfectly fine to read from here -- this only ever
+    needs one notebook's own entry, not every notebook in the workspace.
+    A cache miss (a notebook created since the last refresh, or nothing
+    cached yet at all) falls back to fetching just this one notebook live
+    and merging it into the cache, instead of demanding a full workspace-
+    wide rescan for a single missing entry. force_refresh=True (the
+    "Recargar" button) always does that live fetch-and-merge, ignoring
+    whatever's cached."""
+    if not force_refresh:
+        cached = _load_notebook_scan_cache()
+        if cached is not None:
+            entry = cached[0].get(item_id)
+            if entry and entry.get("content"):
+                return entry["content"]
+    return _merge_one_notebook_into_cache(client, item_id)
 
 
 def detect_relationships(client: Any, item_id: str, *, use_cache: bool = False) -> List[Dict[str, str]]:
@@ -539,21 +619,27 @@ def detect_relationships(client: Any, item_id: str, *, use_cache: bool = False) 
     relationship already edited by hand (or already applied from a
     previous detection) never gets suggested again.
 
-    `use_cache=True` reads the last scan saved by refresh_notebook_scan_cache()
-    instead of re-scanning Fabric live -- the slow part (every Notebook's
-    own get_definition() call, ~1-2 minutes across a workspace this size)
-    done once and reused, rather than repeated on every click. The very
-    first call with nothing cached yet still does one live scan and saves
-    it, so "Datos cacheados" works out of the box; every call after that
-    is fast until someone explicitly refreshes it."""
+    `use_cache=True` reads the last FULL scan saved by
+    refresh_notebook_scan_cache() instead of re-scanning Fabric live -- the
+    slow part (every Notebook's own get_definition() call, ~1-2 minutes
+    across a workspace this size) done once and reused, rather than
+    repeated on every click. The very first call with nothing cached yet
+    (or only a partial cache from someone opening a "Contenido" tab before
+    ever running a detection -- see is_full on _load_notebook_scan_cache())
+    still does one live scan and saves it, so "Datos cacheados" works out
+    of the box; every call after that is fast until someone explicitly
+    refreshes it. A partial cache is never trusted here even though it
+    technically "exists" -- unlike a single notebook's content, a
+    relationship candidate for a notebook that's simply missing from an
+    incomplete cache would silently never appear, not just be slow."""
     if use_cache:
         cached = _load_notebook_scan_cache()
-        if cached is None:
+        if cached is None or not cached[3]:
             refs_by_notebook = _scan_notebook_table_refs(client)
             table_index = _lakehouse_table_index(client)
-            _save_notebook_scan_cache(refs_by_notebook, table_index)
+            _save_notebook_scan_cache(refs_by_notebook, table_index, is_full=True)
         else:
-            refs_by_notebook, table_index, _cached_at = cached
+            refs_by_notebook, table_index, _cached_at, _is_full = cached
     else:
         refs_by_notebook = _scan_notebook_table_refs(client)
         table_index = _lakehouse_table_index(client)

@@ -599,6 +599,30 @@ def test_notebook_content_400s_for_an_item_with_no_notebook_part(isolated_state,
     assert resp.status_code == 400
 
 
+def test_notebook_content_is_cached_after_first_read_and_refresh_bypasses_it(isolated_state, client, monkeypatch):
+    fake = _use_fake_fabric_client(monkeypatch)
+    fake._model_definitions["nb-1"] = [
+        {"path": "notebook-content.py", "payload": base64.b64encode(_BRONZE_NOTEBOOK_CONTENT.encode()).decode()}
+    ]
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    first = client.get("/fabric-catalog/items/nb-1/notebook-content")
+    assert first.json()["content"] == _BRONZE_NOTEBOOK_CONTENT
+
+    # The live client now serves different content -- a cached read must
+    # still return the original, unlike refresh=true.
+    fake._model_definitions["nb-1"] = [
+        {"path": "notebook-content.py", "payload": base64.b64encode(b"# changed live\n").decode()}
+    ]
+
+    cached = client.get("/fabric-catalog/items/nb-1/notebook-content")
+    assert cached.json()["content"] == _BRONZE_NOTEBOOK_CONTENT
+
+    refreshed = client.get("/fabric-catalog/items/nb-1/notebook-content", params={"refresh": "true"})
+    assert refreshed.json()["content"] == "# changed live\n"
+
+
 def test_reader_cannot_read_a_notebooks_content(isolated_state, client, monkeypatch):
     _use_fake_fabric_client(monkeypatch)
     make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)

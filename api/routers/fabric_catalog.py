@@ -216,13 +216,16 @@ def refresh_notebook_scan_cache() -> NotebookScanCacheStatusOut:
 
 
 @router.get("/items/{item_id}/notebook-content", response_model=NotebookContentOut)
-def get_notebook_content(item_id: str) -> NotebookContentOut:
-    """This Notebook's own Python source, straight from Fabric's
-    get_definition() -- read-only, there's no way to edit it from here.
-    400 for anything that isn't a real notebook definition; 502 if Fabric
-    can't be reached right now."""
+def get_notebook_content(item_id: str, refresh: bool = False) -> NotebookContentOut:
+    """This Notebook's own Python source -- read-only, there's no way to
+    edit it from here. Prefers the notebook-scan cache's own copy (instant
+    once cached, see refresh_notebook_scan_cache()); a cache miss falls
+    back to fetching just this one notebook live and merging it into the
+    cache. refresh=true (the "Recargar" button) always fetches live and
+    updates the cached copy for this notebook. 400 for anything that isn't
+    a real notebook definition; 502 if Fabric can't be reached right now."""
     try:
-        content = fabric_catalog.get_notebook_content(_client(), item_id)
+        content = fabric_catalog.get_notebook_content_cached(_client(), item_id, force_refresh=refresh)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except FabricPipelineError as exc:
