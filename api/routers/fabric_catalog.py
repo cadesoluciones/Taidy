@@ -36,6 +36,7 @@ from ..schemas.fabric_catalog import (
     FabricCatalogItemOut,
     FlagOut,
     NotebookContentOut,
+    NotebookScanCacheStatusOut,
     SemanticModelStateOut,
     SetCatalogManifestRequest,
     SetCanvasPositionsRequest,
@@ -174,19 +175,44 @@ def remove_relationship(
 
 
 @router.get("/items/{item_id}/detected-relationships", response_model=DetectedRelationshipsOut)
-def get_detected_relationships(item_id: str) -> DetectedRelationshipsOut:
+def get_detected_relationships(item_id: str, use_cache: bool = False) -> DetectedRelationshipsOut:
     """Best-effort candidate relationships for this item, parsed from
     Notebook code (read_table_from_lakehouse()/write_df_to_lakehouse()
     calls) rather than drawn by hand -- see fabric_catalog.detect_relationships().
     Never applies anything; POST .../relationships (using each candidate's
     own owner_item_id, which may differ from `item_id`) is what actually
-    saves one. Only ever returns candidates not already saved. 502 if
-    Fabric can't be reached to scan notebooks right now."""
+    saves one. Only ever returns candidates not already saved.
+    `use_cache=true` reads the last workspace scan saved by
+    POST .../notebook-scan-cache/refresh instead of re-scanning Fabric live
+    (~1-2 minutes across every Notebook). 502 if Fabric can't be reached to
+    scan notebooks right now (only possible with use_cache=false, or the
+    very first use_cache=true call before anything's cached yet)."""
     try:
-        candidates = fabric_catalog.detect_relationships(_client(), item_id)
+        candidates = fabric_catalog.detect_relationships(_client(), item_id, use_cache=use_cache)
     except FabricPipelineError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
     return DetectedRelationshipsOut(candidates=[DetectedRelationshipOut(**c) for c in candidates])
+
+
+@router.get("/notebook-scan-cache", response_model=NotebookScanCacheStatusOut)
+def get_notebook_scan_cache_status() -> NotebookScanCacheStatusOut:
+    """Whether "Datos cacheados" has anything to read yet, and when it was
+    last refreshed -- purely informational, never touches Fabric itself."""
+    return NotebookScanCacheStatusOut(**fabric_catalog.get_notebook_scan_cache_status())
+
+
+@router.post("/notebook-scan-cache/refresh", response_model=NotebookScanCacheStatusOut)
+def refresh_notebook_scan_cache() -> NotebookScanCacheStatusOut:
+    """Re-scans every Notebook + Lakehouse table live and overwrites the
+    cache "Datos cacheados" reads from -- same ~1-2 minute cost as a single
+    live detection, done once and reused afterward. Purely a re-read of
+    Fabric's own structure, never a write to it. 502 if Fabric can't be
+    reached right now."""
+    try:
+        cached_at = fabric_catalog.refresh_notebook_scan_cache(_client())
+    except FabricPipelineError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    return NotebookScanCacheStatusOut(cached=True, cached_at=cached_at)
 
 
 @router.get("/items/{item_id}/notebook-content", response_model=NotebookContentOut)

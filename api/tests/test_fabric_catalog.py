@@ -510,6 +510,54 @@ def test_operator_can_detect_relationships_for_a_table(isolated_state, client, m
     assert resp2.json()["candidates"] == []
 
 
+def test_notebook_scan_cache_status_and_refresh_endpoints(isolated_state, client, monkeypatch):
+    fake = _use_fake_fabric_client(monkeypatch)
+    fake.list_items = lambda: [
+        {"id": "lh-1", "type": "Lakehouse", "displayName": "Lakehouse"},
+        {"id": "nb-bronze", "type": "Notebook", "displayName": "bronze_bc_customer_list"},
+    ]
+    fake._lakehouse_tables["lh-1"] = [{"schema": "bronze", "table": "bc_customer_list"}]
+    fake._model_definitions["nb-bronze"] = [
+        {"path": "notebook-content.py", "payload": base64.b64encode(_BRONZE_NOTEBOOK_CONTENT.encode()).decode()}
+    ]
+    make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)
+    _login(client, "operator1", "OperatorPass2026!")
+
+    status_resp = client.get("/fabric-catalog/notebook-scan-cache")
+    assert status_resp.status_code == 200
+    assert status_resp.json() == {"cached": False, "cached_at": ""}
+
+    refresh_resp = client.post("/fabric-catalog/notebook-scan-cache/refresh")
+    assert refresh_resp.status_code == 200
+    assert refresh_resp.json()["cached"] is True
+    assert refresh_resp.json()["cached_at"]
+
+    status_resp2 = client.get("/fabric-catalog/notebook-scan-cache")
+    assert status_resp2.json()["cached"] is True
+
+    table_id = "lakehouse-table:lh-1:bronze.bc_customer_list"
+    cached_resp = client.get(f"/fabric-catalog/items/{table_id}/detected-relationships", params={"use_cache": "true"})
+    assert cached_resp.status_code == 200
+    assert cached_resp.json()["candidates"] == [
+        {
+            "owner_item_id": "nb-bronze",
+            "owner_name": "bronze_bc_customer_list",
+            "type": "writes_to",
+            "target_item_id": table_id,
+            "target_name": "bronze.bc_customer_list",
+        }
+    ]
+
+
+def test_reader_cannot_refresh_the_notebook_scan_cache(isolated_state, client, monkeypatch):
+    _use_fake_fabric_client(monkeypatch)
+    make_user("reader1", "ReaderPass2026!", users_db.ROLE_READER)
+    _login(client, "reader1", "ReaderPass2026!")
+
+    resp = client.post("/fabric-catalog/notebook-scan-cache/refresh")
+    assert resp.status_code == 403
+
+
 def test_detected_relationships_empty_for_an_item_with_nothing_to_detect(isolated_state, client, monkeypatch):
     _use_fake_fabric_client(monkeypatch)
     make_user("operator1", "OperatorPass2026!", users_db.ROLE_OPERATOR)

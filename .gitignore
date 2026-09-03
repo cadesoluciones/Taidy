@@ -107,6 +107,7 @@ webapp/workflows.json
 webapp/app_settings.json
 webapp/fabric_catalog.json
 webapp/fabric_catalog_live_cache.json
+webapp/fabric_notebook_scan_cache.json
 api/sessions.json
 
 # Sync engine: caché persistida del fetch incremental (estado generado)

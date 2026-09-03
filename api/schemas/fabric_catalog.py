@@ -156,6 +156,11 @@ class NotebookContentOut(BaseModel):
     content: str
 
 
+class NotebookScanCacheStatusOut(BaseModel):
+    cached: bool
+    cached_at: str = ""
+
+
 class SemanticModelColumnOut(BaseModel):
     name: str
     description: str = ""

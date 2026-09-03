@@ -1312,6 +1312,77 @@ def test_detect_relationships_a_notebook_whose_definition_fails_contributes_noth
     assert fabric_catalog.detect_relationships(client, "nb-bronze") == []
 
 
+def test_notebook_scan_cache_status_starts_uncached(isolated_state):
+    assert fabric_catalog.get_notebook_scan_cache_status() == {"cached": False, "cached_at": ""}
+
+
+def test_refresh_notebook_scan_cache_populates_the_status(isolated_state):
+    client = _notebook_client(
+        [("nb-bronze", "bronze_bc_customer_list", _BRONZE_NOTEBOOK_CONTENT)],
+        lakehouse_tables=[{"schema": "bronze", "table": "bc_customer_list"}],
+    )
+    cached_at = fabric_catalog.refresh_notebook_scan_cache(client)
+    status = fabric_catalog.get_notebook_scan_cache_status()
+    assert status == {"cached": True, "cached_at": cached_at}
+
+
+def test_detect_relationships_use_cache_reads_the_refreshed_scan_not_a_live_one(isolated_state):
+    """A notebook edited on the real client AFTER the cache was refreshed
+    must not show up in a use_cache=True call -- that's the whole point of
+    reading a saved scan instead of Fabric live."""
+    client = _notebook_client(
+        [("nb-bronze", "bronze_bc_customer_list", _BRONZE_NOTEBOOK_CONTENT)],
+        lakehouse_tables=[{"schema": "bronze", "table": "bc_customer_list"}],
+    )
+    fabric_catalog.refresh_notebook_scan_cache(client)
+
+    # Now the live notebook stops writing to that table entirely -- a live
+    # scan from here on would find nothing.
+    client._model_definitions["nb-bronze"] = [
+        {"path": "notebook-content.py", "payload": base64.b64encode(b"pass\n").decode("ascii")}
+    ]
+
+    table_id = "lakehouse-table:lh-1:bronze.bc_customer_list"
+    cached_candidates = fabric_catalog.detect_relationships(client, table_id, use_cache=True)
+    live_candidates = fabric_catalog.detect_relationships(client, table_id, use_cache=False)
+
+    assert cached_candidates == [
+        {
+            "owner_item_id": "nb-bronze",
+            "owner_name": "bronze_bc_customer_list",
+            "type": "writes_to",
+            "target_item_id": table_id,
+            "target_name": "bronze.bc_customer_list",
+        }
+    ]
+    assert live_candidates == []
+
+
+def test_detect_relationships_use_cache_bootstraps_and_saves_on_first_use(isolated_state):
+    """No refresh has ever run -- the first use_cache=True call still has to
+    scan live once (nothing to read otherwise), but it saves what it found
+    so every call after that is a cache read, not a repeated live scan."""
+    client = _notebook_client(
+        [("nb-bronze", "bronze_bc_customer_list", _BRONZE_NOTEBOOK_CONTENT)],
+        lakehouse_tables=[{"schema": "bronze", "table": "bc_customer_list"}],
+    )
+    assert fabric_catalog.get_notebook_scan_cache_status()["cached"] is False
+
+    table_id = "lakehouse-table:lh-1:bronze.bc_customer_list"
+    candidates = fabric_catalog.detect_relationships(client, table_id, use_cache=True)
+
+    assert candidates == [
+        {
+            "owner_item_id": "nb-bronze",
+            "owner_name": "bronze_bc_customer_list",
+            "type": "writes_to",
+            "target_item_id": table_id,
+            "target_name": "bronze.bc_customer_list",
+        }
+    ]
+    assert fabric_catalog.get_notebook_scan_cache_status()["cached"] is True
+
+
 def test_get_notebook_content_returns_the_decoded_source(isolated_state):
     client = _notebook_client([("nb-bronze", "bronze_bc_customer_list", _BRONZE_NOTEBOOK_CONTENT)])
     assert fabric_catalog.get_notebook_content(client, "nb-bronze") == _BRONZE_NOTEBOOK_CONTENT

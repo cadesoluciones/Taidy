@@ -800,6 +800,31 @@
   margin-bottom: var(--space-3);
 }
 
+.dataModeRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.dataModeButton,
+.dataModeButtonActive {
+  padding: 5px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.dataModeButtonActive {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-bg));
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
 .detectHint {
   font-size: 12px;
   color: var(--color-text-muted);

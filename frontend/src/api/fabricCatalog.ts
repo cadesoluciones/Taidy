@@ -138,10 +138,10 @@ export function removeFabricRelationship(
 }
 
 export interface DetectedRelationship {
-  /** The item that would actually own the saved relationship (always a
-   * Notebook today) -- may differ from whichever item's editor this came
-   * from, since a table's own candidates are declared by the notebook
-   * that produces/consumes it, not by the table itself. */
+  /** The item that would actually own the saved relationship (a Notebook
+   * for writes_to, the table itself for reads_from -- see
+   * BACKWARD_RELATIONSHIP_TYPES-style wording above) -- may differ from
+   * whichever item's editor this came from. */
   owner_item_id: string;
   owner_name: string;
   type: FabricRelationshipType;
@@ -151,9 +151,34 @@ export interface DetectedRelationship {
 
 /** Best-effort candidates parsed from Notebook code (never applied
  * automatically) -- see webapp/fabric_catalog.py's detect_relationships().
- * Only ever returns candidates not already saved. */
-export function fetchDetectedRelationships(itemId: string): Promise<{ candidates: DetectedRelationship[] }> {
-  return apiGet(`/fabric-catalog/items/${encodeURIComponent(itemId)}/detected-relationships`);
+ * Only ever returns candidates not already saved. `useCache`: read the
+ * last saved workspace scan (see refreshNotebookScanCache()) instead of
+ * re-scanning Fabric live (~1-2 minutes across every Notebook). */
+export function fetchDetectedRelationships(
+  itemId: string,
+  useCache = false,
+): Promise<{ candidates: DetectedRelationship[] }> {
+  const params = useCache ? "?use_cache=true" : "";
+  return apiGet(`/fabric-catalog/items/${encodeURIComponent(itemId)}/detected-relationships${params}`);
+}
+
+export interface NotebookScanCacheStatus {
+  cached: boolean;
+  cached_at: string;
+}
+
+/** Whether "Datos cacheados" has anything to read yet, and when it was
+ * last refreshed -- purely informational, never touches Fabric itself. */
+export function fetchNotebookScanCacheStatus(): Promise<NotebookScanCacheStatus> {
+  return apiGet("/fabric-catalog/notebook-scan-cache");
+}
+
+/** Re-scans every Notebook + Lakehouse table live and overwrites the cache
+ * "Datos cacheados" reads from -- same ~1-2 minute cost as a single live
+ * detection, done once and reused afterward. Purely a re-read of Fabric's
+ * own structure, never a write to it. */
+export function refreshNotebookScanCache(): Promise<NotebookScanCacheStatus> {
+  return apiPost("/fabric-catalog/notebook-scan-cache/refresh");
 }
 
 export function setFabricCanvasPositions(

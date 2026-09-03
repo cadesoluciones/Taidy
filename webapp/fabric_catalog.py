@@ -44,6 +44,13 @@ from webapp.state_dir import state_path
 _CATALOG_PATH = state_path("fabric_catalog.json", Path(__file__).resolve().parent)
 _LOCK = threading.Lock()
 
+# Separate file/lock from the metadata store above -- this caches the raw
+# notebook scan detect_relationships() reads from (see refresh_notebook_scan_cache()),
+# an unrelated concern with its own write path, not part of the curated
+# per-item metadata.
+_NOTEBOOK_SCAN_CACHE_PATH = state_path("fabric_notebook_scan_cache.json", Path(__file__).resolve().parent)
+_NOTEBOOK_SCAN_LOCK = threading.Lock()
+
 RELATIONSHIP_TYPES = {"reads_from", "writes_to", "triggered_by", "generates", "updates"}
 CRITICALITY_LEVELS = {"baja", "media", "alta"}
 STATUS_VALUES = {"activo", "en_desuso", "deprecado"}
@@ -460,7 +467,65 @@ def _lakehouse_table_index(client: Any) -> Dict[Tuple[str, str], str]:
     return index
 
 
-def detect_relationships(client: Any, item_id: str) -> List[Dict[str, str]]:
+def _load_notebook_scan_cache() -> Optional[Tuple[Dict[str, Dict[str, List[Tuple[str, str]]]], Dict[Tuple[str, str], str], str]]:
+    """None if refresh_notebook_scan_cache() has never run (or the file's
+    unreadable); otherwise (refs_by_notebook, table_index, cached_at)."""
+    if not _NOTEBOOK_SCAN_CACHE_PATH.exists():
+        return None
+    try:
+        payload = json.loads(_NOTEBOOK_SCAN_CACHE_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    refs_by_notebook = {
+        notebook_id: {
+            "reads": [(schema, table) for schema, table in refs.get("reads", [])],
+            "writes": [(schema, table) for schema, table in refs.get("writes", [])],
+        }
+        for notebook_id, refs in payload.get("refs_by_notebook", {}).items()
+    }
+    # Tuple keys aren't valid JSON object keys -- stored/read back as
+    # [schema, table, item_id] triples instead.
+    table_index = {(schema, table): item_id for schema, table, item_id in payload.get("table_index", [])}
+    return refs_by_notebook, table_index, payload.get("cached_at", "")
+
+
+def _save_notebook_scan_cache(
+    refs_by_notebook: Dict[str, Dict[str, List[Tuple[str, str]]]], table_index: Dict[Tuple[str, str], str]
+) -> str:
+    cached_at = datetime.now(timezone.utc).isoformat()
+    payload = {
+        "cached_at": cached_at,
+        "refs_by_notebook": refs_by_notebook,
+        "table_index": [[schema, table, item_id] for (schema, table), item_id in table_index.items()],
+    }
+    with _NOTEBOOK_SCAN_LOCK:
+        tmp = _NOTEBOOK_SCAN_CACHE_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(_NOTEBOOK_SCAN_CACHE_PATH)
+    return cached_at
+
+
+def refresh_notebook_scan_cache(client: Any) -> str:
+    """Re-scans every Notebook's code + every Lakehouse's tables live and
+    overwrites the cache detect_relationships(..., use_cache=True) reads
+    from -- the same ~1-2 minute cost as a single live/"Datos directo"
+    detection (this IS that same scan), just done once and reused
+    afterward instead of repeated on every click. This is the ONLY thing
+    that ever writes this cache -- a cached detect never refreshes it on
+    its own, so what "Datos cacheados" shows stays put between review
+    sessions until someone explicitly asks for a refresh. Returns the new
+    cached_at timestamp."""
+    refs_by_notebook = _scan_notebook_table_refs(client)
+    table_index = _lakehouse_table_index(client)
+    return _save_notebook_scan_cache(refs_by_notebook, table_index)
+
+
+def get_notebook_scan_cache_status() -> Dict[str, Any]:
+    cached = _load_notebook_scan_cache()
+    return {"cached": cached is not None, "cached_at": cached[2] if cached else ""}
+
+
+def detect_relationships(client: Any, item_id: str, *, use_cache: bool = False) -> List[Dict[str, str]]:
     """Best-effort candidate relationships involving `item_id`, detected
     from notebook code rather than drawn by hand. A writes_to edge is
     declared on the notebook (the "owner") since its wording is active from
@@ -472,9 +537,26 @@ def detect_relationships(client: Any, item_id: str) -> List[Dict[str, str]]:
     anything -- the caller still goes through add_relationship() to
     actually save one. Only ever returns candidates NOT already saved, so a
     relationship already edited by hand (or already applied from a
-    previous detection) never gets suggested again."""
-    refs_by_notebook = _scan_notebook_table_refs(client)
-    table_index = _lakehouse_table_index(client)
+    previous detection) never gets suggested again.
+
+    `use_cache=True` reads the last scan saved by refresh_notebook_scan_cache()
+    instead of re-scanning Fabric live -- the slow part (every Notebook's
+    own get_definition() call, ~1-2 minutes across a workspace this size)
+    done once and reused, rather than repeated on every click. The very
+    first call with nothing cached yet still does one live scan and saves
+    it, so "Datos cacheados" works out of the box; every call after that
+    is fast until someone explicitly refreshes it."""
+    if use_cache:
+        cached = _load_notebook_scan_cache()
+        if cached is None:
+            refs_by_notebook = _scan_notebook_table_refs(client)
+            table_index = _lakehouse_table_index(client)
+            _save_notebook_scan_cache(refs_by_notebook, table_index)
+        else:
+            refs_by_notebook, table_index, _cached_at = cached
+    else:
+        refs_by_notebook = _scan_notebook_table_refs(client)
+        table_index = _lakehouse_table_index(client)
     notebooks_by_id = {i["id"]: i for i in client.list_items() if i.get("type") == "Notebook"}
     metadata = list_metadata()
 

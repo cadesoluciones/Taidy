@@ -52,6 +52,7 @@ def isolated_state(tmp_path, monkeypatch):
     monkeypatch.setattr(table_configs, "_HUBSPOT_TABLES_PATH", tmp_path / "hubspot_tables.yaml")
     monkeypatch.setattr(sync_mappings, "_SYNC_MAPPINGS_PATH", tmp_path / "sync_mappings.yaml")
     monkeypatch.setattr(fabric_catalog, "_CATALOG_PATH", tmp_path / "fabric_catalog.json")
+    monkeypatch.setattr(fabric_catalog, "_NOTEBOOK_SCAN_CACHE_PATH", tmp_path / "fabric_notebook_scan_cache.json")
     monkeypatch.setattr(fabric_catalog_cache, "_CACHE_PATH", tmp_path / "fabric_catalog_live_cache.json")
     monkeypatch.setattr(env_secrets, "_ENV_PATH", tmp_path / ".env")
     monkeypatch.setattr(session_store, "_SESSIONS_PATH", tmp_path / "sessions.json")

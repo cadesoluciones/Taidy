@@ -46,6 +46,7 @@ def isolated_state(tmp_path, monkeypatch):
     monkeypatch.setattr(history, "_HISTORY_PATH", tmp_path / "run_history.json")
     monkeypatch.setattr(app_settings, "_SETTINGS_PATH", tmp_path / "app_settings.json")
     monkeypatch.setattr(fabric_catalog, "_CATALOG_PATH", tmp_path / "fabric_catalog.json")
+    monkeypatch.setattr(fabric_catalog, "_NOTEBOOK_SCAN_CACHE_PATH", tmp_path / "fabric_notebook_scan_cache.json")
     monkeypatch.setattr(fabric_catalog_cache, "_CACHE_PATH", tmp_path / "fabric_catalog_live_cache.json")
     users_db.init_db()
     # A freshly-seeded admin always has must_change_password=1; clear it so any

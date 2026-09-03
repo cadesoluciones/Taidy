@@ -14,7 +14,9 @@ import {
   fetchDetectedRelationships,
   fetchFabricCatalog,
   fetchFabricTablePreview,
+  fetchNotebookScanCacheStatus,
   fetchTypeIcons,
+  refreshNotebookScanCache,
   removeFabricRelationship,
   setFabricCanvasPositions,
   setFabricFavorite,
@@ -28,6 +30,7 @@ import {
   type FabricRelationshipType,
   type FabricStatus,
   type FabricTablePreview,
+  type NotebookScanCacheStatus,
 } from "../api/fabricCatalog";
 import { useAuth } from "../auth/AuthContext";
 import { renderMarkdown } from "../utils/markdown";
@@ -113,6 +116,17 @@ export function FabricCatalogManager() {
   // null: never run yet this time the modal's open (button still shows
   // "Detectar relaciones"). [] after a run that found nothing new.
   const [detectedCandidates, setDetectedCandidates] = useState<DetectedRelationship[] | null>(null);
+  // "cacheado" by default -- matches what was actually asked for ("cachear
+  // la info la primera vez que entras"): the very first detection anywhere
+  // in the app still does one live scan (nothing to read yet) and saves
+  // it, so every one after that across every item is fast until someone
+  // explicitly refreshes it. Server-wide, not per-item, so this and
+  // cacheStatus load once whenever the relationship modal opens, not once
+  // per selected item.
+  const [dataMode, setDataMode] = useState<"cacheado" | "directo">("cacheado");
+  const [cacheStatus, setCacheStatus] = useState<NotebookScanCacheStatus | null>(null);
+  const [isRefreshingCache, setIsRefreshingCache] = useState(false);
+  const [refreshCacheError, setRefreshCacheError] = useState<string | null>(null);
 
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewItemId, setPreviewItemId] = useState<string | null>(null);
@@ -272,12 +286,33 @@ export function FabricCatalogManager() {
     setIsDetecting(true);
     setDetectError(null);
     try {
-      const result = await fetchDetectedRelationships(selected.item_id);
+      const result = await fetchDetectedRelationships(selected.item_id, dataMode === "cacheado");
       setDetectedCandidates(result.candidates);
+      if (dataMode === "cacheado") void loadCacheStatus(); // a first-use bootstrap just created it
     } catch (err) {
       setDetectError(err instanceof ApiError ? err.message : "No se pudieron detectar relaciones.");
     } finally {
       setIsDetecting(false);
+    }
+  }
+
+  async function loadCacheStatus() {
+    try {
+      setCacheStatus(await fetchNotebookScanCacheStatus());
+    } catch {
+      setCacheStatus(null); // purely informational -- a failed fetch just hides the status line
+    }
+  }
+
+  async function handleRefreshCache() {
+    setIsRefreshingCache(true);
+    setRefreshCacheError(null);
+    try {
+      setCacheStatus(await refreshNotebookScanCache());
+    } catch (err) {
+      setRefreshCacheError(err instanceof ApiError ? err.message : "No se pudo actualizar la caché.");
+    } finally {
+      setIsRefreshingCache(false);
     }
   }
 
@@ -745,6 +780,7 @@ export function FabricCatalogManager() {
                             setDetectedCandidates(null);
                             setDetectError(null);
                             setRelationshipModalOpen(true);
+                            void loadCacheStatus();
                           }}
                         >
                           Editar relaciones
@@ -919,6 +955,48 @@ export function FabricCatalogManager() {
               >
                 {canEdit && (
                   <div className={styles.detectRelationships}>
+                    <div className={styles.dataModeRow}>
+                      <span className={styles.compactLabel}>Origen de los datos:</span>
+                      <button
+                        type="button"
+                        className={dataMode === "cacheado" ? styles.dataModeButtonActive : styles.dataModeButton}
+                        onClick={() => setDataMode("cacheado")}
+                        title="Lee el último escaneo guardado en el servidor -- rápido, salvo la primera vez"
+                      >
+                        Datos cacheados
+                      </button>
+                      <button
+                        type="button"
+                        className={dataMode === "directo" ? styles.dataModeButtonActive : styles.dataModeButton}
+                        onClick={() => setDataMode("directo")}
+                        title="Vuelve a escanear Fabric en directo cada vez -- siempre tarda uno o dos minutos"
+                      >
+                        Datos directo
+                      </button>
+                      {dataMode === "cacheado" && (
+                        <>
+                          <span className={styles.detectHint}>
+                            {cacheStatus?.cached
+                              ? `Caché del ${new Date(cacheStatus.cached_at).toLocaleString("es-ES")}`
+                              : "Sin caché todavía -- la primera detección la creará."}
+                          </span>
+                          <button
+                            type="button"
+                            className={styles.relType}
+                            disabled={isRefreshingCache}
+                            onClick={() => void handleRefreshCache()}
+                          >
+                            {isRefreshingCache ? "Actualizando…" : "Actualizar caché"}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    {isRefreshingCache && (
+                      <span className={styles.detectHint}>
+                        Volviendo a escanear los notebooks del workspace -- puede tardar uno o dos minutos.
+                      </span>
+                    )}
+                    {refreshCacheError && <span className={styles.detectError}>{refreshCacheError}</span>}
                     <button
                       type="button"
                       className={styles.relType}
@@ -929,7 +1007,9 @@ export function FabricCatalogManager() {
                     </button>
                     {isDetecting && (
                       <span className={styles.detectHint}>
-                        Revisando el código de los notebooks del workspace -- puede tardar uno o dos minutos.
+                        {dataMode === "cacheado" && cacheStatus?.cached
+                          ? "Leyendo la caché guardada -- debería ser rápido."
+                          : "Revisando el código de los notebooks del workspace -- puede tardar uno o dos minutos."}
                       </span>
                     )}
                     {detectError && <span className={styles.detectError}>{detectError}</span>}
