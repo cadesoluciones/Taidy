@@ -17,13 +17,15 @@ services:
       # container access under SELinux (Enforcing, e.g. RHEL/Rocky) -- a
       # no-op everywhere else (Windows/macOS Docker Desktop, non-SELinux
       # Linux), so it's safe to always set.
-      - ./config.json:/app/config.json:ro,z
       # Bind-mounted (not read-only) so the admin "Claves de servicio" screen
-      # (webapp/env_secrets.py, which writes to /app/.env in place) edits
-      # this SAME file `env_file:` above reads from -- without this mount, a
-      # secret saved from that screen only ever lands in the container's
-      # writable layer and silently vanishes on the next `docker compose up
-      # --build` (a fresh container never sees the previous one's layer).
+      # (webapp/config_settings.py, which writes to /app/config.json in
+      # place) edits this SAME file every *_client/config.py loader reads
+      # -- without write access here, a tenant/workspace/lakehouse id saved
+      # from that screen only ever lands in the container's writable layer
+      # and silently vanishes on the next `docker compose up --build` (a
+      # fresh container never sees the previous one's layer). Same reason
+      # `.env` below isn't `:ro` either.
+      - ./config.json:/app/config.json:z
       - ./.env:/app/.env:z
       # tables.yaml is shared by every BC environment -- each table's `url`
       # carries a literal `{ENVIRONMENT}` placeholder resolved at load time

@@ -47,6 +47,7 @@ from webapp import scheduler as sched_module  # noqa: E402
 from .routers import (  # noqa: E402
     audit as audit_router,
     auth as auth_router,
+    config_settings as config_settings_router,
     dashboard as dashboard_router,
     fabric_catalog as fabric_catalog_router,
     history as history_router,
@@ -125,6 +126,7 @@ def create_app() -> FastAPI:
     app.include_router(pipelines_router.router)
     app.include_router(sync_router.router)
     app.include_router(secrets_router.router)
+    app.include_router(config_settings_router.router)
     app.include_router(fabric_catalog_router.router)
 
     @app.get("/health")
